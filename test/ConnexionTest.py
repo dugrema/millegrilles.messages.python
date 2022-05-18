@@ -5,12 +5,14 @@ from millegrilles.messages.MessagesThread import MessagesThread
 
 logger = logging.getLogger(__name__)
 
+LOGGING_FORMAT = '%(asctime)s %(threadName)s %(levelname)s: %(message)s'
+
 
 def main():
     logger.info("Debut main()")
     stop_event = Event()
     messages_thread = MessagesThread(stop_event)
-    messages_thread.start(callback_reply_q, True)
+    messages_thread.start(callback_reply_q)
 
     logger.info("Attente")
     stop_event.wait(300)
@@ -24,7 +26,8 @@ def callback_reply_q(message):
 
 
 if __name__ == '__main__':
-    logging.basicConfig()
+    # logging.basicConfig()
+    logging.basicConfig(format=LOGGING_FORMAT, level=logging.WARN)
     logging.getLogger(__name__).setLevel(logging.DEBUG)
     logging.getLogger('millegrilles').setLevel(logging.DEBUG)
     main()

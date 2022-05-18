@@ -89,6 +89,18 @@ class MessageWrapper:
         self.correlation_id = correlation_id
         self.delivery_tag = delivery_tag
 
+        # Message traite et verifie
+        self.parsed: Optional[dict] = None
+        self.certificat_pem: Optional[list] = None
+        self.millegrille_pem: Optional[str] = None
+        self.certificat = None
+        self.hachage_valide = False
+        self.signature_valide = False
+        self.certificat_valide = False
+
+    def __str__(self):
+        return 'tag:%d' % self.delivery_tag
+
 
 class MessageConsumer:
     """
