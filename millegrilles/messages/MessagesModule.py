@@ -1,6 +1,7 @@
 import logging
 import asyncio
 
+from threading import Event as EventThreading
 from typing import Optional, Union
 
 from asyncio import Event
@@ -62,6 +63,9 @@ class MessagesModule:
 
     def preparer_ressources(self, reply_callback, reply_callback_is_asyncio):
         raise NotImplementedError('Not implemented')
+
+    def get_producer(self):
+        return self._producer
 
 
 class RessourcesConsommation:
@@ -166,8 +170,6 @@ class MessageConsumer:
 
     async def _traiter_message(self, message):
         # Effectuer le traitement
-        await asyncio.sleep(5)
-
         if self._callback_is_async is True:
             await self._callback(message)
         else:
@@ -186,12 +188,13 @@ class MessageConsumerVerificateur(MessageConsumer):
 
 class MessagePending:
 
-    def __init__(self, content: bytes, routing_key: str, exchanges: list, reply_to=None, correlation_id=None):
+    def __init__(self, content: bytes, routing_key: str, exchanges: list, reply_to=None, correlation_id=None, headers: Optional[dict] = None):
         self.content = content
         self.routing_key = routing_key
         self.reply_to = reply_to
         self.correlation_id = correlation_id
         self.exchanges = exchanges
+        self.headers = headers
 
 
 class MessageProducer:
@@ -205,11 +208,15 @@ class MessageProducer:
         self.__deliveries = list()  # Q d'emission de message, permet d'emettre via thread IO-LOOP
 
         self.__event_message: Optional[Event] = None
+        self._event_q_prete = EventThreading()
+        self.__NB_MESSAGE_MAX = 10
 
         self.__actif = False
 
-    def emettre(self, message: Union[str, bytes], routing_key: str, exchanges: Union[str, list],
-                correlation_id: str = None, reply_to: str = None):
+    def emettre(self, message: Union[str, bytes], routing_key: str,
+                exchanges: Optional[Union[str, list]] = None, correlation_id: str = None, reply_to: str = None):
+
+        self._event_q_prete.wait()
 
         if isinstance(message, str):
             message = message.encode('utf-8')
@@ -224,34 +231,46 @@ class MessageProducer:
 
         pending = MessagePending(message, routing_key, exchanges, reply_to, correlation_id)
         self.__deliveries.append(pending)
+        if len(self.__deliveries) > self.__NB_MESSAGE_MAX:
+            self._event_q_prete.clear()  # Va faire bloquer le prochain appel
 
         # Notifier thread en await
         self.__event_message.set()
 
     async def run_async(self):
+        self.__logger.info("Demarrage run_async producer")
         self.__actif = True
         self.__event_message = Event()
 
         try:
             while self.__actif:
-                self.__logger.debug("Wake up producer")
-
                 while len(self.__deliveries) > 0:
                     message = self.__deliveries.pop(0)
                     self.__logger.debug("producer : send message %s" % message)
                     await self.send(message)
 
+                self._event_q_prete.set()  # Debloque reception de messages
+
                 # Attendre prochains messages
-                self.__logger.debug("producer : attente prochain message")
-                await self.__event_message.wait()
+                # self.__logger.debug("producer : attente prochain message")
+                try:
+                    await asyncio.wait_for(self.__event_message.wait(), 0.25)
+                except TimeoutError:
+                    pass
+                else:
+                    self.__logger.debug("Wake up producer")
+
                 self.__event_message.clear()  # Reset flag
         except:
             self.__logger.exception("Erreur traitement, producer arrete")
 
         self.__actif = False
 
-    async def send(self, message):
+    async def send(self, message: MessagePending):
         self.__logger.warning("NOT IMPLEMENTED - Emettre message %s", message)
+
+    def get_reply_q(self):
+        return self._reply_res.q
 
 
 class MessageProducerFormatteur(MessageProducer):

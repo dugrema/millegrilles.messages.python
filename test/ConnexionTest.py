@@ -13,6 +13,15 @@ def main():
     stop_event = Event()
     messages_thread = MessagesThread(stop_event)
     messages_thread.start(callback_reply_q)
+    producer = messages_thread.get_producer()
+
+    stop_event.wait(2)
+    logger.info("produire messages")
+    reply_q = producer.get_reply_q()
+    for i in range(0, 10000):
+        message = 'message %d' % i
+        producer.emettre(message, reply_q)
+        stop_event.wait(0.001)
 
     logger.info("Attente")
     stop_event.wait(300)
@@ -21,8 +30,12 @@ def main():
     logger.info("Fin main()")
 
 
+wait_event = Event()
+
+
 def callback_reply_q(message):
     logger.info("Message recu : %s" % message)
+    # wait_event.wait(0.7)
 
 
 if __name__ == '__main__':

@@ -18,7 +18,7 @@ class MessagesThread:
         self.__thread: Optional[Thread] = None
 
         self.__logger.info("Utilisation module messages %s" % module_class.__name__)
-        self.__messages_module = module_class()
+        self.__messages_module: MessagesModule = module_class()
 
     def start(self, reply_callback=None, reply_callback_is_asyncio=False):
         self.__messages_module.preparer_ressources(reply_callback, reply_callback_is_asyncio)
@@ -38,3 +38,6 @@ class MessagesThread:
             self.__stop_event.wait(30)
 
         self.__logger.info("Fin thread MessagesThread")
+
+    def get_producer(self):
+        return self.__messages_module.get_producer()

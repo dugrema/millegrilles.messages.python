@@ -12,7 +12,7 @@ from pika.channel import Channel
 
 from millegrilles.messages.MessagesModule \
     import MessagesModule, MessageConsumerVerificateur, MessageProducerFormatteur, RessourcesConsommation, \
-    MessageWrapper
+    MessageWrapper, MessagePending
 
 
 class PikaModule(MessagesModule):
@@ -233,6 +233,8 @@ class PikaModuleProducer(MessageProducerFormatteur):
 
     def __init__(self, pika_module: PikaModule, reply_res: Optional[RessourcesConsommation] = None):
         super().__init__(pika_module, reply_res)
+
+        self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__channel: Optional[Channel] = None
 
     def set_channel(self, channel: Channel):
@@ -240,4 +242,37 @@ class PikaModuleProducer(MessageProducerFormatteur):
         channel.add_on_close_callback(self.clear_channel)
 
     def clear_channel(self, _channel=None, reason=None):
+        self.__logger.debug("Fermeture channel producer : %s", reason)
         self.__channel = None
+
+    async def send(self, message: MessagePending):
+        if self.__channel is None:
+            raise Exception("Channel n'est pas pret")
+
+        exchanges = message.exchanges
+        routing_key = message.routing_key
+        reply_to = message.reply_to
+        correlation_id = message.correlation_id
+        headers = message.headers
+
+        delivery_mode_v = 1
+
+        properties = pika.BasicProperties(delivery_mode=delivery_mode_v)
+        if reply_to is not None:
+            properties.reply_to = reply_to
+        if correlation_id is not None:
+            properties.correlation_id = correlation_id
+        if headers:
+            properties.headers = headers
+
+        if exchanges is not None:
+            raise NotImplementedError('todo')
+        else:
+            self.__channel.basic_publish(
+                exchange='',
+                routing_key=routing_key,
+                body=message.content,
+                properties=properties,
+                mandatory=True
+            )
+
