@@ -28,11 +28,15 @@ class PikaModule(MessagesModule):
     def est_connecte(self) -> bool:
         return self.__connexion is not None
 
-    def preparer_ressources(self):
+    def preparer_ressources(self, reply_callback=None, reply_callback_is_asyncio=False):
         # Creer reply-q, consumer
-        reply_q_ressources = RessourcesConsommation()
-        reply_q_consumer = PikaModuleConsumer(self, reply_q_ressources, channel_separe=True)
-        self._consumers.append(reply_q_consumer)
+        if reply_callback:
+            reply_q_ressources = RessourcesConsommation()
+            reply_q_consumer = PikaModuleConsumer(self, reply_q_ressources, callback=reply_callback,
+                                                  channel_separe=True, callback_is_asyncio=reply_callback_is_asyncio)
+            self.ajouter_consumer(reply_q_consumer)
+        else:
+            reply_q_ressources = None
 
         # Creer producer
         self._producer = PikaModuleProducer(self, reply_q_ressources)
@@ -123,10 +127,10 @@ class PikaModule(MessagesModule):
 
 class PikaModuleConsumer(MessageConsumerVerificateur):
 
-    def __init__(self, module_messages: PikaModule, ressources: RessourcesConsommation,
-                 prefetch_count=2, channel_separe=False):
+    def __init__(self, module_messages: PikaModule, ressources: RessourcesConsommation, callback,
+                 prefetch_count=2, channel_separe=False, callback_is_asyncio=False):
 
-        super().__init__(module_messages, ressources, prefetch_count, channel_separe)
+        super().__init__(module_messages, ressources, callback, prefetch_count, channel_separe, callback_is_asyncio)
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__channel: Optional[Channel] = None
 

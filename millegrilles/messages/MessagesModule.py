@@ -39,7 +39,7 @@ class MessagesModule:
         # Creer tasks pour producers, consumers et entretien
         tasks = [
             asyncio.create_task(self.__entretien_task()),
-            asyncio.create_task(self._producer.run()),
+            asyncio.create_task(self._producer.run_async()),
         ]
 
         for consumer in self._consumers:
@@ -57,10 +57,10 @@ class MessagesModule:
     async def _close(self):
         raise NotImplementedError('Not implemented')
 
-    def creer_consumer(self):
-        pass
+    def ajouter_consumer(self, consumer):
+        self._consumers.append(consumer)
 
-    def preparer_ressources(self):
+    def preparer_ressources(self, reply_callback, reply_callback_is_asyncio):
         raise NotImplementedError('Not implemented')
 
 
@@ -95,11 +95,13 @@ class MessageConsumer:
     Consumer pour une Q.
     """
 
-    def __init__(self, module_messages: MessagesModule, ressources: RessourcesConsommation,
-                 prefetch_count=1, channel_separe=False):
+    def __init__(self, module_messages: MessagesModule, ressources: RessourcesConsommation, callback,
+                 prefetch_count=1, channel_separe=False, callback_is_asyncio=False):
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self._module_messages = module_messages
         self._ressources = ressources
+        self._callback = callback
+        self._callback_is_async = callback_is_asyncio
         self.channel_separe = channel_separe
 
         # self._consuming = False
@@ -127,7 +129,7 @@ class MessageConsumer:
             # Traiter messages
             while len(self._messages) > 0:
                 message = self._messages.pop(0)
-                await self._traiter_message(message)
+                await self.__traiter_message(message)
             await self._event_message.wait()
 
         self.__logger.info("Arret consumer %s" % self._module_messages)
@@ -140,18 +142,24 @@ class MessageConsumer:
         self._messages.append(message)
         self._event_message.set()
 
-    async def _traiter_message(self, message: MessageWrapper):
+    async def __traiter_message(self, message: MessageWrapper):
         # Clear flag, permet de s'assurer de bloquer sur un message en attente
         try:
             self.__logger.debug("Message a traiter : %s" % message.delivery_tag)
-
-            # Effectuer le traitement
-            await asyncio.sleep(5)
-
+            await self._traiter_message(message)
         finally:
             # Debloquer Q pour le prochain message
             self.__logger.debug("Message traite, ACK %s" % message.delivery_tag)
             self.ack_message(message)
+
+    async def _traiter_message(self, message):
+        # Effectuer le traitement
+        await asyncio.sleep(5)
+
+        if self._callback_is_async is True:
+            await self._callback(message)
+        else:
+            await asyncio.to_thread(self._callback, message)
 
     def ack_message(self, message: MessageWrapper):
         raise NotImplementedError('Not implemented')
@@ -159,9 +167,9 @@ class MessageConsumer:
 
 class MessageConsumerVerificateur(MessageConsumer):
 
-    def __init__(self, module_messages: MessagesModule, ressources: RessourcesConsommation,
-                 prefetch_count=1, channel_separe=False):
-        super().__init__(module_messages, ressources, prefetch_count, channel_separe)
+    def __init__(self, module_messages: MessagesModule, ressources: RessourcesConsommation, callback,
+                 prefetch_count=1, channel_separe=False, callback_is_asyncio=False):
+        super().__init__(module_messages, ressources, callback, prefetch_count, channel_separe, callback_is_asyncio)
 
 
 class MessagePending:
@@ -208,7 +216,7 @@ class MessageProducer:
         # Notifier thread en await
         self.__event_message.set()
 
-    async def run(self):
+    async def run_async(self):
         self.__actif = True
         self.__event_message = Event()
 

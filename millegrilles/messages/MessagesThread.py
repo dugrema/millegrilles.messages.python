@@ -20,15 +20,15 @@ class MessagesThread:
         self.__logger.info("Utilisation module messages %s" % module_class.__name__)
         self.__messages_module = module_class()
 
-    def start(self):
+    def start(self, reply_callback=None, reply_callback_is_asyncio=False):
+        self.__messages_module.preparer_ressources(reply_callback, reply_callback_is_asyncio)
+
         self.__thread = Thread(target=self.run, daemon=True)
         self.__thread.start()
 
     def run(self):
         # Loop thread tant que stop_event est clear. Note: thread est daemon, devrait fermer immediatement
         # meme si en attente asyncio.
-        self.__messages_module.preparer_ressources()
-
         while not self.__stop_event.is_set():
             self.__logger.info("Debut thread asyncio MessagesThread")
             asyncio.run(self.__messages_module.run_async())
