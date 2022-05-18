@@ -13,7 +13,7 @@ def main():
     messages_thread.start()
 
     logger.info("Attente")
-    stop_event.wait(40)
+    stop_event.wait(300)
     stop_event.set()
 
     logger.info("Fin main()")

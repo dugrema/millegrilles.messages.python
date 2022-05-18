@@ -78,6 +78,18 @@ class RessourcesConsommation:
         self.est_reply_q = self.q is None
 
 
+class MessageWrapper:
+
+    def __init__(self, contenu: bytes, routing_key: str, queue: str, exchange: str, reply_to: str, correlation_id: str, delivery_tag: int):
+        self.contenu = contenu
+        self.routing_key = routing_key
+        self.queue = queue
+        self.exchange = exchange
+        self.reply_to = reply_to
+        self.correlation_id = correlation_id
+        self.delivery_tag = delivery_tag
+
+
 class MessageConsumer:
     """
     Consumer pour une Q.
@@ -96,6 +108,8 @@ class MessageConsumer:
         self._event_consumer: Optional[Event] = None
         self._event_message: Optional[Event] = None
 
+        self._message = None
+
     async def run_async(self):
         self._event_channel = Event()
         self._event_consumer = Event()
@@ -109,13 +123,41 @@ class MessageConsumer:
         self.__logger.info("Consumer actif")
         while self._event_consumer.is_set():
             # Traiter messages
-
+            await self._traiter_message()
             await self._event_message.wait()
 
         self.__logger.info("Arret consumer %s" % self._module_messages)
 
     async def entretien(self):
         pass
+
+    def recevoir_message(self, message: MessageWrapper):
+        self.__logger.debug("Traiter message")
+        if self._message is not None:
+            raise Exception("Message non traite present")
+        self._message = message
+        self._event_message.set()
+
+    async def _traiter_message(self):
+        # Clear flag, permet de s'assurer de bloquer sur un message en attente
+        self._event_message.clear()
+        message = self._message
+        self._message = None
+
+        if message is None:
+            return
+
+        try:
+            self.__logger.debug("Message a traiter : %s" % message.contenu)
+            # Effectuer le traitement
+            await asyncio.sleep(2)
+
+        finally:
+            # Debloquer Q pour le prochain message
+            self.ack_message(message)
+
+    def ack_message(self, message):
+        raise NotImplementedError('Not implemented')
 
 
 class MessageConsumerVerificateur(MessageConsumer):

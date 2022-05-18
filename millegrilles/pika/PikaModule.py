@@ -1,4 +1,5 @@
 # Plug-in module pour pika 1.2 dans millegrilles messages
+import asyncio
 import logging
 import pika
 import ssl
@@ -10,7 +11,8 @@ from pika.adapters.utils.connection_workflow import AMQPConnectionWorkflowFailed
 from pika.channel import Channel
 
 from millegrilles.messages.MessagesModule \
-    import MessagesModule, MessageConsumerVerificateur, MessageProducerFormatteur, RessourcesConsommation
+    import MessagesModule, MessageConsumerVerificateur, MessageProducerFormatteur, RessourcesConsommation, \
+    MessageWrapper
 
 
 class PikaModule(MessagesModule):
@@ -201,6 +203,21 @@ class PikaModuleConsumer(MessageConsumerVerificateur):
 
     def on_message(self, _unused_channel, basic_deliver, properties, body):
         self.__logger.debug("Message recu : %s" % body)
+
+        # Traiter via une task asyncio
+        correlation_id = properties.correlation_id
+        reply_to = properties.reply_to
+        exchange = basic_deliver.exchange
+        routing_key = basic_deliver.routing_key
+        delivery_tag = basic_deliver.delivery_tag
+
+        message = MessageWrapper(body, routing_key, self._ressources.q, exchange, reply_to, correlation_id, delivery_tag)
+
+        # Note : recevoir va lancer une exception si le message precedent n'est pas fini de traiter
+        self.recevoir_message(message)
+
+    def ack_message(self, message: MessageWrapper):
+        self.__channel.basic_ack(message.delivery_tag)
 
 
 class PikaModuleProducer(MessageProducerFormatteur):
