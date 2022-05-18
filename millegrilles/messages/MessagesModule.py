@@ -4,14 +4,28 @@ import asyncio
 from typing import Optional, Union
 
 from asyncio import Event
+from asyncio.exceptions import TimeoutError
 
 
 class MessagesModule:
 
     def __init__(self):
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
-        self.__consumers = list()
+        self._consumers = list()
         self._producer = None
+
+        self.__event_attente: Optional[Event] = None
+
+    async def __entretien_task(self):
+        self.__event_attente = Event()
+
+        while not self.__event_attente.is_set():
+            await self.entretien()
+
+            try:
+                await asyncio.wait_for(self.__event_attente.wait(), 30)
+            except TimeoutError:
+                pass
 
     async def entretien(self):
         if self.est_connecte() is True:
@@ -22,18 +36,17 @@ class MessagesModule:
             await self._connect()
 
     async def run_async(self):
-
         # Creer tasks pour producers, consumers et entretien
         tasks = [
-            asyncio.create_task(self.entretien()),
+            asyncio.create_task(self.__entretien_task()),
             asyncio.create_task(self._producer.run()),
         ]
 
-        for consumer in self.__consumers:
-            tasks.append(consumer.run_async())
+        for consumer in self._consumers:
+            tasks.append(asyncio.create_task(consumer.run_async()))
 
         # Execution de la loop avec toutes les tasks
-        await asyncio.tasks.wait(tasks, return_when=asyncio.tasks.FIRST_EXCEPTION)
+        await asyncio.tasks.wait(tasks, return_when=asyncio.tasks.FIRST_COMPLETED)
 
     def est_connecte(self) -> bool:
         raise NotImplementedError('Not implemented')
@@ -53,17 +66,13 @@ class MessagesModule:
 
 class RessourcesConsommation:
 
-    def __init__(self, nom_queue: Optional[str], routing_keys: Optional[list] = None):
+    def __init__(self, nom_queue: Optional[str] = None, routing_keys: Optional[list] = None):
         """
-        Pour creer une reply-Q, fournir routing_keys et laisser nom_queue vide.
+        Pour creer une reply-Q, laisser nom_queue vide.
         Pour configurer une nouvelle Q, inlcure une liste de routing_keys avec le nom de la Q.
         :param nom_queue:
         :param routing_keys:
         """
-
-        if nom_queue is None and routing_keys is None:
-            raise ValueError('Il faut fournir au moins un nom de queue ou une liste de routing_keys')
-
         self.q = nom_queue  # Param est vide, le nom de la Q va etre conserve lors de la creation de la reply-Q
         self.rk = routing_keys
         self.est_reply_q = self.q is None
@@ -76,22 +85,34 @@ class MessageConsumer:
 
     def __init__(self, module_messages: MessagesModule, ressources: RessourcesConsommation,
                  prefetch_count=1, channel_separe=False):
+        self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self._module_messages = module_messages
         self._ressources = ressources
-        self._channel_separe = channel_separe
+        self.channel_separe = channel_separe
 
-        self._consuming = False
+        # self._consuming = False
         self._prefetch_count = prefetch_count
+        self._event_channel: Optional[Event] = None
+        self._event_consumer: Optional[Event] = None
+        self._event_message: Optional[Event] = None
 
-    def start_consuming(self):
-        if self._consuming is True:
-            return  # Rien a faire
+    async def run_async(self):
+        self._event_channel = Event()
+        self._event_consumer = Event()
+        self._event_message = Event()
+        self.__logger.info("Demarrage consumer %s" % self._module_messages)
 
-    def stop_consuming(self):
-        if self._consuming is False:
-            return  # Rien a faire
+        await self._event_channel.wait()
 
-        self._consuming = False
+        await self._event_consumer.wait()
+
+        self.__logger.info("Consumer actif")
+        while self._event_consumer.is_set():
+            # Traiter messages
+
+            await self._event_message.wait()
+
+        self.__logger.info("Arret consumer %s" % self._module_messages)
 
     async def entretien(self):
         pass
@@ -101,7 +122,7 @@ class MessageConsumerVerificateur(MessageConsumer):
 
     def __init__(self, module_messages: MessagesModule, ressources: RessourcesConsommation,
                  prefetch_count=1, channel_separe=False):
-        super().__init__(module_messages, ressources,prefetch_count, channel_separe)
+        super().__init__(module_messages, ressources, prefetch_count, channel_separe)
 
 
 class MessagePending:
@@ -124,7 +145,7 @@ class MessageProducer:
         self._message_number = 0
         self.__deliveries = list()  # Q d'emission de message, permet d'emettre via thread IO-LOOP
 
-        self.__event_message: Event = None
+        self.__event_message: Optional[Event] = None
 
         self.__actif = False
 
