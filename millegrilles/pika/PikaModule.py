@@ -7,8 +7,9 @@ from typing import Optional, Union
 
 from pika.adapters.asyncio_connection import AsyncioConnection
 from pika.adapters.utils.connection_workflow import AMQPConnectionWorkflowFailed
+from pika.channel import Channel
 
-from millegrilles.messages.MessagesModule import MessagesModule
+from millegrilles.messages.MessagesModule import MessagesModule, MessageConsumerVerificateur, MessageProducerFormatteur
 
 
 class PikaModule(MessagesModule):
@@ -19,9 +20,13 @@ class PikaModule(MessagesModule):
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
 
         self.__connexion: Optional[AsyncioConnection] = None
+        self.__channel_main: Optional[Channel] = None
 
     def est_connecte(self) -> bool:
         return self.__connexion is not None
+
+    def preparer_ressources(self):
+        self._producer = PikaModuleProducer(self)
 
     async def _connect(self):
         tls_context = ssl.SSLContext(ssl.PROTOCOL_TLS)
@@ -36,7 +41,7 @@ class PikaModule(MessagesModule):
                                       virtual_host='zeYncRqEqZ6eTEmUZ8whJFuHG796eSvCTWE4M432izXrp22bAtwGm7Jf',
                                       credentials=pika.credentials.ExternalCredentials(),
                                       ssl_options=ssl_options,
-                                      connection_attempts=5, retry_delay=5,
+                                      connection_attempts=2, retry_delay=10,
                                       heartbeat=30, blocked_connection_timeout=10)]
 
         connection_adapter = AsyncioConnection.create_connection(parameters, on_done=self.on_connect_done)
@@ -72,4 +77,26 @@ class PikaModule(MessagesModule):
     def on_close(self, _unused_connection, reason):
         self.__logger.info("on_close: Connexion fermee, raison : %s", reason)
         self.__connexion = None
-        self._consuming = False
+
+
+class RessourcesConsommation:
+
+    def __init__(self, nom_queue, routing_keys: list):
+        self.q = nom_queue
+        self.rk = routing_keys
+
+
+class PikaModuleConsumer(MessageConsumerVerificateur):
+
+    def __init__(self, module_messages: MessagesModule, ressources: RessourcesConsommation,
+                 prefetch_count=1, channel_separe=False):
+
+        super().__init__(module_messages, ressources, prefetch_count, channel_separe)
+
+
+class PikaModuleProducer(MessageProducerFormatteur):
+
+    def __init__(self, pika_module: PikaModule):
+        super().__init__(pika_module)
+
+

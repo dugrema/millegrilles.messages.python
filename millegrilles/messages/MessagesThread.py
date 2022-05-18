@@ -15,7 +15,6 @@ class MessagesThread:
         print("Logger %s.%s" % (__name__, self.__class__.__name__))
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__stop_event = stop_event
-        self.__stop_event_asyncio: Optional[EventAsyncio] = None
         self.__thread: Optional[Thread] = None
 
         self.__logger.info("Utilisation module messages %s" % module_class.__name__)
@@ -26,30 +25,16 @@ class MessagesThread:
         self.__thread.start()
 
     def run(self):
-        self.__logger.info("Debut thread asyncio MessagesThread")
-        asyncio.run(self.__asyncio_loop())
-        self.__logger.info("Fin thread asyncio MessagesThread")
-
-    async def entretien(self):
-        self.__logger.debug("Debut cycle entretien")
-
-        await self.__messages_module.entretien()
-
-        self.__logger.debug("Fin cycle entretien")
-
-    async def __asyncio_loop(self):
-        self.__stop_event_asyncio = EventAsyncio()
-
         # Loop thread tant que stop_event est clear. Note: thread est daemon, devrait fermer immediatement
         # meme si en attente asyncio.
+        self.__messages_module.preparer_ressources()
+
         while not self.__stop_event.is_set():
+            self.__logger.info("Debut thread asyncio MessagesThread")
+            asyncio.run(self.__messages_module.run_async())
 
-            await self.entretien()
-
-            # Attendre pour entretien
-            try:
-                await asyncio.wait_for(self.__stop_event_asyncio.wait(), 30)
-            except asyncio.exceptions.TimeoutError:
-                pass
+            # Attendre pour redemarrer execution module
+            self.__logger.info("Fin thread asyncio MessagesThread, attendre 30 secondes pour redemarrer")
+            self.__stop_event.wait(30)
 
         self.__logger.info("Fin thread MessagesThread")
