@@ -33,18 +33,22 @@ class MessagesThread:
     async def entretien(self):
         self.__logger.debug("Debut cycle entretien")
 
+        await self.__messages_module.entretien()
+
         self.__logger.debug("Fin cycle entretien")
 
     async def __asyncio_loop(self):
         self.__stop_event_asyncio = EventAsyncio()
 
+        # Loop thread tant que stop_event est clear. Note: thread est daemon, devrait fermer immediatement
+        # meme si en attente asyncio.
         while not self.__stop_event.is_set():
 
             await self.entretien()
 
             # Attendre pour entretien
             try:
-                await asyncio.wait_for(self.__stop_event_asyncio.wait(), 8)
+                await asyncio.wait_for(self.__stop_event_asyncio.wait(), 30)
             except asyncio.exceptions.TimeoutError:
                 pass
 
