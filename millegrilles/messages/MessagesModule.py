@@ -108,7 +108,8 @@ class MessageConsumer:
         self._event_consumer: Optional[Event] = None
         self._event_message: Optional[Event] = None
 
-        self._message = None
+        # Q de messages en memoire
+        self._messages = list()
 
     async def run_async(self):
         self._event_channel = Event()
@@ -122,8 +123,11 @@ class MessageConsumer:
 
         self.__logger.info("Consumer actif")
         while self._event_consumer.is_set():
+            self._event_message.clear()
             # Traiter messages
-            await self._traiter_message()
+            while len(self._messages) > 0:
+                message = self._messages.pop(0)
+                await self._traiter_message(message)
             await self._event_message.wait()
 
         self.__logger.info("Arret consumer %s" % self._module_messages)
@@ -132,31 +136,24 @@ class MessageConsumer:
         pass
 
     def recevoir_message(self, message: MessageWrapper):
-        self.__logger.debug("Traiter message")
-        if self._message is not None:
-            raise Exception("Message non traite present")
-        self._message = message
+        self.__logger.debug("recevoir_message")
+        self._messages.append(message)
         self._event_message.set()
 
-    async def _traiter_message(self):
+    async def _traiter_message(self, message: MessageWrapper):
         # Clear flag, permet de s'assurer de bloquer sur un message en attente
-        self._event_message.clear()
-        message = self._message
-        self._message = None
-
-        if message is None:
-            return
-
         try:
-            self.__logger.debug("Message a traiter : %s" % message.contenu)
+            self.__logger.debug("Message a traiter : %s" % message.delivery_tag)
+
             # Effectuer le traitement
-            await asyncio.sleep(2)
+            await asyncio.sleep(5)
 
         finally:
             # Debloquer Q pour le prochain message
+            self.__logger.debug("Message traite, ACK %s" % message.delivery_tag)
             self.ack_message(message)
 
-    def ack_message(self, message):
+    def ack_message(self, message: MessageWrapper):
         raise NotImplementedError('Not implemented')
 
 

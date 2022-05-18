@@ -124,7 +124,7 @@ class PikaModule(MessagesModule):
 class PikaModuleConsumer(MessageConsumerVerificateur):
 
     def __init__(self, module_messages: PikaModule, ressources: RessourcesConsommation,
-                 prefetch_count=1, channel_separe=False):
+                 prefetch_count=2, channel_separe=False):
 
         super().__init__(module_messages, ressources, prefetch_count, channel_separe)
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
@@ -149,8 +149,11 @@ class PikaModuleConsumer(MessageConsumerVerificateur):
             self.enregistrer_q()
 
     def enregistrer_q(self):
-        nom_q = self._ressources.q or ''
         reply_q = self._ressources.est_reply_q
+        if reply_q is True:
+            nom_q = ''
+        else:
+            nom_q = self._ressources.q or ''
         rk = self._ressources.rk
 
         if reply_q is True or rk is not None:
@@ -170,9 +173,9 @@ class PikaModuleConsumer(MessageConsumerVerificateur):
         self._event_consumer.set()
 
     def stop_consuming(self):
-        self.__channel.basic_cancel(self.__consumer_tag)
-        self.__consumer_tag = self.__channel.basic_consume(self._ressources.q, self.on_message)
-        self._event_consumer.set()
+        self.__channel.basic_cancel(self.__consumer_tag, self.on_cancel_ok)
+        self._event_consumer.clear()
+        self.__consumer_tag = None
 
     def on_channel_open(self, channel: Channel):
         self.set_channel(channel)
@@ -197,6 +200,8 @@ class PikaModuleConsumer(MessageConsumerVerificateur):
 
     def on_consumer_cancelled(self, method_frame):
         self.__logger.debug("Consumer cancelled")
+        self._event_consumer.clear()
+        self.__consumer_tag = None
 
     def on_cancel_ok(self, _unused_frame, data):
         self.__logger.debug("Cancel consumer ok: %s" % data)
