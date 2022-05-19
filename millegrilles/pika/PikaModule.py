@@ -24,11 +24,16 @@ class PikaModule(MessagesModule):
 
         self.__connexion: Optional[AsyncioConnection] = None
         self.__channel_main: Optional[Channel] = None
+        self.__exchanges_pending: Optional[set] = None
 
     def est_connecte(self) -> bool:
         return self.__connexion is not None
 
-    def preparer_ressources(self, reply_res: Optional[RessourcesConsommation] = None, consumers: Optional[list] = None):
+    def preparer_ressources(self, reply_res: Optional[RessourcesConsommation] = None, consumers: Optional[list] = None,
+                            exchanges: Optional[list] = None):
+
+        self._exchanges = exchanges
+
         # Creer reply-q, consumer
         if reply_res:
             reply_q_consumer = PikaModuleConsumer(self, reply_res)
@@ -104,7 +109,33 @@ class PikaModule(MessagesModule):
         self.__channel_main = channel
         channel.add_on_close_callback(self.on_channel_closed)
 
-        # Reconfigurer les producers/listeners
+        if self._exchanges is not None:
+            # Recreer les exchanges en premier
+            self.__exchanges_pending = set()
+            self.__exchanges_pending.update(self._exchanges)
+
+            for ex in self.__exchanges_pending:
+
+                def callback_binding(_unused_frame, self=self, exchange=ex):
+                    self.__logger.debug("Resultat exchange OK: %s" % exchange)
+                    self.__exchanges_pending.remove(exchange)
+
+                    if len(self.__exchanges_pending) == 0:
+                        self.__logger.info("Exchanges prets")
+                        self.demarrer_ressources()
+
+                self.__channel_main.exchange_declare(ex.nom, ex.type_exchange, durable=True,
+                                                     callback=callback_binding)
+
+        else:
+            # Reconfigurer les producers/listeners
+            self.demarrer_ressources()
+
+    def demarrer_ressources(self):
+        """
+        Generer les ressources pour consumers et le producer
+        :return:
+        """
         self._producer.set_channel(self.__channel_main)
         for consumer in self._consumers:
             res = consumer.get_ressources()

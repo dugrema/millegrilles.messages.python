@@ -1,7 +1,9 @@
 import logging
 from threading import Event
+from pika.exchange_type import ExchangeType
 
-from millegrilles.messages.MessagesThread import MessagesThread, RessourcesConsommation
+from millegrilles.messages.MessagesThread import MessagesThread
+from millegrilles.messages.MessagesModule import RessourcesConsommation, ExchangeConfiguration
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +15,8 @@ def main():
     stop_event = Event()
 
     # Preparer resources consumer
+    exchange_1 = ExchangeConfiguration("1.public", ExchangeType.topic)
+
     reply_res = RessourcesConsommation(callback_reply_q)
     q1 = RessourcesConsommation(callback_q_1, 'CoreBackup/tada')
     q1.ajouter_rk('3.protege', 'commande.CoreBackup.m1')
@@ -24,6 +28,7 @@ def main():
     q2.ajouter_rk('2.prive', 'commande.CoreBackup.t2')
 
     messages_thread = MessagesThread(stop_event)
+    # messages_thread.ajouter_exchange(exchange_1)
     messages_thread.set_reply_ressources(reply_res)
     messages_thread.ajouter_consumer(q1)
     messages_thread.ajouter_consumer(q2)

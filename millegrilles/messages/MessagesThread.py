@@ -1,11 +1,10 @@
 import asyncio
 import logging
 
-from asyncio import Event as EventAsyncio
 from threading import Thread, Event
 from typing import Optional
 
-from millegrilles.messages.MessagesModule import MessagesModule, RessourcesConsommation
+from millegrilles.messages.MessagesModule import MessagesModule, RessourcesConsommation, ExchangeConfiguration
 from millegrilles.pika.PikaModule import PikaModule
 
 
@@ -22,6 +21,7 @@ class MessagesThread:
 
         self.__reply_ressources: Optional[RessourcesConsommation] = None
         self.__consumer_ressources = list()
+        self.__exchanges: Optional[list] = None
 
         self.__locked = False
 
@@ -29,10 +29,11 @@ class MessagesThread:
         if self.__thread is not None:
             raise Exception("Deja demarre")
 
-        self.__messages_module.preparer_ressources(self.__reply_ressources, self.__consumer_ressources)
+        self.__messages_module.preparer_ressources(self.__reply_ressources, self.__consumer_ressources,
+                                                   self.__exchanges)
 
         self.__locked = True
-        self.__thread = Thread(target=self.__run, daemon=True, name="asyncio-msg")
+        self.__thread = Thread(target=self.__run, daemon=True, name="asyncio_loop1")
         self.__thread.start()
 
     def __run(self):
@@ -64,6 +65,11 @@ class MessagesThread:
             raise Exception("Thread active, locked")
 
         self.__consumer_ressources.append(res)
+
+    def ajouter_exchange(self, exchange: ExchangeConfiguration):
+        if self.__exchanges is None:
+            self.__exchanges = list()
+        self.__exchanges.append(exchange)
 
     def attendre_pret(self, max_delai=20):
         self.__messages_module.attendre_pret(max_delai)

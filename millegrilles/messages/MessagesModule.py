@@ -57,12 +57,29 @@ class RessourcesRoutingKey:
         return other.exchange == self.exchange and other.rk == self.rk
 
 
+class ExchangeConfiguration:
+
+    def __init__(self, nom, type_exchange):
+        self.nom = nom
+        self.type_exchange = type_exchange
+
+    def __str__(self):
+        return 'ExchangeConfiguration %s' % self.nom
+
+    def __hash__(self):
+        return hash(self.nom)
+
+    def __eq__(self, other):
+        return other.nom == self.nom
+
+
 class MessagesModule:
 
     def __init__(self):
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self._consumers = list()
         self._producer = None
+        self._exchanges: Optional[list] = None
 
         self.__event_pret = EventThreading()
 
@@ -112,7 +129,8 @@ class MessagesModule:
     def ajouter_consumer(self, consumer: RessourcesConsommation):
         self._consumers.append(consumer)
 
-    def preparer_ressources(self, reply_res: Optional[RessourcesConsommation] = None, consumers: Optional[list] = None):
+    def preparer_ressources(self, reply_res: Optional[RessourcesConsommation] = None, consumers: Optional[list] = None,
+                            exchanges: Optional[list] = None):
         raise NotImplementedError('Not implemented')
 
     def get_producer(self):
