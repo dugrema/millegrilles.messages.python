@@ -129,7 +129,9 @@ class MessagesModule:
     def ajouter_consumer(self, consumer: RessourcesConsommation):
         self._consumers.append(consumer)
 
-    def preparer_ressources(self, reply_res: Optional[RessourcesConsommation] = None, consumers: Optional[list] = None,
+    def preparer_ressources(self, env_configuration: Optional[dict] = None,
+                            reply_res: Optional[RessourcesConsommation] = None,
+                            consumers: Optional[list] = None,
                             exchanges: Optional[list] = None):
         raise NotImplementedError('Not implemented')
 

@@ -42,7 +42,7 @@ def main():
     logger.info("produire messages")
 
     reply_q = producer.get_reply_q()
-    for i in range(0, 100):
+    for i in range(0, 1):
         message = 'message %d' % i
         producer.emettre(message, reply_q)
         stop_event.wait(0.001)

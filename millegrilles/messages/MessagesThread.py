@@ -11,7 +11,6 @@ from millegrilles.pika.PikaModule import PikaModule
 class MessagesThread:
 
     def __init__(self, stop_event: Event, module_class: MessagesModule = PikaModule):
-        print("Logger %s.%s" % (__name__, self.__class__.__name__))
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__stop_event = stop_event
         self.__thread: Optional[Thread] = None
@@ -19,6 +18,7 @@ class MessagesThread:
         self.__logger.info("Utilisation module messages %s" % module_class.__name__)
         self.__messages_module: MessagesModule = module_class()
 
+        self.__env_configuration: Optional[dict] = None
         self.__reply_ressources: Optional[RessourcesConsommation] = None
         self.__consumer_ressources = list()
         self.__exchanges: Optional[list] = None
@@ -29,7 +29,9 @@ class MessagesThread:
         if self.__thread is not None:
             raise Exception("Deja demarre")
 
-        self.__messages_module.preparer_ressources(self.__reply_ressources, self.__consumer_ressources,
+        self.__messages_module.preparer_ressources(self.__env_configuration,
+                                                   self.__reply_ressources,
+                                                   self.__consumer_ressources,
                                                    self.__exchanges)
 
         self.__locked = True
@@ -53,6 +55,9 @@ class MessagesThread:
 
     def get_producer(self):
         return self.__messages_module.get_producer()
+
+    def set_env_configuration(self, env_configuration: dict):
+        self.__env_configuration = env_configuration
 
     def set_reply_ressources(self, res: RessourcesConsommation):
         if self.__locked:

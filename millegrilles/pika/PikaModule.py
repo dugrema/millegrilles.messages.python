@@ -10,6 +10,7 @@ from pika.adapters.asyncio_connection import AsyncioConnection
 from pika.adapters.utils.connection_workflow import AMQPConnectionWorkflowFailed
 from pika.channel import Channel
 
+from millegrilles.messages.ParamsEnvironnement import ConfigurationPika
 from millegrilles.messages.MessagesModule \
     import MessagesModule, MessageConsumerVerificateur, MessageProducerFormatteur, RessourcesConsommation, \
     MessageWrapper, MessagePending
@@ -22,6 +23,7 @@ class PikaModule(MessagesModule):
         super(PikaModule, self).__init__()
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
 
+        self.__pika_configuration: Optional[ConfigurationPika] = None
         self.__connexion: Optional[AsyncioConnection] = None
         self.__channel_main: Optional[Channel] = None
         self.__exchanges_pending: Optional[set] = None
@@ -29,8 +31,16 @@ class PikaModule(MessagesModule):
     def est_connecte(self) -> bool:
         return self.__connexion is not None
 
-    def preparer_ressources(self, reply_res: Optional[RessourcesConsommation] = None, consumers: Optional[list] = None,
+    def preparer_ressources(self, env_configuration: Optional[dict] = None,
+                            reply_res: Optional[RessourcesConsommation] = None,
+                            consumers: Optional[list] = None,
                             exchanges: Optional[list] = None):
+
+        self.__pika_configuration = ConfigurationPika()
+        configuration_pika_dict = self.__pika_configuration.get_env()
+        if env_configuration is not None:
+            configuration_pika_dict.update()
+        self.__pika_configuration.parse_config(configuration_pika_dict)
 
         self._exchanges = exchanges
 
@@ -57,20 +67,26 @@ class PikaModule(MessagesModule):
         self.__connexion.channel(on_open_callback=on_open_callback)
 
     async def _connect(self):
+        self.__logger.debug("Connecter a MQ avec configuration %s" % self.__pika_configuration)
+
+        hostname = self.__pika_configuration.hostname
+
         tls_context = ssl.SSLContext(ssl.PROTOCOL_TLS)
         tls_context.verify_mode = ssl.CERT_REQUIRED
-        tls_context.load_verify_locations('/home/mathieu/mgdev/certs/pki.millegrille')
-        tls_context.load_cert_chain('/home/mathieu/mgdev/certs/pki.core.cert', '/home/mathieu/mgdev/certs/pki.core.key')
-        ssl_options = pika.SSLOptions(tls_context, 'mq')
+        tls_context.load_verify_locations(self.__pika_configuration.ca_pem_path)
+        tls_context.load_cert_chain(self.__pika_configuration.cert_pem_path, self.__pika_configuration.key_pem_path)
+        ssl_options = pika.SSLOptions(tls_context, hostname)
 
         parameters = [
-            pika.ConnectionParameters(host='mg-dev5.maple.maceroc.com',
-                                      port=5673,
+            pika.ConnectionParameters(host=hostname,
+                                      port=self.__pika_configuration.port,
                                       virtual_host='zeYncRqEqZ6eTEmUZ8whJFuHG796eSvCTWE4M432izXrp22bAtwGm7Jf',
                                       credentials=pika.credentials.ExternalCredentials(),
                                       ssl_options=ssl_options,
-                                      connection_attempts=2, retry_delay=10,
-                                      heartbeat=30, blocked_connection_timeout=10)]
+                                      connection_attempts=self.__pika_configuration.connection_attempts,
+                                      retry_delay=self.__pika_configuration.retry_delay,
+                                      heartbeat=self.__pika_configuration.heartbeat,
+                                      blocked_connection_timeout=self.__pika_configuration.blocked_connection_timeout)]
 
         connection_adapter = AsyncioConnection.create_connection(parameters, on_done=self.on_connect_done)
 
