@@ -14,9 +14,18 @@ def main():
 
     # Preparer resources consumer
     reply_res = RessourcesConsommation(callback_reply_q)
+    q1 = RessourcesConsommation(callback_q_1, 'CoreBackup/tada')
+    q1.ajouter_rk('3.protege', 'commande.CoreBackup.m1')
+    q1.ajouter_rk('2.prive', 'commande.CoreBackup.m2')
+
+    q2 = RessourcesConsommation(callback_q_2, 'CoreBackup/titi')
+    q2.ajouter_rk('3.protege', 'commande.CoreBackup.t1')
+    q2.ajouter_rk('2.prive', 'commande.CoreBackup.t2')
 
     messages_thread = MessagesThread(stop_event)
     messages_thread.set_reply_ressources(reply_res)
+    messages_thread.ajouter_consumer(q1)
+    messages_thread.ajouter_consumer(q2)
 
     # Demarrer traitement messages
     messages_thread.start()
@@ -27,7 +36,7 @@ def main():
     logger.info("produire messages")
 
     reply_q = producer.get_reply_q()
-    for i in range(0, 10000):
+    for i in range(0, 100):
         message = 'message %d' % i
         producer.emettre(message, reply_q)
         stop_event.wait(0.001)

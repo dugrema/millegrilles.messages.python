@@ -35,7 +35,8 @@ class PikaModule(MessagesModule):
             self.ajouter_consumer(reply_q_consumer)
 
         if consumers is not None:
-            for consumer in consumers:
+            for consumer_res in consumers:
+                consumer = PikaModuleConsumer(self, consumer_res)
                 self.ajouter_consumer(consumer)
 
         # Creer producer
@@ -139,6 +140,8 @@ class PikaModuleConsumer(MessageConsumerVerificateur):
 
         self.__consumer_tag: Optional[str] = None
 
+        self.__rk_pending = set()
+
     def set_channel(self, channel: Channel):
         self.__channel = channel
         channel.add_on_close_callback(self.clear_channel)
@@ -197,13 +200,28 @@ class PikaModuleConsumer(MessageConsumerVerificateur):
         # Enregistrer bindings de routing_key
         self._ressources.q = nom_queue
 
-        rk = self._ressources.rk
-        if rk is not None:
+        routing_keys = self._ressources.rk
+        if routing_keys is not None:
             # Enregistrer bindings
-            raise NotImplementedError("todo")
+            self.__rk_pending.update(routing_keys)
+            for rk in self.__rk_pending:
+
+                def callback_binding(_unused_frame, self=self, nom_queue=nom_queue, rk=rk):
+                    self.__logger.debug("Resultat binding OK: %s sur %s" % (nom_queue, rk))
+                    self.__rk_pending.remove(rk)
+
+                    if len(self.__rk_pending) == 0:
+                        self.__logger.info("Bindings Q %s prets" % nom_queue)
+                        self.set_qos()
+
+                self.__logger.debug("Binding %s sur %s" % (rk, nom_queue))
+                self.__channel.queue_bind(nom_queue, rk.exchange, rk.rk, callback=callback_binding)
         else:
             # Set qos et demarrer consommation
             self.set_qos()
+
+    # def on_bindok(self, data):
+    #     self.__logger.debug("Binding OK pour %s", data)
 
     def on_consumer_cancelled(self, method_frame):
         self.__logger.debug("Consumer cancelled")

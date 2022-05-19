@@ -11,7 +11,7 @@ from asyncio.exceptions import TimeoutError
 class RessourcesConsommation:
 
     def __init__(self, callback, nom_queue: Optional[str] = None,
-                 routing_keys: Optional[list] = None, channel_separe=False, est_asyncio=False, prefetch_count=1):
+                 channel_separe=False, est_asyncio=False, prefetch_count=1):
         """
         Pour creer une reply-Q, laisser nom_queue vide.
         Pour configurer une nouvelle Q, inlcure une liste de routing_keys avec le nom de la Q.
@@ -20,11 +20,32 @@ class RessourcesConsommation:
         """
         self.callback = callback
         self.q = nom_queue  # Param est vide, le nom de la Q va etre conserve lors de la creation de la reply-Q
-        self.rk = routing_keys
+        self.rk: Optional[list] = None
         self.est_reply_q = self.q is None
         self.est_asyncio = est_asyncio
         self.channel_separe = channel_separe
         self.prefetch_count = prefetch_count
+
+    def ajouter_rk(self, exchange: str, rk: str):
+        if self.rk is None:
+            self.rk = list()
+        self.rk.append(RessourcesRoutingKey(exchange, rk))
+
+
+class RessourcesRoutingKey:
+
+    def __init__(self, exchange: str, rk: str):
+        self.exchange = exchange
+        self.rk = rk
+
+    def __str__(self):
+        return 'RessourcesRoutingKey %s/%s' % (self.exchange, self.rk)
+
+    def __hash__(self):
+        return hash('.'.join([self.exchange, self.rk]))
+
+    def __eq__(self, other):
+        return other.exchange == self.exchange and other.rk == self.rk
 
 
 class MessagesModule:
@@ -79,7 +100,7 @@ class MessagesModule:
     async def _close(self):
         raise NotImplementedError('Not implemented')
 
-    def ajouter_consumer(self, consumer):
+    def ajouter_consumer(self, consumer: RessourcesConsommation):
         self._consumers.append(consumer)
 
     def preparer_ressources(self, reply_res: Optional[RessourcesConsommation] = None, consumers: Optional[list] = None):
