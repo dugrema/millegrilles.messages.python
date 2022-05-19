@@ -1,7 +1,7 @@
 import logging
 from threading import Event
 
-from millegrilles.messages.MessagesThread import MessagesThread
+from millegrilles.messages.MessagesThread import MessagesThread, RessourcesConsommation
 
 logger = logging.getLogger(__name__)
 
@@ -11,12 +11,21 @@ LOGGING_FORMAT = '%(asctime)s %(threadName)s %(levelname)s: %(message)s'
 def main():
     logger.info("Debut main()")
     stop_event = Event()
+
+    # Preparer resources consumer
+    reply_res = RessourcesConsommation(callback_reply_q)
+
     messages_thread = MessagesThread(stop_event)
-    messages_thread.start(callback_reply_q)
+    messages_thread.set_reply_ressources(reply_res)
+
+    # Demarrer traitement messages
+    messages_thread.start()
     producer = messages_thread.get_producer()
 
-    stop_event.wait(2)
+    # Demarrer test (attendre connexion prete)
+    messages_thread.attendre_pret()
     logger.info("produire messages")
+
     reply_q = producer.get_reply_q()
     for i in range(0, 10000):
         message = 'message %d' % i
@@ -36,6 +45,14 @@ wait_event = Event()
 def callback_reply_q(message):
     logger.info("Message recu : %s" % message)
     # wait_event.wait(0.7)
+
+
+def callback_q_1(message):
+    logger.info("callback_q_1 Message recu : %s" % message)
+
+
+def callback_q_2(message):
+    logger.info("callback_q_2 Message recu : %s" % message)
 
 
 if __name__ == '__main__':

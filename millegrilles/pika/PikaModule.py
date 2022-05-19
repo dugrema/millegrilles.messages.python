@@ -28,18 +28,18 @@ class PikaModule(MessagesModule):
     def est_connecte(self) -> bool:
         return self.__connexion is not None
 
-    def preparer_ressources(self, reply_callback=None, reply_callback_is_asyncio=False):
+    def preparer_ressources(self, reply_res: Optional[RessourcesConsommation] = None, consumers: Optional[list] = None):
         # Creer reply-q, consumer
-        if reply_callback:
-            reply_q_ressources = RessourcesConsommation()
-            reply_q_consumer = PikaModuleConsumer(self, reply_q_ressources, callback=reply_callback,
-                                                  channel_separe=True, callback_is_asyncio=reply_callback_is_asyncio)
+        if reply_res:
+            reply_q_consumer = PikaModuleConsumer(self, reply_res)
             self.ajouter_consumer(reply_q_consumer)
-        else:
-            reply_q_ressources = None
+
+        if consumers is not None:
+            for consumer in consumers:
+                self.ajouter_consumer(consumer)
 
         # Creer producer
-        self._producer = PikaModuleProducer(self, reply_q_ressources)
+        self._producer = PikaModuleProducer(self, reply_res)
 
     async def entretien(self):
         await super().entretien()
@@ -106,7 +106,8 @@ class PikaModule(MessagesModule):
         # Reconfigurer les producers/listeners
         self._producer.set_channel(self.__channel_main)
         for consumer in self._consumers:
-            if consumer.channel_separe is not True:
+            res = consumer.get_ressources()
+            if res.channel_separe is not True:
                 consumer.set_channel(self.__channel_main)
             consumer.enregistrer_ressources()
 
@@ -116,7 +117,8 @@ class PikaModule(MessagesModule):
 
         self._producer.clear_channel()
         for consumer in self._consumers:
-            if consumer.channel_separe is not True:
+            res = consumer.get_ressources()
+            if res.channel_separe is not True:
                 consumer.clear_channel()
 
     def on_close(self, _unused_connection, reason):
@@ -127,10 +129,9 @@ class PikaModule(MessagesModule):
 
 class PikaModuleConsumer(MessageConsumerVerificateur):
 
-    def __init__(self, module_messages: PikaModule, ressources: RessourcesConsommation, callback,
-                 prefetch_count=2, channel_separe=False, callback_is_asyncio=False):
+    def __init__(self, module_messages: PikaModule, ressources: RessourcesConsommation):
 
-        super().__init__(module_messages, ressources, callback, prefetch_count, channel_separe, callback_is_asyncio)
+        super().__init__(module_messages, ressources)
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__channel: Optional[Channel] = None
 
@@ -147,7 +148,7 @@ class PikaModuleConsumer(MessageConsumerVerificateur):
         self.__channel = None
 
     def enregistrer_ressources(self):
-        if self.channel_separe is True:
+        if self._ressources.channel_separe is True:
             self.__pika_module.open_channel(self.on_channel_open)
         else:
             self.enregistrer_q()
@@ -169,16 +170,18 @@ class PikaModuleConsumer(MessageConsumerVerificateur):
             self.set_qos()
 
     def set_qos(self):
-        self.__channel.basic_qos(prefetch_count=self._prefetch_count, callback=self.on_basic_qos_ok)
+        self.__channel.basic_qos(prefetch_count=self._ressources.prefetch_count, callback=self.on_basic_qos_ok)
 
     def start_consuming(self):
         self.__channel.add_on_cancel_callback(self.on_consumer_cancelled)
         self.__consumer_tag = self.__channel.basic_consume(self._ressources.q, self.on_message)
         self._event_consumer.set()
+        self._consumer_pret.set()
 
     def stop_consuming(self):
         self.__channel.basic_cancel(self.__consumer_tag, self.on_cancel_ok)
         self._event_consumer.clear()
+        self._consumer_pret.clear()
         self.__consumer_tag = None
 
     def on_channel_open(self, channel: Channel):
@@ -240,10 +243,12 @@ class PikaModuleProducer(MessageProducerFormatteur):
     def set_channel(self, channel: Channel):
         self.__channel = channel
         channel.add_on_close_callback(self.clear_channel)
+        self._producer_pret.set()
 
     def clear_channel(self, _channel=None, reason=None):
         self.__logger.debug("Fermeture channel producer : %s", reason)
         self.__channel = None
+        self._producer_pret.clear()
 
     async def send(self, message: MessagePending):
         if self.__channel is None:

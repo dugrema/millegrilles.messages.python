@@ -8,12 +8,33 @@ from asyncio import Event
 from asyncio.exceptions import TimeoutError
 
 
+class RessourcesConsommation:
+
+    def __init__(self, callback, nom_queue: Optional[str] = None,
+                 routing_keys: Optional[list] = None, channel_separe=False, est_asyncio=False, prefetch_count=1):
+        """
+        Pour creer une reply-Q, laisser nom_queue vide.
+        Pour configurer une nouvelle Q, inlcure une liste de routing_keys avec le nom de la Q.
+        :param nom_queue:
+        :param routing_keys:
+        """
+        self.callback = callback
+        self.q = nom_queue  # Param est vide, le nom de la Q va etre conserve lors de la creation de la reply-Q
+        self.rk = routing_keys
+        self.est_reply_q = self.q is None
+        self.est_asyncio = est_asyncio
+        self.channel_separe = channel_separe
+        self.prefetch_count = prefetch_count
+
+
 class MessagesModule:
 
     def __init__(self):
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self._consumers = list()
         self._producer = None
+
+        self.__event_pret = EventThreading()
 
         self.__event_attente: Optional[Event] = None
 
@@ -61,25 +82,28 @@ class MessagesModule:
     def ajouter_consumer(self, consumer):
         self._consumers.append(consumer)
 
-    def preparer_ressources(self, reply_callback, reply_callback_is_asyncio):
+    def preparer_ressources(self, reply_res: Optional[RessourcesConsommation] = None, consumers: Optional[list] = None):
         raise NotImplementedError('Not implemented')
 
     def get_producer(self):
         return self._producer
 
+    def get_consumers(self):
+        return self._consumers
 
-class RessourcesConsommation:
+    def attendre_pret(self, max_delai=20):
+        event_producer = self._producer.producer_pret()
+        event_producer.wait(max_delai)
 
-    def __init__(self, nom_queue: Optional[str] = None, routing_keys: Optional[list] = None):
-        """
-        Pour creer une reply-Q, laisser nom_queue vide.
-        Pour configurer une nouvelle Q, inlcure une liste de routing_keys avec le nom de la Q.
-        :param nom_queue:
-        :param routing_keys:
-        """
-        self.q = nom_queue  # Param est vide, le nom de la Q va etre conserve lors de la creation de la reply-Q
-        self.rk = routing_keys
-        self.est_reply_q = self.q is None
+        if event_producer.is_set() is False:
+            raise Exception("Timeout attente producer")
+
+        for consumer in self._consumers:
+            event = consumer.consumer_pret()
+            event.wait(max_delai)
+
+            if event.is_set() is False:
+                raise Exception("Timeout attente consumer")
 
 
 class MessageWrapper:
@@ -111,35 +135,33 @@ class MessageConsumer:
     Consumer pour une Q.
     """
 
-    def __init__(self, module_messages: MessagesModule, ressources: RessourcesConsommation, callback,
-                 prefetch_count=1, channel_separe=False, callback_is_asyncio=False):
+    def __init__(self, module_messages: MessagesModule, ressources: RessourcesConsommation):
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self._module_messages = module_messages
         self._ressources = ressources
-        self._callback = callback
-        self._callback_is_async = callback_is_asyncio
-        self.channel_separe = channel_separe
 
         # self._consuming = False
         self.__loop = None
-        self._prefetch_count = prefetch_count
         self._event_channel: Optional[Event] = None
         self._event_consumer: Optional[Event] = None
         self._event_message: Optional[Event] = None
 
-
         # Q de messages en memoire
         self._messages = list()
 
+        self._consumer_pret = EventThreading()
+
     async def run_async(self):
+        self.__logger.info("Demarrage consumer %s" % self._module_messages)
+
+        # Setup asyncio
         self.__loop = asyncio.get_event_loop()
         self._event_channel = Event()
         self._event_consumer = Event()
         self._event_message = Event()
-        self.__logger.info("Demarrage consumer %s" % self._module_messages)
 
+        # Attente ressources
         await self._event_channel.wait()
-
         await self._event_consumer.wait()
 
         self.__logger.info("Consumer actif")
@@ -151,16 +173,16 @@ class MessageConsumer:
                 await self.__traiter_message(message)
             await self._event_message.wait()
 
+        self._consumer_pret.clear()
         self.__logger.info("Arret consumer %s" % self._module_messages)
-
-    async def entretien(self):
-        pass
 
     def recevoir_message(self, message: MessageWrapper):
         self.__logger.debug("recevoir_message")
         self._messages.append(message)
+
+        # call_soon_threadsafe permet d'interagir avec asyncio a partir d'une thread externe
+        # Requis pour demarrer le traitement des messages immediatement
         self.__loop.call_soon_threadsafe(self._event_message.set)
-        # self._event_message.set()
 
     async def __traiter_message(self, message: MessageWrapper):
         # Clear flag, permet de s'assurer de bloquer sur un message en attente
@@ -174,20 +196,26 @@ class MessageConsumer:
 
     async def _traiter_message(self, message):
         # Effectuer le traitement
-        if self._callback_is_async is True:
-            await self._callback(message)
+        if self._ressources.est_asyncio is True:
+            await self._ressources.callback(message)
         else:
-            await asyncio.to_thread(self._callback, message)
+            # Utiliser threadpool de asyncio pour methode blocking
+            await asyncio.to_thread(self._ressources.callback, message)
+
+    def get_ressources(self):
+        return self._ressources
 
     def ack_message(self, message: MessageWrapper):
         raise NotImplementedError('Not implemented')
 
+    def consumer_pret(self) -> EventThreading:
+        return self._consumer_pret
+
 
 class MessageConsumerVerificateur(MessageConsumer):
 
-    def __init__(self, module_messages: MessagesModule, ressources: RessourcesConsommation, callback,
-                 prefetch_count=1, channel_separe=False, callback_is_asyncio=False):
-        super().__init__(module_messages, ressources, callback, prefetch_count, channel_separe, callback_is_asyncio)
+    def __init__(self, module_messages: MessagesModule, ressources: RessourcesConsommation):
+        super().__init__(module_messages, ressources)
 
 
 class MessagePending:
@@ -217,9 +245,13 @@ class MessageProducer:
         self.__NB_MESSAGE_MAX = 10
 
         self.__actif = False
+        self._producer_pret = EventThreading()
 
     def emettre(self, message: Union[str, bytes], routing_key: str,
                 exchanges: Optional[Union[str, list]] = None, correlation_id: str = None, reply_to: str = None):
+
+        if not self._producer_pret.is_set():
+            raise Exception("Producer n'est pas pret (utiliser message thread ou producer .producer_pret().wait()")
 
         self._event_q_prete.wait()
 
@@ -259,16 +291,8 @@ class MessageProducer:
                 self._event_q_prete.set()  # Debloque reception de messages
 
                 # Attendre prochains messages
-                # self.__logger.debug("producer : attente prochain message")
                 await self.__event_message.wait()
                 self.__logger.debug("Wake up producer")
-                # try:
-                #     # Note : l'evenement trigger en dehors de asyncio ne declenche pas tout le temps la loop
-                #     #await asyncio.wait_for(self.__event_message.wait(), 0.25)
-                # except TimeoutError:
-                #     pass
-                # else:
-                #     self.__logger.debug("Wake up producer")
 
                 self.__event_message.clear()  # Reset flag
         except:
@@ -281,6 +305,9 @@ class MessageProducer:
 
     def get_reply_q(self):
         return self._reply_res.q
+
+    def producer_pret(self) -> EventThreading:
+        return self._producer_pret
 
 
 class MessageProducerFormatteur(MessageProducer):
