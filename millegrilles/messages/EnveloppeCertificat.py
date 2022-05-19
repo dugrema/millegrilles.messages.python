@@ -366,7 +366,7 @@ def split_chaine_certificats(pem_str: Union[str, bytes]):
     """
     if isinstance(pem_str, bytes):
         pem_str = pem_str.decode('utf-8')
-    chaine_certs = [c.strip() + END_CERTIFICATE for c in pem_str.split(END_CERTIFICATE)]
+    chaine_certs = [c.strip() + '\n' + END_CERTIFICATE for c in pem_str.split(END_CERTIFICATE)]
     return chaine_certs[0:-1]  # Dernier est juste un END CERTIFICATE
 
 
