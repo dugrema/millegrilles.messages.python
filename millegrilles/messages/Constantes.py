@@ -13,6 +13,10 @@ ENV_KEY_PEM = 'KEY_PEM'
 
 ENV_WEB_PORT = 'WEB_PORT'
 
+SECURITE_PUBLIC = '1.public'
+SECURITE_PRIVE = '2.prive'
+SECURITE_PROTEGE = '3.protege'
+SECURITE_SECURE = '4.secure'
 
 # Champs messages
 MESSAGE_ENTETE='en-tete'

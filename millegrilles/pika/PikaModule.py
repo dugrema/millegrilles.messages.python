@@ -10,6 +10,7 @@ from pika.adapters.asyncio_connection import AsyncioConnection
 from pika.adapters.utils.connection_workflow import AMQPConnectionWorkflowFailed
 from pika.channel import Channel
 
+from millegrilles.messages.CleCertificat import CleCertificat
 from millegrilles.messages.EnveloppeCertificat import EnveloppeCertificat
 from millegrilles.messages.MessagesModule \
     import MessagesModule, MessageConsumerVerificateur, MessageProducerFormatteur, RessourcesConsommation, \
@@ -179,6 +180,10 @@ class PikaModule(MessagesModule):
         self.__channel_main = None
         self.__connexion = None
 
+    @property
+    def configuration(self) -> ConfigurationPika:
+        return self.__pika_configuration
+
 
 class PikaModuleConsumer(MessageConsumerVerificateur):
 
@@ -309,7 +314,10 @@ class PikaModuleConsumer(MessageConsumerVerificateur):
 class PikaModuleProducer(MessageProducerFormatteur):
 
     def __init__(self, pika_module: PikaModule, reply_res: Optional[RessourcesConsommation] = None):
-        super().__init__(pika_module, reply_res)
+        configuration = pika_module.configuration
+        clecert = CleCertificat.from_files(configuration.key_pem_path, configuration.cert_pem_path)
+
+        super().__init__(pika_module, clecert, reply_res)
 
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__channel: Optional[Channel] = None
@@ -345,7 +353,14 @@ class PikaModuleProducer(MessageProducerFormatteur):
             properties.headers = headers
 
         if exchanges is not None:
-            raise NotImplementedError('todo')
+            for exchange in exchanges:
+                self.__channel.basic_publish(
+                    exchange=exchange,
+                    routing_key=routing_key,
+                    body=message.content,
+                    properties=properties,
+                    mandatory=True
+                )
         else:
             self.__channel.basic_publish(
                 exchange='',

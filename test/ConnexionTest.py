@@ -2,6 +2,7 @@ import logging
 from threading import Event
 from pika.exchange_type import ExchangeType
 
+from millegrilles.messages import Constantes
 from millegrilles.messages.MessagesThread import MessagesThread
 from millegrilles.messages.MessagesModule import RessourcesConsommation, ExchangeConfiguration
 
@@ -24,7 +25,7 @@ def main():
 
     q2 = RessourcesConsommation(callback_q_2, 'CoreBackup/titi', durable=True)
     q2.set_ttl(30000)
-    q2.ajouter_rk('3.protege', 'commande.CoreBackup.t1')
+    q2.ajouter_rk('2.prive', 'evenement.CoreBackup.t1')
     q2.ajouter_rk('2.prive', 'commande.CoreBackup.t2')
 
     messages_thread = MessagesThread(stop_event)
@@ -42,10 +43,12 @@ def main():
     logger.info("produire messages")
 
     reply_q = producer.get_reply_q()
-    for i in range(0, 1):
-        message = 'message %d' % i
-        producer.emettre(message, reply_q)
-        stop_event.wait(0.001)
+    for i in range(0, 1000):
+        # message = 'message %d' % i
+        # producer.emettre(message, reply_q)
+        evenement = {"value": i, "texte": "Allo"}
+        producer.emettre_evenement(evenement, domaine='CoreBackup', action='t1', exchanges=[Constantes.SECURITE_PRIVE])
+        # stop_event.wait(0.001)
 
     logger.info("Attente")
     stop_event.wait(300)

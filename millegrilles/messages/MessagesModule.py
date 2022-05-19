@@ -1,11 +1,15 @@
-import logging
 import asyncio
+import json
+import logging
 
 from threading import Event as EventThreading
 from typing import Optional, Union
 
 from asyncio import Event
 from asyncio.exceptions import TimeoutError
+
+from millegrilles.messages.CleCertificat import CleCertificat
+from millegrilles.messages.FormatteurMessages import FormatteurMessageMilleGrilles, SignateurTransactionSimple
 
 
 class RessourcesConsommation:
@@ -365,22 +369,53 @@ class MessageProducerFormatteur(MessageProducer):
     Produceur qui formatte le message a emettre.
     """
 
-    def __init__(self, module_messages: MessagesModule, reply_res: Optional[RessourcesConsommation] = None):
+    def __init__(self, module_messages: MessagesModule, clecert: CleCertificat,
+                 reply_res: Optional[RessourcesConsommation] = None):
         super().__init__(module_messages, reply_res)
+        self.__formatteur_messages: FormatteurMessageMilleGrilles = \
+            MessageProducerFormatteur.__preparer_formatteur(clecert)
+
+    @staticmethod
+    def __preparer_formatteur(clecert: CleCertificat) -> FormatteurMessageMilleGrilles:
+        idmg = clecert.enveloppe.idmg
+        signateur = SignateurTransactionSimple(clecert)
+        formatteur = FormatteurMessageMilleGrilles(idmg, signateur)
+        return formatteur
 
     def emettre_evenement(self, evenement: dict, domaine: str, action: str,
-                          partition: Optional[str], exchanges: Union[str, list], version=1,
+                          partition: Optional[str] = None, exchanges: Union[str, list] = None, version=1,
                           reply_to=None, correlation_id=None):
+        message, uuid_message = self.__formatteur_messages.signer_message(
+            evenement, domaine, version, action=action, partition=partition)
+
+        if correlation_id is None:
+            correlation_id = str(uuid_message)
+
+        rk = ['evenement', domaine]
+        if partition is not None:
+            rk.append(partition)
+        rk.append(action)
+
+        message_bytes = json.dumps(message)
+
+        self.emettre(message_bytes, '.'.join(rk), exchanges, correlation_id, reply_to)
+
+    def emettre_commande(self, commande: dict, domaine: str, action: str,
+                         partition: Optional[str] = None, exchanges: Union[str, list] = None, version=1,
+                         reply_to=None, correlation_id=None):
         pass
 
-    def emettre_commande(self):
+    def emettre_requete(self, requete: dict, domaine: str, action: str,
+                        partition: Optional[str] = None, exchanges: Union[str, list] = None, version=1,
+                        reply_to=None, correlation_id=None):
         pass
 
-    def emettre_requete(self):
+    def emettre_transaction(self, transaction: dict, domaine: str, action: str,
+                            partition: Optional[str] = None, exchanges: Union[str, list] = None, version=1,
+                            reply_to=None, correlation_id=None):
         pass
 
-    def emettre_transaction(self):
-        pass
-
-    def repondre(self):
+    def repondre(self, reponse: dict, domaine: str, action: str,
+                 partition: Optional[str], exchanges: Union[str, list], version=1,
+                 reply_to=None, correlation_id=None):
         pass
