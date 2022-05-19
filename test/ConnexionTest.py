@@ -18,7 +18,8 @@ def main():
     q1.ajouter_rk('3.protege', 'commande.CoreBackup.m1')
     q1.ajouter_rk('2.prive', 'commande.CoreBackup.m2')
 
-    q2 = RessourcesConsommation(callback_q_2, 'CoreBackup/titi')
+    q2 = RessourcesConsommation(callback_q_2, 'CoreBackup/titi', durable=True)
+    q2.set_ttl(30000)
     q2.ajouter_rk('3.protege', 'commande.CoreBackup.t1')
     q2.ajouter_rk('2.prive', 'commande.CoreBackup.t2')
 

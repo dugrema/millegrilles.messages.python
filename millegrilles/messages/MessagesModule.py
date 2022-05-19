@@ -11,7 +11,7 @@ from asyncio.exceptions import TimeoutError
 class RessourcesConsommation:
 
     def __init__(self, callback, nom_queue: Optional[str] = None,
-                 channel_separe=False, est_asyncio=False, prefetch_count=1):
+                 channel_separe=False, est_asyncio=False, prefetch_count=1, auto_delete=False, exclusive=False, durable=False):
         """
         Pour creer une reply-Q, laisser nom_queue vide.
         Pour configurer une nouvelle Q, inlcure une liste de routing_keys avec le nom de la Q.
@@ -25,11 +25,20 @@ class RessourcesConsommation:
         self.est_asyncio = est_asyncio
         self.channel_separe = channel_separe
         self.prefetch_count = prefetch_count
+        self.exclusive = exclusive
+        self.durable = durable
+        self.auto_delete = auto_delete
+        self.arguments: Optional[dict] = None
 
     def ajouter_rk(self, exchange: str, rk: str):
         if self.rk is None:
             self.rk = list()
         self.rk.append(RessourcesRoutingKey(exchange, rk))
+
+    def set_ttl(self, ttl: int):
+        if self.arguments is None:
+            self.arguments = dict()
+        self.arguments['x-message-ttl'] = ttl
 
 
 class RessourcesRoutingKey:

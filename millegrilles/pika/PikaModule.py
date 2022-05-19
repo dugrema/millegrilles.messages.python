@@ -166,8 +166,12 @@ class PikaModuleConsumer(MessageConsumerVerificateur):
 
         if reply_q is True or rk is not None:
             # On doit declarer la Q
-            exclusive = reply_q is True
-            self.__channel.queue_declare(nom_q, exclusive=exclusive, callback=self.on_queue_declare)
+            exclusive = reply_q is True or self._ressources.exclusive
+            durable = self._ressources.durable
+            auto_delete = self._ressources.auto_delete
+            arguments = self._ressources.arguments
+            self.__channel.queue_declare(nom_q, exclusive=exclusive, callback=self.on_queue_declare,
+                                         durable=durable, auto_delete=auto_delete, arguments=arguments)
         elif reply_q is False:
             # On utilise une queue existante (RK deja configures)
             self.set_qos()
