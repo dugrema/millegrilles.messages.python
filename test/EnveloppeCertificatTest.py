@@ -17,6 +17,7 @@ def load_certs():
     logger.debug('IDMG cert Core : %s' % enveloppe_core.idmg)
     logger.debug('Fingerprint cert core : %s' % enveloppe_core.fingerprint)
     logger.debug('Exchanges cert core : %s' % enveloppe_core.get_exchanges)
+    logger.debug('x25519 public key cert core : %s' % enveloppe_core.get_public_x25519())
 
 
 def main():

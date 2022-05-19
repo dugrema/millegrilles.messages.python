@@ -20,6 +20,8 @@ from cryptography.x509 import load_pem_x509_certificate, ObjectIdentifier, NameO
 from cryptography.x509.base import Certificate
 from multihash.constants import HASH_CODES
 from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PublicKey
+from nacl.signing import VerifyKey
 
 from millegrilles.messages.Hachage import hacher, map_code_to_hashes
 
@@ -96,8 +98,10 @@ class EnveloppeCertificat:
 
         return str(self.certificat.public_bytes(serialization.Encoding.PEM), 'utf-8')
 
-    @property
-    def public_key(self):
+    def get_public_key(self):
+        return self.certificat.public_key()
+
+    def public_key_str(self):
         public_key = self.certificat.public_key().public_bytes(
             encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo)
         public_key_str = str(public_key, 'utf-8')
@@ -314,6 +318,15 @@ class EnveloppeCertificat:
 
         return {'expire': est_expire, 'renouveler': peut_renouveler}
 
+    def get_public_x25519(self) -> X25519PublicKey:
+        public_key = self.certificat.public_key().public_bytes(encoding=serialization.Encoding.Raw,
+                                                               format=serialization.PublicFormat.Raw)
+
+        cle_nacl_verifykey = VerifyKey(public_key).to_curve25519_public_key()
+        x25519_public_key = X25519PublicKey.from_public_bytes(cle_nacl_verifykey.encode())
+
+        return x25519_public_key
+
 
 def trouver_idmg(enveloppe: EnveloppeCertificat) -> str:
 
@@ -366,21 +379,21 @@ IDMG_ENCODING = 'base58btc'
 IDMG_HASH_FUNCTION = 'blake2s-256'
 
 
-def encoder_idmg(certificat_pem: str, version=IDMG_VERSION_ACTIVE):
-    return _encoder_idmg(certificat_pem, version)
+# def encoder_idmg(certificat_pem: str, version=IDMG_VERSION_ACTIVE):
+#     return _encoder_idmg(certificat_pem, version)
 
 
 def encoder_idmg_cert(cert_x509: Certificate, version=IDMG_VERSION_ACTIVE):
-    return _encoder_idmg_cert(cert_x509, version)
+    return _encoder_idmg_cert(cert_x509, version, IDMG_HASH_FUNCTION)
 
 
 def verifier_idmg(idmg: str, certificat_pem: str):
     return _verifier_idmg(idmg, certificat_pem)
 
 
-def _encoder_idmg(certificat_pem: str, version=IDMG_VERSION_ACTIVE, hashing_code: Union[int, str] = IDMG_HASH_FUNCTION):
+def _encoder_idmg(certificat_pem: str, version=IDMG_VERSION_ACTIVE):
     cert_x509 = load_pem_x509_certificate(certificat_pem.encode('utf-8'), default_backend())
-    return encoder_idmg_cert(cert_x509, version, hashing_code)
+    return encoder_idmg_cert(cert_x509, version)
 
 
 def _encoder_idmg_cert(cert_x509: Certificate, version=IDMG_VERSION_ACTIVE, hashing_code: Union[int, str] = IDMG_HASH_FUNCTION):
