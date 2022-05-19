@@ -10,10 +10,11 @@ from pika.adapters.asyncio_connection import AsyncioConnection
 from pika.adapters.utils.connection_workflow import AMQPConnectionWorkflowFailed
 from pika.channel import Channel
 
-from millegrilles.messages.ParamsEnvironnement import ConfigurationPika
+from millegrilles.messages.EnveloppeCertificat import EnveloppeCertificat
 from millegrilles.messages.MessagesModule \
     import MessagesModule, MessageConsumerVerificateur, MessageProducerFormatteur, RessourcesConsommation, \
     MessageWrapper, MessagePending
+from millegrilles.messages.ParamsEnvironnement import ConfigurationPika
 
 
 class PikaModule(MessagesModule):
@@ -71,6 +72,10 @@ class PikaModule(MessagesModule):
 
         hostname = self.__pika_configuration.hostname
 
+        # Extraire IDMG du certificat. C'est le virtual host RabbitMQ.
+        enveloppe_cert = EnveloppeCertificat.from_file(self.__pika_configuration.cert_pem_path)
+        idmg = enveloppe_cert.idmg
+
         tls_context = ssl.SSLContext(ssl.PROTOCOL_TLS)
         tls_context.verify_mode = ssl.CERT_REQUIRED
         tls_context.load_verify_locations(self.__pika_configuration.ca_pem_path)
@@ -80,7 +85,7 @@ class PikaModule(MessagesModule):
         parameters = [
             pika.ConnectionParameters(host=hostname,
                                       port=self.__pika_configuration.port,
-                                      virtual_host='zeYncRqEqZ6eTEmUZ8whJFuHG796eSvCTWE4M432izXrp22bAtwGm7Jf',
+                                      virtual_host=idmg,
                                       credentials=pika.credentials.ExternalCredentials(),
                                       ssl_options=ssl_options,
                                       connection_attempts=self.__pika_configuration.connection_attempts,
