@@ -12,3 +12,20 @@ ENV_CERT_PEM = 'CERT_PEM'
 ENV_KEY_PEM = 'KEY_PEM'
 
 ENV_WEB_PORT = 'WEB_PORT'
+
+
+# Champs messages
+MESSAGE_ENTETE='en-tete'
+MESSAGE_FINGERPRINT_CERTIFICAT = 'fingerprint_certificat'
+MESSAGE_SIGNATURE = '_signature'
+MESSAGE_VERSION_1 = 1
+MESSAGE_IDMG = 'idmg'
+MESSAGE_UUID_TRANSACTION = 'uuid_transaction'
+MESSAGE_ESTAMPILLE = 'estampille'
+MESSAGE_VERSION = 'version'
+MESSAGE_DOMAINE = 'domaine'
+MESSAGE_ACTION = 'action'
+MESSAGE_PARTITION = 'partition'
+MESSAGE_CERTIFICAT = 'certificat'
+MESSAGE_HACHAGE = 'hachage_contenu'
+MESSAGE_CERTIFICAT_INCLUS = '_certificat'

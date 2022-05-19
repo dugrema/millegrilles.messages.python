@@ -46,7 +46,9 @@ class EnveloppeCertificat:
         self.__fingerprint = calculer_fingerprint(certificat)
         self.__idmg = trouver_idmg(self)
 
-    def _set_chaine_certificats(self, pems: Union[str, list]):
+    def _set_chaine_certificats(self, pems: Union[str, bytes, list]):
+        if isinstance(pems, bytes):
+            pems = pems.decode('utf-8')
         if isinstance(pems, str):
             self.__chaine_pem = split_chaine_certificats(pems)
         else:
@@ -356,14 +358,16 @@ def calculer_fingerprint(certificat):
     return mb.decode('utf-8')
 
 
-def split_chaine_certificats(pem_str: str):
+def split_chaine_certificats(pem_str: Union[str, bytes]):
     """
     Split une chaine de certificats (PEM format str)
     :param pem_str:
     :return:
     """
-    chaine_certs = [c + END_CERTIFICATE for c in pem_str.split(END_CERTIFICATE)]
-    return chaine_certs
+    if isinstance(pem_str, bytes):
+        pem_str = pem_str.decode('utf-8')
+    chaine_certs = [c.strip() + END_CERTIFICATE for c in pem_str.split(END_CERTIFICATE)]
+    return chaine_certs[0:-1]  # Dernier est juste un END CERTIFICATE
 
 
 # ---- IDMG ----

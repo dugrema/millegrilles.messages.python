@@ -5,20 +5,21 @@ import multibase
 import uuid
 import pytz
 
-from typing import Union
 from cryptography.hazmat.primitives import hashes
 
-from millegrilles import Constantes
-from millegrilles.SecuritePKI import SignateurTransaction, UtilCertificats
+from millegrilles.messages import Constantes
 from millegrilles.messages.Hachage import hacher
 from millegrilles.messages.CleCertificat import CleCertificat
+from millegrilles.messages.Encoders import DateFormatEncoder
+
+VERSION_SIGNATURE = 2
 
 
 class SignateurTransactionSimple:
     """ Signe une transaction avec clecert. """
 
-    def __init__(self, clecert: EnveloppeCleCert):
-        self._logger = logging.getLogger('%s.%s' % (__name__, self.__class__.__name__))
+    def __init__(self, clecert: CleCertificat):
+        self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__clecert = clecert
 
     def signer(self, dict_message):
@@ -31,43 +32,40 @@ class SignateurTransactionSimple:
 
         # Copier la base du message et l'en_tete puisqu'ils seront modifies
         dict_message_effectif = dict_message.copy()
-        en_tete = dict_message[Constantes.TRANSACTION_MESSAGE_LIBELLE_EN_TETE].copy()
-        dict_message_effectif[Constantes.TRANSACTION_MESSAGE_LIBELLE_EN_TETE] = en_tete
+        en_tete = dict_message[Constantes.MESSAGE_ENTETE].copy()
+        dict_message_effectif[Constantes.MESSAGE_ENTETE] = en_tete
 
         # Ajouter information du certification dans l'en_tete
         fingerprint_cert = self.__clecert.fingerprint
-        # self._logger.debug("Fingerprint: %s" % fingerprint_cert)
-        en_tete[Constantes.TRANSACTION_MESSAGE_LIBELLE_FINGERPRINT_CERTIFICAT] = fingerprint_cert
+        en_tete[Constantes.MESSAGE_FINGERPRINT_CERTIFICAT] = fingerprint_cert
 
         signature = self._produire_signature(dict_message_effectif)
-        dict_message_effectif[Constantes.TRANSACTION_MESSAGE_LIBELLE_SIGNATURE] = signature
+        dict_message_effectif[Constantes.MESSAGE_SIGNATURE] = signature
 
         return dict_message_effectif
 
     def _produire_signature(self, dict_message):
         # message_bytes = self.preparer_transaction_bytes(dict_message)
-        message_bytes = UtilCertificats.preparer_message_bytes(dict_message)
-        self._logger.debug("Message en format json: %s" % message_bytes)
+        message_bytes = preparer_message_bytes(dict_message)
+        self.__logger.debug("Message en format json: %s" % message_bytes)
 
         # Hacher le message avec BLAKE2b pour supporter message de grande taille avec Ed25519
-        hash = hashes.Hash(hashes.BLAKE2b(64))
-        hash.update(message_bytes)
-        hash_value = hash.finalize()
+        hash_fct = hashes.Hash(hashes.BLAKE2b(64))
+        hash_fct.update(message_bytes)
+        hash_value = hash_fct.finalize()
 
         signature = self.__clecert.signer(hash_value)
-        # signature_texte_utf8 = str(base64.b64encode(signature), 'utf-8')
 
-        VERSION_SIGNATURE = 2
         signature = bytes([VERSION_SIGNATURE]) + signature
 
         signature_encodee = multibase.encode('base64', signature).decode('utf-8')
-        self._logger.debug("Signature: %s" % signature_encodee)
+        self.__logger.debug("Signature: %s" % signature_encodee)
 
         return signature_encodee
 
     @property
     def chaine_certs(self) -> list:
-        return self.__clecert.chaine
+        return self.__clecert.enveloppe.chaine_pem()
 
 
 class FormatteurMessageMilleGrilles:
@@ -76,11 +74,10 @@ class FormatteurMessageMilleGrilles:
     Supporte aussi une contre-signature pour emission vers une MilleGrille tierce.
     """
 
-    def __init__(self, idmg: str, signateur_transactions: Union[SignateurTransaction, SignateurTransactionSimple]):
+    def __init__(self, idmg: str, signateur_transactions: SignateurTransactionSimple):
         """
         :param idmg: MilleGrille correspondant au signateur de transactions
         :param signateur_transactions: Signateur de transactions pour la MilleGrille
-        :param contresignateur_transactions: Contre-signateur (e.g. pour un connecteur inter-MilleGrilles)
         """
         self.__idmg = idmg
         self.__signateur_transactions = signateur_transactions
@@ -89,9 +86,8 @@ class FormatteurMessageMilleGrilles:
     def signer_message(self,
                        message: dict,
                        domaine: str = None,
-                       version: int = Constantes.TRANSACTION_MESSAGE_LIBELLE_VERSION_6,
-                       idmg_destination: str = None,
-                       ajouter_chaine_certs = False,
+                       version: int = Constantes.MESSAGE_VERSION_1,
+                       ajouter_chaine_certs=True,
                        action: str = None,
                        partition: str = None) -> (dict, str):
         """
@@ -100,7 +96,9 @@ class FormatteurMessageMilleGrilles:
         :param message: Message a signer
         :param domaine: Domaine a ajouter dans l'entete
         :param version: Version du message (depend du domaine)
-        :param idmg_destination: Optionnel, idmg destination pour le message.
+        :param ajouter_chaine_certs:
+        :param action:
+        :param partition:
         :return: Message signe
         """
 
@@ -108,47 +106,40 @@ class FormatteurMessageMilleGrilles:
         uuid_transaction = uuid.uuid1()
 
         meta = dict()
-        meta[Constantes.CONFIG_IDMG] = self.__idmg
-        meta[Constantes.TRANSACTION_MESSAGE_LIBELLE_UUID] = "%s" % uuid_transaction
+        meta[Constantes.MESSAGE_IDMG] = self.__idmg
+        meta[Constantes.MESSAGE_UUID_TRANSACTION] = "%s" % uuid_transaction
         date_courante_utc = datetime.datetime.now(tz=pytz.UTC)
-        meta[Constantes.TRANSACTION_MESSAGE_LIBELLE_ESTAMPILLE] = int(date_courante_utc.timestamp())
-        meta[Constantes.TRANSACTION_MESSAGE_LIBELLE_VERSION] = version
+        meta[Constantes.MESSAGE_ESTAMPILLE] = int(date_courante_utc.timestamp())
+        meta[Constantes.MESSAGE_VERSION] = version
         if domaine is not None:
-            meta[Constantes.TRANSACTION_MESSAGE_LIBELLE_DOMAINE] = domaine
+            meta[Constantes.MESSAGE_DOMAINE] = domaine
         if action is not None:
-            meta[Constantes.TRANSACTION_MESSAGE_LIBELLE_ACTION] = action
+            meta[Constantes.MESSAGE_ACTION] = action
         if partition is not None:
-            meta[Constantes.TRANSACTION_MESSAGE_LIBELLE_PARTITION] = partition
-        if idmg_destination is not None:
-            meta[Constantes.TRANSACTION_MESSAGE_LIBELLE_IDMG_DESTINATION] = idmg_destination
+            meta[Constantes.MESSAGE_PARTITION] = partition
 
         message_copy = message.copy()
-        message_copy[Constantes.TRANSACTION_MESSAGE_LIBELLE_INFO_TRANSACTION] = meta
         try:
-            del message_copy[Constantes.TRANSACTION_MESSAGE_LIBELLE_EN_TETE]
+            del message_copy[Constantes.MESSAGE_ENTETE]
         except KeyError:
             pass  # L'entete n'existait pas
 
         # Nettoyer le message, serialiser pour eliminer tous les objets
-        message_bytes = UtilCertificats.preparer_message_bytes(message_copy)
-        # enveloppe_bytes = self.__signateur_transactions.preparer_transaction_bytes(enveloppe)
+        message_bytes = preparer_message_bytes(message_copy)
 
         # Hacher le contenu avec SHA2-256 et signer le message avec le certificat du noeud
-        # meta[Constantes.TRANSACTION_MESSAGE_LIBELLE_HACHAGE] = self.__signateur_transactions.hacher_bytes(enveloppe_bytes)
         self.__logger.debug("Message a hacher : %s" % message_bytes.decode('utf-8'))
-        meta[Constantes.TRANSACTION_MESSAGE_LIBELLE_HACHAGE] = hacher(
-            message_bytes, hashing_code='blake2s-256', encoding='base64')
+        meta[Constantes.MESSAGE_HACHAGE] = hacher(message_bytes, hashing_code='blake2s-256', encoding='base64')
 
         # Recuperer le dict de message (deserialiser), ajouter l'entete pour signer le message
         message_copy = json.loads(message_bytes)
-        message_copy[Constantes.TRANSACTION_MESSAGE_LIBELLE_EN_TETE] = meta
+        message_copy[Constantes.MESSAGE_ENTETE] = meta
 
         message_signe = self.__signateur_transactions.signer(message_copy)
 
         if ajouter_chaine_certs:
             # Ajouter un element _certificats = [cert, inter, millegrilles]
-            message_signe[Constantes.TRANSACTION_MESSAGE_LIBELLE_CERTIFICAT_INCLUS] = \
-                self.__signateur_transactions.chaine_certs
+            message_signe[Constantes.MESSAGE_CERTIFICAT_INCLUS] = self.__signateur_transactions.chaine_certs
 
         return message_signe, uuid_transaction
 
@@ -156,3 +147,50 @@ class FormatteurMessageMilleGrilles:
     def chaine_certificat(self):
         return self.__signateur_transactions.chaine_certs
 
+
+def preparer_message_bytes(message: dict):
+    """
+            Prepare une transaction (dictionnaire) pour la signature ou la verification. Retourne des bytes.
+            :return: Transaction nettoyee en bytes.
+            """
+
+    transaction_temp = dict()
+    for key, value in message.items():
+        if not key.startswith('_'):
+            transaction_temp[key] = value
+
+    # self._logger.debug("Message nettoye: %s" % str(transaction_temp))
+
+    # Premiere passe, converti les dates. Les nombre floats sont incorrects.
+    message_json = json.dumps(
+        transaction_temp,
+        ensure_ascii=False,  # S'assurer de supporter tous le range UTF-8
+        cls=DateFormatEncoder
+    )
+
+    # HACK - Fix pour le decodage des float qui ne doivent pas finir par .0 (e.g. 100.0 doit etre 100)
+    message_json = json.loads(message_json, parse_float=parse_float)
+    message_json = json.dumps(
+        message_json,
+        ensure_ascii=False,  # S'assurer de supporter tous le range UTF-8
+        sort_keys=True,
+        separators=(',', ':')
+    )
+
+    message_bytes = bytes(message_json, 'utf-8')
+
+    return message_bytes
+
+
+def parse_float(f: str):
+    """
+    Permet de transformer les nombre floats qui finissent par .0 en entier. Requis pour interoperabilite avec
+    la verification (hachage, signature) en JavaScript qui fait cette conversion implicitement.
+    :param f:
+    :return:
+    """
+    val_float = float(f)
+    val_int = int(val_float)
+    if val_int == val_float:
+        return val_int
+    return val_float
