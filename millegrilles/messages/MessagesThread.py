@@ -31,6 +31,7 @@ class MessagesThread:
         # meme si en attente asyncio.
         while not self.__stop_event.is_set():
             self.__logger.info("Debut thread asyncio MessagesThread")
+
             asyncio.run(self.__messages_module.run_async())
 
             # Attendre pour redemarrer execution module

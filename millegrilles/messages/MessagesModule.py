@@ -121,15 +121,18 @@ class MessageConsumer:
         self.channel_separe = channel_separe
 
         # self._consuming = False
+        self.__loop = None
         self._prefetch_count = prefetch_count
         self._event_channel: Optional[Event] = None
         self._event_consumer: Optional[Event] = None
         self._event_message: Optional[Event] = None
 
+
         # Q de messages en memoire
         self._messages = list()
 
     async def run_async(self):
+        self.__loop = asyncio.get_event_loop()
         self._event_channel = Event()
         self._event_consumer = Event()
         self._event_message = Event()
@@ -156,7 +159,8 @@ class MessageConsumer:
     def recevoir_message(self, message: MessageWrapper):
         self.__logger.debug("recevoir_message")
         self._messages.append(message)
-        self._event_message.set()
+        self.__loop.call_soon_threadsafe(self._event_message.set)
+        # self._event_message.set()
 
     async def __traiter_message(self, message: MessageWrapper):
         # Clear flag, permet de s'assurer de bloquer sur un message en attente
@@ -207,6 +211,7 @@ class MessageProducer:
         self._message_number = 0
         self.__deliveries = list()  # Q d'emission de message, permet d'emettre via thread IO-LOOP
 
+        self.__loop = None
         self.__event_message: Optional[Event] = None
         self._event_q_prete = EventThreading()
         self.__NB_MESSAGE_MAX = 10
@@ -235,10 +240,12 @@ class MessageProducer:
             self._event_q_prete.clear()  # Va faire bloquer le prochain appel
 
         # Notifier thread en await
-        self.__event_message.set()
+        # self.__event_message.set()
+        self.__loop.call_soon_threadsafe(self.__event_message.set)
 
     async def run_async(self):
         self.__logger.info("Demarrage run_async producer")
+        self.__loop = asyncio.get_event_loop()
         self.__actif = True
         self.__event_message = Event()
 
@@ -253,12 +260,15 @@ class MessageProducer:
 
                 # Attendre prochains messages
                 # self.__logger.debug("producer : attente prochain message")
-                try:
-                    await asyncio.wait_for(self.__event_message.wait(), 0.25)
-                except TimeoutError:
-                    pass
-                else:
-                    self.__logger.debug("Wake up producer")
+                await self.__event_message.wait()
+                self.__logger.debug("Wake up producer")
+                # try:
+                #     # Note : l'evenement trigger en dehors de asyncio ne declenche pas tout le temps la loop
+                #     #await asyncio.wait_for(self.__event_message.wait(), 0.25)
+                # except TimeoutError:
+                #     pass
+                # else:
+                #     self.__logger.debug("Wake up producer")
 
                 self.__event_message.clear()  # Reset flag
         except:
