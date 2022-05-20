@@ -1,9 +1,9 @@
-import datetime
 import logging
 import asyncio
 
 from cryptography.exceptions import InvalidSignature
 
+from millegrilles.messages import Constantes
 from millegrilles.messages.CleCertificat import CleCertificat
 from millegrilles.messages.FormatteurMessages import SignateurTransactionSimple, FormatteurMessageMilleGrilles
 from millegrilles.messages.EnveloppeCertificat import EnveloppeCertificat
@@ -57,7 +57,7 @@ async def valider_message():
 
 
 def main():
-    logging.basicConfig()
+    logging.basicConfig(format=Constantes.LOGGING_FORMAT, level=logging.WARN)
     logging.getLogger(__name__).setLevel(logging.DEBUG)
     logging.getLogger('millegrilles').setLevel(logging.DEBUG)
 

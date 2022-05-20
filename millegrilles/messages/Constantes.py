@@ -1,4 +1,7 @@
 
+# Logging
+LOGGING_FORMAT = '%(asctime)s %(threadName)s %(levelname)s: %(message)s'
+
 # Env params
 ENV_MQ_HOSTNAME = 'MQ_HOSTNAME'
 ENV_MQ_PORT = 'MQ_PORT'

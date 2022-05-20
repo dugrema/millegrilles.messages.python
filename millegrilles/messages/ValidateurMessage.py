@@ -1,17 +1,18 @@
 # Validateurs de messages (transactions, documents, commandes, etc.)
+import asyncio
 import datetime
 import json
 import logging
 import pytz
 import multibase
 
-from cryptography.hazmat.primitives import hashes, asymmetric
+from cryptography.hazmat.primitives import hashes
 from typing import Union
 
 from millegrilles.messages import Constantes
 from millegrilles.messages.ValidateurCertificats import ValidateurCertificat, CertificatInconnu
 from millegrilles.messages.EnveloppeCertificat import EnveloppeCertificat
-from millegrilles.messages.FormatteurMessages import DateFormatEncoder
+from millegrilles.messages.FormatteurMessages import DateFormatEncoder, parse_float
 from millegrilles.messages.Hachage import verifier_hachage
 
 
@@ -21,23 +22,11 @@ class ValidateurMessage:
     """
 
     def __init__(self, validateur_certificats: ValidateurCertificat):
-        """
-        :param contexte: millegrilles.dao.Configuration.ContexteRessourcesMilleGrilles [Optionnel]
-                         Permet de faire des requetes MQ pour charger les certificats par fingerprint
-        :param idmg: Parametre qui permet de bloquer le validateur sur un idmg en particulier. Requis si contexte non fournis.
-        """
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__validateur_certificats = validateur_certificats
 
-    async def entretien(self):
-        """
-        Invoquer regulierement pour effectuer l'entretien des elements expires.
-        :return:
-        """
-        # self.__validateur.entretien()
-        pass
-
-    async def verifier(self, message: Union[bytes, str, dict], utiliser_date_message=False, utiliser_idmg_message=False) -> EnveloppeCertificat:
+    async def verifier(self, message: Union[bytes, str, dict], utiliser_date_message=False,
+                       utiliser_idmg_message=False) -> EnveloppeCertificat:
         """
         :raise certvalidator.errors.PathValidationError: Certificat est invalide.
         :raise cryptography.exceptions.InvalidSignature: Signature du message est invalide.
@@ -52,15 +41,19 @@ class ValidateurMessage:
             raise TypeError("La transaction doit etre en format bytes, str ou dict")
 
         # Preparer le message pour verification du hachage et de la signature
-        message_nettoye = ValidateurMessage.__preparer_message(dict_message)
+        message_nettoye = preparer_message(dict_message)
 
-        # Verifier le hachage du contenu - si invalide, pas de raison de verifier le certificat et la signature
-        await self.verifier_hachage(message_nettoye)
+        # Verifier le hachage du contenu - si invalide, pas de raison de verifier la signature
+        fut_hachage = self.verifier_hachage(message_nettoye)
 
-        # Hachage du contenu valide. Verifier le certificat et la signature.
         # Valider presence de la signature en premier, certificat apres
         signature = dict_message[Constantes.MESSAGE_SIGNATURE]
-        enveloppe_certificat = await self.__valider_certificat_message(message, utiliser_date_message, utiliser_idmg_message)
+        fut_enveloppe_certificat = self.__valider_certificat_message(message, utiliser_date_message,
+                                                                     utiliser_idmg_message)
+
+        # Attendre hachage et enveloppe certificat
+        resultat = await asyncio.gather(fut_hachage, fut_enveloppe_certificat)
+        enveloppe_certificat = resultat[1]
 
         # Certificat est valide. On verifie la signature.
         await self.__verifier_signature(message_nettoye, signature, enveloppe_certificat)
@@ -95,23 +88,22 @@ class ValidateurMessage:
 
         return hachage
 
-    async def verifier_signature_message(self, message: dict, enveloppe_certificat: EnveloppeCertificat):
-        """
-        Verifie que le message a bien ete signe par la cle specifiee
-        :param message:
-        :return:
-        """
-        signature = message['_signature']
-
-        message_copie = dict()
-        for key, value in message.items():
-            if not key.startswith('_'):
-                message_copie[key] = value
-
-        # Lance une exception si echec
-        self.__verifier_signature(message_copie, signature, enveloppe_certificat)
-
-        return True
+    # async def verifier_signature_message(self, message: dict, enveloppe_certificat: EnveloppeCertificat):
+    #     """
+    #     Verifie que le message a bien ete signe par la cle specifiee
+    #     :return:
+    #     """
+    #     signature = message['_signature']
+    #
+    #     message_copie = dict()
+    #     for key, value in message.items():
+    #         if not key.startswith('_'):
+    #             message_copie[key] = value
+    #
+    #     # Lance une exception si echec
+    #     await self.__verifier_signature(message_copie, signature, enveloppe_certificat)
+    #
+    #     return True
 
     async def __verifier_signature(self, message: dict, signature: str, enveloppe: EnveloppeCertificat):
         # Le certificat est valide. Valider la signature du message.
@@ -196,39 +188,25 @@ class ValidateurMessage:
         else:
             raise CertificatInconnu(fingerprint_message)
 
-    @staticmethod
-    def __preparer_message(message: dict) -> dict:
-        message_nettoye = dict()
-        for key, value in message.items():
-            if not key.startswith('_'):
-                message_nettoye[key] = value
-
-        # Premiere passe, converti les dates. Les nombre floats sont incorrects.
-        message_str = json.dumps(
-            message_nettoye,
-            ensure_ascii=False,   # S'assurer de supporter tous le range UTF-8
-            cls=DateFormatEncoder
-        )
-
-        # HACK - Fix pour le decodage des float qui ne doivent pas finir par .0 (e.g. 100.0 doit etre 100)
-        message_nettoye = json.loads(message_str, parse_float=ValidateurMessage.__parse_float)
-
-        return message_nettoye
-
-    @staticmethod
-    def __parse_float(f: str):
-        """
-        Permet de transformer les nombre floats qui finissent par .0 en entier. Requis pour interoperabilite avec
-        la verification (hachage, signature) en JavaScript qui fait cette conversion implicitement.
-        :param f:
-        :return:
-        """
-        val_float = float(f)
-        val_int = int(val_float)
-        if val_int == val_float:
-            return val_int
-        return val_float
-
     @property
     def validateur_pki(self) -> ValidateurCertificat:
         return self.__validateur_certificats
+
+
+def preparer_message(message: dict) -> dict:
+    message_nettoye = dict()
+    for key, value in message.items():
+        if not key.startswith('_'):
+            message_nettoye[key] = value
+
+    # Premiere passe, converti les dates. Les nombre floats sont incorrects.
+    message_str = json.dumps(
+        message_nettoye,
+        ensure_ascii=False,   # S'assurer de supporter tous le range UTF-8
+        cls=DateFormatEncoder
+    )
+
+    # HACK - Fix pour le decodage des float qui ne doivent pas finir par .0 (e.g. 100.0 doit etre 100)
+    message_nettoye = json.loads(message_str, parse_float=parse_float)
+
+    return message_nettoye
