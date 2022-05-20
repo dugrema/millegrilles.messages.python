@@ -10,10 +10,10 @@ from cryptography.hazmat.primitives import hashes
 from typing import Union
 
 from millegrilles.messages import Constantes
-from millegrilles.messages.ValidateurCertificats import ValidateurCertificat, CertificatInconnu
 from millegrilles.messages.EnveloppeCertificat import EnveloppeCertificat
 from millegrilles.messages.FormatteurMessages import DateFormatEncoder, parse_float
 from millegrilles.messages.Hachage import verifier_hachage
+from millegrilles.messages.ValidateurCertificats import ValidateurCertificatCache, CertificatInconnu
 
 
 class ValidateurMessage:
@@ -21,7 +21,7 @@ class ValidateurMessage:
     Validateur de messages. Verifie le hachage et la signature.
     """
 
-    def __init__(self, validateur_certificats: ValidateurCertificat):
+    def __init__(self, validateur_certificats: ValidateurCertificatCache):
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__validateur_certificats = validateur_certificats
 
@@ -155,13 +155,13 @@ class ValidateurMessage:
         entete = message[Constantes.MESSAGE_ENTETE]
         fingerprint_message = entete[Constantes.MESSAGE_FINGERPRINT_CERTIFICAT]
 
-        # try:
-        #     # Tenter de charger une version du certificat dans le cache
-        #     enveloppe_certificat = self.__validateur.valider_fingerprint(
-        #         fingerprint_message, date_reference=date_reference, idmg=idmg_message, nofetch=True)
-        #     return enveloppe_certificat
-        # except CertificatInconnu:
-        #     pass
+        try:
+            # Tenter de charger une version du certificat dans le cache
+            enveloppe_certificat = await self.__validateur_certificats.valider_fingerprint(
+                fingerprint_message, date_reference=date_reference, idmg=idmg_message, nofetch=True)
+            return enveloppe_certificat
+        except CertificatInconnu:
+            pass
 
         # Valider le certificat
         if certificats_inline is not None:
@@ -169,7 +169,7 @@ class ValidateurMessage:
             if isinstance(certificats_inline, str):
                 certificats_inline = certificats_inline.replace(';', '\n')
 
-            enveloppe_certificat = self.__validateur_certificats.valider(
+            enveloppe_certificat = await self.__validateur_certificats.valider(
                 certificats_inline, date_reference=date_reference, idmg=idmg_message)
 
             # S'assurer que le certificat correspond au fingerprint
@@ -189,7 +189,7 @@ class ValidateurMessage:
             raise CertificatInconnu(fingerprint_message)
 
     @property
-    def validateur_pki(self) -> ValidateurCertificat:
+    def validateur_pki(self) -> ValidateurCertificatCache:
         return self.__validateur_certificats
 
 

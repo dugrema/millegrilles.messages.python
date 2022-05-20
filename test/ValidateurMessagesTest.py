@@ -7,7 +7,7 @@ from millegrilles.messages import Constantes
 from millegrilles.messages.CleCertificat import CleCertificat
 from millegrilles.messages.FormatteurMessages import SignateurTransactionSimple, FormatteurMessageMilleGrilles
 from millegrilles.messages.EnveloppeCertificat import EnveloppeCertificat
-from millegrilles.messages.ValidateurCertificats import ValidateurCertificat
+from millegrilles.messages.ValidateurCertificats import ValidateurCertificatCache
 from millegrilles.messages.ValidateurMessage import ValidateurMessage
 from millegrilles.messages.Hachage import ErreurHachage
 
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 async def valider_message():
     enveloppe_ca = EnveloppeCertificat.from_file(PATH_CA)
-    validateur_certificats = ValidateurCertificat(enveloppe_ca)
+    validateur_certificats = ValidateurCertificatCache(enveloppe_ca)
     validateur_messages = ValidateurMessage(validateur_certificats)
 
     clecert = CleCertificat.from_files(PATH_CORE_CLE, PATH_CORE_CERT)

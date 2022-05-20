@@ -12,7 +12,7 @@ from millegrilles.messages.EnveloppeCertificat import EnveloppeCertificat
 
 class CertificatInconnu(Exception):
 
-    def __init__(self, message, errors =None, fingerprint: str = None):
+    def __init__(self, message, errors=None, fingerprint: str = None):
         super().__init__(message, errors)
         self.errors = errors
         self.__fingerprint = fingerprint
@@ -22,6 +22,8 @@ class CertificatInconnu(Exception):
         except ValueError:
             # Ajouter le type de hachage
             self.__fingerprint = self.__fingerprint
+        except AttributeError:
+            pass
 
     @property
     def fingerprint(self):
@@ -118,3 +120,61 @@ class ValidateurCertificat:
             store.add_cert(self.__root_cert_openssl)
             store.set_time(date_reference)
             return store
+
+
+class ValidateurCertificatCache(ValidateurCertificat):
+
+    def __init__(self, enveloppe_ca: EnveloppeCertificat, cache_ttl_secs: int = 900):
+        super().__init__(enveloppe_ca)
+        self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
+        self.__cache_ttl_secs = cache_ttl_secs
+
+    async def valider(
+            self,
+            certificat: Union[bytes, str, list],
+            date_reference: datetime.datetime = None,
+            idmg: str = None,
+            usages: set = {'digital_signature'}
+    ) -> EnveloppeCertificat:
+
+        enveloppe = super().valider(certificat, date_reference, idmg, usages)
+
+        return enveloppe
+
+    async def valider_fingerprint(self, fingerprint: str, date_reference: datetime.datetime = None,
+                                  idmg: str = None, usages: set = frozenset({'digital_signature'}),
+                                  nofetch=False) -> EnveloppeCertificat:
+        """
+        Charge un certificat a partir du cache
+        :return:
+        """
+        raise CertificatInconnu('todo')
+
+    async def entretien(self):
+        pass
+
+
+class EnveloppeCache:
+
+    def __init__(self, enveloppe: EnveloppeCertificat):
+        self.__enveloppe = enveloppe
+        self.__fingerprint = enveloppe.fingerprint
+        self.__idmg = enveloppe.idmg
+        self.__date_activite = datetime.datetime.now()
+
+    def touch(self):
+        self.__date_activite = datetime.datetime.now()
+
+    @property
+    def enveloppe(self):
+        return self.__enveloppe
+
+    @property
+    def idmg(self):
+        return self.__idmg
+
+    def __hash__(self):
+        return hash(self.__fingerprint)
+
+    def __eq__(self, other):
+        return other.__fingerprint == self.__fingerprint
