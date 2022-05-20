@@ -55,6 +55,8 @@ async def valider_message():
     except InvalidSignature:
         logger.debug("Resultat validation InvalidSignature (OK!)")
 
+    await validateur_certificats.entretien()
+
 
 def main():
     logging.basicConfig(format=Constantes.LOGGING_FORMAT, level=logging.WARN)

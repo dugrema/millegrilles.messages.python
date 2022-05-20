@@ -56,7 +56,7 @@ class ValidateurMessage:
         enveloppe_certificat = resultat[1]
 
         # Certificat est valide. On verifie la signature.
-        await self.__verifier_signature(message_nettoye, signature, enveloppe_certificat)
+        await verifier_signature(message_nettoye, signature, enveloppe_certificat)
 
         return enveloppe_certificat
 
@@ -87,52 +87,6 @@ class ValidateurMessage:
         verifier_hachage(hachage, message_bytes)
 
         return hachage
-
-    # async def verifier_signature_message(self, message: dict, enveloppe_certificat: EnveloppeCertificat):
-    #     """
-    #     Verifie que le message a bien ete signe par la cle specifiee
-    #     :return:
-    #     """
-    #     signature = message['_signature']
-    #
-    #     message_copie = dict()
-    #     for key, value in message.items():
-    #         if not key.startswith('_'):
-    #             message_copie[key] = value
-    #
-    #     # Lance une exception si echec
-    #     await self.__verifier_signature(message_copie, signature, enveloppe_certificat)
-    #
-    #     return True
-
-    async def __verifier_signature(self, message: dict, signature: str, enveloppe: EnveloppeCertificat):
-        # Le certificat est valide. Valider la signature du message.
-        signature_enveloppe = multibase.decode(signature.encode('utf-8'))
-        version_signature = signature_enveloppe[0]
-        signature_bytes = signature_enveloppe[1:]
-
-        if isinstance(signature_bytes, str):
-            signature_bytes = signature_bytes.encode('utf-8')
-
-        message_bytes = json.dumps(
-            message,
-            ensure_ascii=False,   # S'assurer de supporter tous le range UTF-8
-            sort_keys=True,
-            separators=(',', ':')
-        ).encode('utf-8')
-
-        certificat = enveloppe.certificat
-        cle_publique = certificat.public_key()
-
-        if version_signature == 2:
-            hash = hashes.Hash(hashes.BLAKE2b(64))
-            hash.update(message_bytes)
-            hash_value = hash.finalize()
-            cle_publique.verify(signature_bytes, hash_value)
-        else:
-            raise ValueError("Version de signature non supportee : %s" % version_signature)
-
-        # Signature OK, aucune exception n'a ete lancee
 
     async def __valider_certificat_message(self, message, utiliser_date_message: bool, utiliser_idmg_message: bool):
         entete = message[Constantes.MESSAGE_ENTETE]
@@ -210,3 +164,33 @@ def preparer_message(message: dict) -> dict:
     message_nettoye = json.loads(message_str, parse_float=parse_float)
 
     return message_nettoye
+
+
+async def verifier_signature(message: dict, signature: str, enveloppe: EnveloppeCertificat):
+    # Le certificat est valide. Valider la signature du message.
+    signature_enveloppe = multibase.decode(signature.encode('utf-8'))
+    version_signature = signature_enveloppe[0]
+    signature_bytes = signature_enveloppe[1:]
+
+    if isinstance(signature_bytes, str):
+        signature_bytes = signature_bytes.encode('utf-8')
+
+    message_bytes = json.dumps(
+        message,
+        ensure_ascii=False,   # S'assurer de supporter tous le range UTF-8
+        sort_keys=True,
+        separators=(',', ':')
+    ).encode('utf-8')
+
+    certificat = enveloppe.certificat
+    cle_publique = certificat.public_key()
+
+    if version_signature == 2:
+        hash = hashes.Hash(hashes.BLAKE2b(64))
+        hash.update(message_bytes)
+        hash_value = hash.finalize()
+        cle_publique.verify(signature_bytes, hash_value)
+    else:
+        raise ValueError("Version de signature non supportee : %s" % version_signature)
+
+    # Signature OK, aucune exception n'a ete lancee

@@ -5,9 +5,11 @@ import OpenSSL
 
 from typing import Optional, Union
 
-from cryptography.x509.base import Certificate
-
 from millegrilles.messages.EnveloppeCertificat import EnveloppeCertificat
+
+
+CACHE_TTL_SECS = 300
+CACHE_MAX_ENTRIES = 100
 
 
 class CertificatInconnu(Exception):
@@ -81,6 +83,16 @@ class ValidateurCertificat:
         """
         enveloppe = self._charger_certificat(certificat)
 
+        valide = self._valider(enveloppe, date_reference, idmg, usages)
+
+        if valide:
+            return enveloppe
+
+        raise Exception('Erreur validation')  # Note : ne devrait pas arrive
+
+    def _valider(self, enveloppe: EnveloppeCertificat, date_reference: datetime.datetime = None,
+                  idmg: str = None, usages: set = {'digital_signature'}) -> bool:
+
         if idmg is not None and idmg != enveloppe.idmg:
             raise IdmgInvalide('IDMG invalide')
 
@@ -88,7 +100,7 @@ class ValidateurCertificat:
             if enveloppe.est_verifie and date_reference is None and (idmg is None or idmg == self.__idmg):
                 # Raccourci, l'enveloppe a deja ete validee (e.g. cache) et on n'a aucune
                 # validation conditionnelle par date ou idmg
-                return enveloppe
+                return True
         except AttributeError:
             pass  # Ok, le certificat n'est pas connu ou dans le cache
 
@@ -109,7 +121,7 @@ class ValidateurCertificat:
             # Validation completee, certificat est valide (sinon OpenSSL.crypto.X509StoreContextError est lancee)
             enveloppe.set_est_verifie(True)
 
-        return enveloppe
+        return True
 
     def __preparer_store(self, date_reference: datetime.datetime = None) -> OpenSSL.crypto.X509Store:
         if date_reference is None:
@@ -127,7 +139,10 @@ class ValidateurCertificatCache(ValidateurCertificat):
     def __init__(self, enveloppe_ca: EnveloppeCertificat, cache_ttl_secs: int = 900):
         super().__init__(enveloppe_ca)
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
-        self.__cache_ttl_secs = cache_ttl_secs
+        self.__cache_ttl_secs = CACHE_TTL_SECS
+        self.__cache_max_entries = CACHE_MAX_ENTRIES
+
+        self.__cache_enveloppes = dict()
 
     async def valider(
             self,
@@ -139,6 +154,23 @@ class ValidateurCertificatCache(ValidateurCertificat):
 
         enveloppe = super().valider(certificat, date_reference, idmg, usages)
 
+        fingerprint = enveloppe.fingerprint
+        try:
+            cache_entry = self.__cache_enveloppes[fingerprint]
+        except KeyError:
+            if len(self.__cache_enveloppes) >= CACHE_MAX_ENTRIES:
+                # Cache plein
+                return enveloppe
+            else:
+                cache_entry = EnveloppeCache(enveloppe)
+                self.__cache_enveloppes[fingerprint] = cache_entry
+
+        if idmg is None and date_reference is None:
+            # Valide pour date courante
+            cache_entry.touch(presentement_valide=True)
+        else:
+            cache_entry.touch()
+
         return enveloppe
 
     async def valider_fingerprint(self, fingerprint: str, date_reference: datetime.datetime = None,
@@ -148,10 +180,35 @@ class ValidateurCertificatCache(ValidateurCertificat):
         Charge un certificat a partir du cache
         :return:
         """
-        raise CertificatInconnu('todo')
+        try:
+            cache_entry = self.__cache_enveloppes[fingerprint]
+        except KeyError:
+            raise CertificatInconnu('CACHE MISS', fingerprint=fingerprint)
+
+        if idmg is not None:
+            if cache_entry.idmg != idmg:
+                raise IdmgInvalide('IDMG invalide')
+
+        enveloppe = cache_entry.enveloppe
+
+        if cache_entry.valide is True and date_reference is None:
+            cache_entry.touch()
+            return enveloppe
+
+        # Valider le certificat
+        super()._valider(enveloppe, date_reference, idmg, usages)
 
     async def entretien(self):
-        pass
+        # Shallow copy pour eviter erreurs concurrence
+        cache_copy = list(self.__cache_enveloppes.values())
+        date_expiree = datetime.datetime.now() - datetime.timedelta(seconds=self.__cache_ttl_secs)
+        for entry in cache_copy:
+            if entry.date_activite < date_expiree:
+                # Retirer entree
+                try:
+                    del self.__cache_enveloppes[entry.fingerprint]
+                except KeyError:
+                    pass
 
 
 class EnveloppeCache:
@@ -161,17 +218,32 @@ class EnveloppeCache:
         self.__fingerprint = enveloppe.fingerprint
         self.__idmg = enveloppe.idmg
         self.__date_activite = datetime.datetime.now()
+        self.__presentement_valide: Optional[bool] = None
 
-    def touch(self):
+    def touch(self, presentement_valide: Optional[bool] = None):
         self.__date_activite = datetime.datetime.now()
+        if presentement_valide is not None:
+            self.__presentement_valide = presentement_valide
 
     @property
-    def enveloppe(self):
+    def fingerprint(self) -> str:
+        return self.__fingerprint
+
+    @property
+    def enveloppe(self) -> EnveloppeCertificat:
         return self.__enveloppe
 
     @property
-    def idmg(self):
+    def idmg(self) -> str:
         return self.__idmg
+
+    @property
+    def valide(self) -> Optional[bool]:
+        return self.__presentement_valide
+
+    @property
+    def date_activite(self):
+        return self.__date_activite
 
     def __hash__(self):
         return hash(self.__fingerprint)
