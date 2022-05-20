@@ -45,7 +45,6 @@ class ValidateurCertificat:
         self.__store = OpenSSL.crypto.X509Store()
 
         certificat_millegrille_pem = enveloppe_ca.certificat_pem
-        print(certificat_millegrille_pem)
         self.__root_cert_openssl = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM,
                                                                    certificat_millegrille_pem)
         self.__store.add_cert(self.__root_cert_openssl)
@@ -108,9 +107,6 @@ class ValidateurCertificat:
             # Validation completee, certificat est valide (sinon OpenSSL.crypto.X509StoreContextError est lancee)
             enveloppe.set_est_verifie(True)
 
-        # La chaine est valide (potentiellement avec conditions comme idmg ou date_reference)
-        self._conserver_enveloppe(enveloppe)
-
         return enveloppe
 
     def __preparer_store(self, date_reference: datetime.datetime = None) -> OpenSSL.crypto.X509Store:
@@ -122,11 +118,3 @@ class ValidateurCertificat:
             store.add_cert(self.__root_cert_openssl)
             store.set_time(date_reference)
             return store
-
-    def _conserver_enveloppe(self, enveloppe: EnveloppeCertificat):
-        """
-        Hook pour sous-classes (e.g. caching)
-        :param enveloppe:
-        :return:
-        """
-        pass
