@@ -9,6 +9,7 @@ from typing import Optional, Union
 import redis.asyncio as redis
 
 from millegrilles.messages.EnveloppeCertificat import EnveloppeCertificat
+from millegrilles.messages.ParamsEnvironnement import ConfigurationRedis
 
 
 CACHE_TTL_SECS = 300
@@ -258,28 +259,27 @@ class EnveloppeCache:
 
 class ValidateurCertificatRedis(ValidateurCertificatCache):
 
-    def __init__(self, enveloppe_ca: EnveloppeCertificat,
-                 redis_hostname: str, redis_port: int, key_path: str, cert_path: str,
-                 redis_username: str, redis_password: str,
-                 cache_ttl_secs=CACHE_TTL_SECS):
+    def __init__(self, enveloppe_ca: EnveloppeCertificat, cache_ttl_secs=CACHE_TTL_SECS):
         super().__init__(enveloppe_ca, cache_ttl_secs)
-
+        self.__configuration_redis = ValidateurCertificatRedis.__charger_configuration_redis()
         self.__enveloppe_ca = enveloppe_ca
-        self.__redis_hostname = redis_hostname
-        self.__redis_port = redis_port
-        self.__cert_path = cert_path
-        self.__key_path = key_path
-        self.__redis_username = redis_username
-        self.__redis_password = redis_password
-
         self.__redis_client: Optional[redis.Redis] = None
+
+    @staticmethod
+    def __charger_configuration_redis():
+        config = ConfigurationRedis()
+        config.parse_config()
+        return config
 
     async def __connecter(self):
         if self.__redis_client is None:
             ca_pem = self.__enveloppe_ca.certificat_pem
-            client = redis.Redis(host=self.__redis_hostname, port=self.__redis_port,
-                                 username=self.__redis_username, password=self.__redis_password,
-                                 ssl=True, ssl_keyfile=self.__key_path, ssl_certfile=self.__cert_path,
+            client = redis.Redis(host=self.__configuration_redis.hostname, port=self.__configuration_redis.port,
+                                 username=self.__configuration_redis.username,
+                                 password=self.__configuration_redis.password,
+                                 ssl=True,
+                                 ssl_keyfile=self.__configuration_redis.key_pem_path,
+                                 ssl_certfile=self.__configuration_redis.cert_pem_path,
                                  ssl_ca_data=ca_pem)
             self.__redis_client = client
 
@@ -312,13 +312,8 @@ class ValidateurCertificatRedis(ValidateurCertificatCache):
             pems = await self.__get_certficat(fingerprint)
             return await self.valider(pems, date_reference, idmg, usages)
 
-    async def valider(
-            self,
-            certificat: Union[bytes, str, list],
-            date_reference: datetime.datetime = None,
-            idmg: str = None,
-            usages: set = {'digital_signature'}
-    ) -> EnveloppeCertificat:
+    async def valider(self, certificat: Union[bytes, str, list], date_reference: datetime.datetime = None,
+                      idmg: str = None, usages: set = {'digital_signature'}) -> EnveloppeCertificat:
 
         enveloppe = await super().valider(certificat, date_reference, idmg, usages)
         fingerprint = enveloppe.fingerprint

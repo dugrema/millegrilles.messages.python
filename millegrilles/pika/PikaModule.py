@@ -1,5 +1,4 @@
 # Plug-in module pour pika 1.2 dans millegrilles messages
-import asyncio
 import logging
 import pika
 import ssl

@@ -45,11 +45,7 @@ def valider_simple():
 async def valider_redis():
     # Test connexion a redis, sauvegarder cert, get par fingerprint
     enveloppe_ca = EnveloppeCertificat.from_file(PATH_CA)
-    validateur = ValidateurCertificatRedis(
-        enveloppe_ca, 'mg-dev5.maple.maceroc.com', 6379,
-        PATH_CORE_KEY, PATH_CORE_CERT,
-        'client_nodejs', 'ThpBciab1yrLeVFKsaw47GesnlrdyfU3'
-    )
+    validateur = ValidateurCertificatRedis(enveloppe_ca)
     await validateur.entretien()  # Se connecte a redis
 
     with open(PATH_CORE_CERT, 'rb') as fichier:
