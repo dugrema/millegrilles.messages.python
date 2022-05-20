@@ -38,10 +38,7 @@ class PikaModule(MessagesModule):
                             exchanges: Optional[list] = None):
 
         self.__pika_configuration = ConfigurationPika()
-        configuration_pika_dict = self.__pika_configuration.get_env()
-        if env_configuration is not None:
-            configuration_pika_dict.update()
-        self.__pika_configuration.parse_config(configuration_pika_dict)
+        self.__pika_configuration.parse_config(env_configuration)
 
         self._exchanges = exchanges
 

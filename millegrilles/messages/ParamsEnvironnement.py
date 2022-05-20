@@ -5,7 +5,12 @@ from millegrilles.messages import Constantes
 from typing import Optional
 
 
-CONST_MQ_OPTIONAL_PARAMS = [
+CONST_MQ_PARAMS = [
+    Constantes.ENV_MQ_HOSTNAME,
+    Constantes.ENV_MQ_PORT,
+    Constantes.ENV_CA_PEM,
+    Constantes.ENV_CERT_PEM,
+    Constantes.ENV_KEY_PEM,
     Constantes.ENV_MQ_CONNECTION_ATTEMPTS,
     Constantes.ENV_MQ_RETRY_DELAY,
     Constantes.ENV_MQ_HEARTBEAT,
@@ -50,13 +55,7 @@ class ConfigurationPika:
         :return: Configuration dict
         """
         config = dict()
-        config[Constantes.ENV_MQ_HOSTNAME] = os.environ.get(Constantes.ENV_MQ_HOSTNAME)
-        config[Constantes.ENV_MQ_PORT] = os.environ.get(Constantes.ENV_MQ_PORT)
-        config[Constantes.ENV_CA_PEM] = os.environ.get(Constantes.ENV_CA_PEM)
-        config[Constantes.ENV_CERT_PEM] = os.environ.get(Constantes.ENV_CERT_PEM)
-        config[Constantes.ENV_KEY_PEM] = os.environ.get(Constantes.ENV_KEY_PEM)
-
-        for opt_param in CONST_MQ_OPTIONAL_PARAMS:
+        for opt_param in CONST_MQ_PARAMS:
             value = os.environ.get(opt_param)
             if value is not None:
                 config[opt_param] = value
@@ -69,20 +68,24 @@ class ConfigurationPika:
         :param configuration:
         :return:
         """
-        self.hostname = configuration.get(Constantes.ENV_MQ_HOSTNAME) or 'mq'
-        self.port = int(configuration.get(Constantes.ENV_MQ_PORT) or '5673')
-        self.ca_pem_path = configuration[Constantes.ENV_CA_PEM]
-        self.cert_pem_path = configuration[Constantes.ENV_CERT_PEM]
-        self.key_pem_path = configuration[Constantes.ENV_KEY_PEM]
+        dict_params = self.get_env()
+        if configuration is not None:
+            dict_params.update(configuration)
+
+        self.hostname = dict_params.get(Constantes.ENV_MQ_HOSTNAME) or 'mq'
+        self.port = int(dict_params.get(Constantes.ENV_MQ_PORT) or '5673')
+        self.ca_pem_path = dict_params[Constantes.ENV_CA_PEM]
+        self.cert_pem_path = dict_params[Constantes.ENV_CERT_PEM]
+        self.key_pem_path = dict_params[Constantes.ENV_KEY_PEM]
 
         # Valeurs avec defaults
-        self.connection_attempts = configuration.get(
+        self.connection_attempts = dict_params.get(
             Constantes.ENV_MQ_CONNECTION_ATTEMPTS) or self.connection_attempts
-        self.retry_delay = configuration.get(
+        self.retry_delay = dict_params.get(
             Constantes.ENV_MQ_RETRY_DELAY) or self.retry_delay
-        self.heartbeat = configuration.get(
+        self.heartbeat = dict_params.get(
             Constantes.ENV_MQ_HEARTBEAT) or self.heartbeat
-        self.blocked_connection_timeout = configuration.get(
+        self.blocked_connection_timeout = dict_params.get(
             Constantes.ENV_MQ_BLOCKED_CONNECTION_TIMEOUT) or self.blocked_connection_timeout
 
     def __str__(self):
