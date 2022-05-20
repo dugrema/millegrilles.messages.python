@@ -336,7 +336,10 @@ class EnveloppeCertificat:
         return hash(self.__fingerprint)
 
     def __eq__(self, other):
-        return other.__fingerprint == self.__fingerprint
+        if isinstance(other, EnveloppeCertificat):
+            return other.__fingerprint == self.__fingerprint
+        else:
+            return False
 
 
 def trouver_idmg(enveloppe: EnveloppeCertificat) -> str:

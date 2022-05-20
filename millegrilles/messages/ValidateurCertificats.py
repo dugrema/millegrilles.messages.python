@@ -311,3 +311,25 @@ class ValidateurCertificatRedis(ValidateurCertificatCache):
         except CertificatInconnu as ci:
             pems = await self.__get_certficat(fingerprint)
             return await self.valider(pems, date_reference, idmg, usages)
+
+    async def valider(
+            self,
+            certificat: Union[bytes, str, list],
+            date_reference: datetime.datetime = None,
+            idmg: str = None,
+            usages: set = {'digital_signature'}
+    ) -> EnveloppeCertificat:
+
+        enveloppe = await super().valider(certificat, date_reference, idmg, usages)
+        fingerprint = enveloppe.fingerprint
+
+        # Verifier si on a deja le certificat dans redis (just touch, maj TTL)
+        cle_redis = 'certificat_v1:%s' % fingerprint
+        reponse = await self.__redis_client.expire(cle_redis, REDIS_TTL_SECS)
+        if reponse is not True:
+            pems = enveloppe.chaine_pem()
+            entree_redis = {'pems': pems, 'ca': None}
+            entree_redis_bytes = json.dumps(entree_redis).encode('utf-8')
+            await self.__redis_client.setex(cle_redis, REDIS_TTL_SECS, entree_redis_bytes)
+
+        return enveloppe

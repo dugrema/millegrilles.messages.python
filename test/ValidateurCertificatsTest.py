@@ -52,8 +52,12 @@ async def valider_redis():
     )
     await validateur.entretien()  # Se connecte a redis
 
+    with open(PATH_CORE_CERT, 'rb') as fichier:
+        pem_bytes = fichier.read()
+    enveloppe = await validateur.valider(pem_bytes)
+
     # Charger cert arbitraire
-    fingerprint_1 = 'z2i3XjxEqcTWSj5xiuEfCX4DMDB31U8ZvtPNqDrmRiteGDnjC1u'
+    fingerprint_1 = enveloppe.fingerprint
     enveloppe = await validateur.valider_fingerprint(fingerprint_1)
     logger.debug("Fingerprint %s enveloppe chargee redis : %s" % (fingerprint_1, enveloppe))
 
