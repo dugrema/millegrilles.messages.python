@@ -8,8 +8,10 @@ from typing import Optional, Union
 from asyncio import Event
 from asyncio.exceptions import TimeoutError
 
+from millegrilles.messages import Constantes
 from millegrilles.messages.CleCertificat import CleCertificat
 from millegrilles.messages.FormatteurMessages import FormatteurMessageMilleGrilles, SignateurTransactionSimple
+from millegrilles.messages.ValidateurMessage import ValidateurMessage
 
 
 class RessourcesConsommation:
@@ -248,7 +250,7 @@ class MessageConsumer:
             self.__logger.debug("Message traite, ACK %s" % message.delivery_tag)
             self.ack_message(message)
 
-    async def _traiter_message(self, message):
+    async def _traiter_message(self, message: MessageWrapper):
         # Effectuer le traitement
         if self._ressources.est_asyncio is True:
             await self._ressources.callback(message)
@@ -268,8 +270,26 @@ class MessageConsumer:
 
 class MessageConsumerVerificateur(MessageConsumer):
 
-    def __init__(self, module_messages: MessagesModule, ressources: RessourcesConsommation):
+    def __init__(self, module_messages: MessagesModule, ressources: RessourcesConsommation,
+                 validateur_messages: ValidateurMessage):
         super().__init__(module_messages, ressources)
+        self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
+        self.__validateur_messages = validateur_messages
+
+    async def _traiter_message(self, message: MessageWrapper):
+        parsed = json.loads(message.contenu)
+        message.parsed = parsed
+
+        # parsed['corrompu'] = True
+
+        # Verifier le message (certificat, signature)
+        try:
+            await self.__validateur_messages.verifier(parsed)
+            # Message OK
+            await super()._traiter_message(message)
+        except:
+            # Message invalide
+            self.__logger.exception("Erreur traitement message %s" % message.routing_key)
 
 
 class MessagePending:

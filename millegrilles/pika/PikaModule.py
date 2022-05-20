@@ -15,6 +15,8 @@ from millegrilles.messages.MessagesModule \
     import MessagesModule, MessageConsumerVerificateur, MessageProducerFormatteur, RessourcesConsommation, \
     MessageWrapper, MessagePending
 from millegrilles.messages.ParamsEnvironnement import ConfigurationPika
+from millegrilles.messages.ValidateurMessage import ValidateurMessage
+from millegrilles.messages.ValidateurCertificats import ValidateurCertificatRedis
 
 
 class PikaModule(MessagesModule):
@@ -28,6 +30,7 @@ class PikaModule(MessagesModule):
         self.__connexion: Optional[AsyncioConnection] = None
         self.__channel_main: Optional[Channel] = None
         self.__exchanges_pending: Optional[set] = None
+        self.__validateur_certificats: Optional[ValidateurCertificatRedis] = None
 
     def est_connecte(self) -> bool:
         return self.__connexion is not None
@@ -42,14 +45,19 @@ class PikaModule(MessagesModule):
 
         self._exchanges = exchanges
 
+        enveloppe_ca = EnveloppeCertificat.from_file(self.__pika_configuration.ca_pem_path)
+        self.__validateur_certificats = ValidateurCertificatRedis(enveloppe_ca)
+        validateur_messages = ValidateurMessage(self.__validateur_certificats)
+        self.__validateur_certificats.entretien()  # Connecter redis
+
         # Creer reply-q, consumer
         if reply_res:
-            reply_q_consumer = PikaModuleConsumer(self, reply_res)
+            reply_q_consumer = PikaModuleConsumer(self, reply_res, validateur_messages)
             self.ajouter_consumer(reply_q_consumer)
 
         if consumers is not None:
             for consumer_res in consumers:
-                consumer = PikaModuleConsumer(self, consumer_res)
+                consumer = PikaModuleConsumer(self, consumer_res, validateur_messages)
                 self.ajouter_consumer(consumer)
 
         # Creer producer
@@ -57,6 +65,8 @@ class PikaModule(MessagesModule):
 
     async def entretien(self):
         await super().entretien()
+
+        self.__validateur_certificats.entretien()
 
         if self.__channel_main is None:
             self.__logger.info("Connecter channel main")
@@ -183,9 +193,9 @@ class PikaModule(MessagesModule):
 
 class PikaModuleConsumer(MessageConsumerVerificateur):
 
-    def __init__(self, module_messages: PikaModule, ressources: RessourcesConsommation):
+    def __init__(self, module_messages: PikaModule, ressources: RessourcesConsommation, validateur_messages: ValidateurMessage):
 
-        super().__init__(module_messages, ressources)
+        super().__init__(module_messages, ressources, validateur_messages)
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__channel: Optional[Channel] = None
 
