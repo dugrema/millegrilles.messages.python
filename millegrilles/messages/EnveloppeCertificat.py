@@ -329,6 +329,15 @@ class EnveloppeCertificat:
 
         return x25519_public_key
 
+    def __str__(self):
+        return 'EnveloppeCertificat %s (%s) ' % (self.fingerprint, self.subject_rfc4514_string())
+
+    def __hash__(self):
+        return hash(self.__fingerprint)
+
+    def __eq__(self, other):
+        return other.__fingerprint == self.__fingerprint
+
 
 def trouver_idmg(enveloppe: EnveloppeCertificat) -> str:
 

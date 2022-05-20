@@ -1,15 +1,19 @@
 # Module de validation des certificats (X.509) et des messages avec _signature
 import datetime
+import json
 import logging
 import OpenSSL
 
 from typing import Optional, Union
+
+import redis.asyncio as redis
 
 from millegrilles.messages.EnveloppeCertificat import EnveloppeCertificat
 
 
 CACHE_TTL_SECS = 300
 CACHE_MAX_ENTRIES = 100
+REDIS_TTL_SECS = 48 * 60 * 60
 
 
 class CertificatInconnu(Exception):
@@ -136,10 +140,10 @@ class ValidateurCertificat:
 
 class ValidateurCertificatCache(ValidateurCertificat):
 
-    def __init__(self, enveloppe_ca: EnveloppeCertificat, cache_ttl_secs: int = 900):
+    def __init__(self, enveloppe_ca: EnveloppeCertificat, cache_ttl_secs=CACHE_TTL_SECS):
         super().__init__(enveloppe_ca)
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
-        self.__cache_ttl_secs = CACHE_TTL_SECS
+        self.__cache_ttl_secs = cache_ttl_secs
         self.__cache_max_entries = CACHE_MAX_ENTRIES
 
         self.__cache_enveloppes = dict()
@@ -250,3 +254,60 @@ class EnveloppeCache:
 
     def __eq__(self, other):
         return other.__fingerprint == self.__fingerprint
+
+
+class ValidateurCertificatRedis(ValidateurCertificatCache):
+
+    def __init__(self, enveloppe_ca: EnveloppeCertificat,
+                 redis_hostname: str, redis_port: int, key_path: str, cert_path: str,
+                 redis_username: str, redis_password: str,
+                 cache_ttl_secs=CACHE_TTL_SECS):
+        super().__init__(enveloppe_ca, cache_ttl_secs)
+
+        self.__enveloppe_ca = enveloppe_ca
+        self.__redis_hostname = redis_hostname
+        self.__redis_port = redis_port
+        self.__cert_path = cert_path
+        self.__key_path = key_path
+        self.__redis_username = redis_username
+        self.__redis_password = redis_password
+
+        self.__redis_client: Optional[redis.Redis] = None
+
+    async def __connecter(self):
+        if self.__redis_client is None:
+            ca_pem = self.__enveloppe_ca.certificat_pem
+            client = redis.Redis(host=self.__redis_hostname, port=self.__redis_port,
+                                 username=self.__redis_username, password=self.__redis_password,
+                                 ssl=True, ssl_keyfile=self.__key_path, ssl_certfile=self.__cert_path,
+                                 ssl_ca_data=ca_pem)
+            self.__redis_client = client
+
+        await self.__redis_client.ping()
+
+    async def entretien(self):
+        await super().entretien()
+        await self.__connecter()
+
+    async def __get_certficat(self, fingerprint) -> list:
+        if self.__redis_client is None:
+            raise CertificatInconnu('CONNEXION FERMEE', fingerprint=fingerprint)
+
+        cert_data = await self.__redis_client.getex('certificat_v1:%s' % fingerprint, REDIS_TTL_SECS)
+
+        if cert_data is None:
+            raise CertificatInconnu('PERSISTENT CACHE MISS', fingerprint=fingerprint)
+
+        # Parse json, format {"pems": [], "ca": ""}
+        cert_dict = json.loads(cert_data)
+        return cert_dict['pems']
+
+    async def valider_fingerprint(self, fingerprint: str, date_reference: datetime.datetime = None,
+                                  idmg: str = None, usages: set = frozenset({'digital_signature'}),
+                                  nofetch=False) -> EnveloppeCertificat:
+
+        try:
+            return await super().valider_fingerprint(fingerprint, date_reference, idmg, usages, nofetch)
+        except CertificatInconnu as ci:
+            pems = await self.__get_certficat(fingerprint)
+            return await self.valider(pems, date_reference, idmg, usages)
