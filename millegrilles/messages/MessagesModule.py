@@ -330,8 +330,10 @@ class MessageProducer:
         correlation_reponse = CorrelationReponse(correlation_id)
         await self._module_messages.get_reply_consumer().ajouter_attendre_reponse(correlation_reponse)
 
+        # Emettre le message
         await self.emettre(message, routing_key, exchange, correlation_id, reply_to)
 
+        # Attendre la reponse. raises TimeoutError
         reponse = await correlation_reponse.attendre_reponse()
 
         return reponse
@@ -391,12 +393,12 @@ class MessageProducerFormatteur(MessageProducer):
 
     async def emettre_evenement(self, evenement: dict, domaine: str, action: str,
                                 partition: Optional[str] = None, exchanges: Union[str, list] = None, version=1,
-                                reply_to=None, correlation_id=None):
+                                reply_to=None):
+
         message, uuid_message = self.__formatteur_messages.signer_message(
             evenement, domaine, version, action=action, partition=partition)
 
-        if correlation_id is None:
-            correlation_id = str(uuid_message)
+        correlation_id = str(uuid_message)
 
         rk = ['evenement', domaine]
         if partition is not None:
@@ -407,20 +409,35 @@ class MessageProducerFormatteur(MessageProducer):
 
         await self.emettre(message_bytes, '.'.join(rk), exchanges, correlation_id, reply_to)
 
-    def executer_commande(self, commande: dict, domaine: str, action: str,
-                          partition: Optional[str] = None, exchanges: Union[str, list] = None, version=1,
-                          reply_to=None, correlation_id=None):
-        pass
+    async def executer_commande(self, commande: dict, domaine: str, action: str, exchange: str,
+                                partition: Optional[str] = None, version=1,
+                                reply_to=None, nowait=False) -> Optional[MessageWrapper]:
 
-    async def executer_requete(self, requete: dict, domaine: str, action: str,
-                               partition: Optional[str] = None, exchange: str = None, version=1,
-                               reply_to=None, correlation_id=None):
+        message, uuid_message = self.__formatteur_messages.signer_message(
+            commande, domaine, version, action=action, partition=partition)
+
+        correlation_id = str(uuid_message)
+
+        rk = ['commande', domaine]
+        if partition is not None:
+            rk.append(partition)
+        rk.append(action)
+
+        message_bytes = json.dumps(message)
+
+        if nowait is not True:
+            reponse = await self.emettre_attendre(message_bytes, '.'.join(rk),
+                                                  exchange=exchange, correlation_id=correlation_id, reply_to=reply_to)
+            return reponse
+
+    async def executer_requete(self, requete: dict, domaine: str, action: str, exchange: str,
+                               partition: Optional[str] = None, version=1,
+                               reply_to=None) -> MessageWrapper:
 
         message, uuid_message = self.__formatteur_messages.signer_message(
             requete, domaine, version, action=action, partition=partition)
 
-        if correlation_id is None:
-            correlation_id = str(uuid_message)
+        correlation_id = str(uuid_message)
 
         rk = ['requete', domaine]
         if partition is not None:
@@ -433,15 +450,32 @@ class MessageProducerFormatteur(MessageProducer):
                                               exchange=exchange, correlation_id=correlation_id, reply_to=reply_to)
         return reponse
 
-    def soumettre_transaction(self, transaction: dict, domaine: str, action: str,
-                              partition: Optional[str] = None, exchanges: Union[str, list] = None, version=1,
-                              reply_to=None, correlation_id=None):
-        pass
+    async def soumettre_transaction(self, transaction: dict, domaine: str, action: str, exchange: str,
+                                    partition: Optional[str] = None, version=1,
+                                    reply_to=None, nowait=False):
+
+        message, uuid_message = self.__formatteur_messages.signer_message(
+            transaction, domaine, version, action=action, partition=partition)
+
+        correlation_id = str(uuid_message)
+
+        rk = ['transaction', domaine]
+        if partition is not None:
+            rk.append(partition)
+        rk.append(action)
+
+        message_bytes = json.dumps(message)
+
+        if nowait is not True:
+            reponse = await self.emettre_attendre(message_bytes, '.'.join(rk),
+                                                  exchange=exchange, correlation_id=correlation_id, reply_to=reply_to)
+            return reponse
 
     async def repondre(self, reponse: dict, reply_to, correlation_id, version=1):
         message, uuid_message = self.__formatteur_messages.signer_message(reponse, version=version)
         message_bytes = json.dumps(message)
-        await self.emettre(message_bytes, correlation_id=correlation_id, reply_to=reply_to)
+        routing_key = reply_to
+        await self.emettre(message_bytes, routing_key, correlation_id=correlation_id, reply_to=reply_to)
 
 
 class MessageConsumer:
