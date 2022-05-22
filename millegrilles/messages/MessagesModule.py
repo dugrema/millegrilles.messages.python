@@ -1,3 +1,6 @@
+"""
+DAO pour messages.
+"""
 import asyncio
 import datetime
 import json

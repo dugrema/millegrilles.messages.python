@@ -163,4 +163,3 @@ class ConfigurationWebServer:
 
     def charger_env(self):
         self.__port = int(os.environ.get(Constantes.ENV_WEB_PORT) or '8080')
-
