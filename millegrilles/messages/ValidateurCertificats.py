@@ -167,19 +167,19 @@ class ValidateurCertificat:
         except (KeyError, AttributeError):
             self.__logger.exception("Erreur traitement reponse certificat directe pour %s" % fingerprint)
 
-        # try:
-        #     reponse_certificat = await self.__producer_messages.executer_requete(
-        #         requete, 'certificat', action=fingerprint, exchange=Constantes.SECURITE_PUBLIC, timeout=5)
-        #     parsed = reponse_certificat.parsed
-        #     if parsed.get('ok') is not False:
-        #         enveloppe = reponse_certificat.certificat
-        #         if enveloppe.fingerprint == fingerprint:
-        #             pems = enveloppe.chaine_pem
-        #             return pems
-        # except TimeoutError:
-        #     pass
-        # except (KeyError, AttributeError):
-        #     self.__logger.exception("Erreur traitement reponse certificat directe pour %s" % fingerprint)
+        try:
+            reponse_certificat = await self.__producer_messages.executer_requete(
+                requete, 'certificat', action=fingerprint, exchange=Constantes.SECURITE_PUBLIC, timeout=5)
+            parsed = reponse_certificat.parsed
+            if parsed.get('ok') is not False:
+                enveloppe = reponse_certificat.certificat
+                if enveloppe.fingerprint == fingerprint:
+                    pems = enveloppe.chaine_pem
+                    return pems
+        except TimeoutError:
+            pass
+        except (KeyError, AttributeError):
+            self.__logger.exception("Erreur traitement reponse certificat directe pour %s" % fingerprint)
 
         raise CertificatInconnu('INCONNU DU SYSTEME', fingerprint=fingerprint)
 
