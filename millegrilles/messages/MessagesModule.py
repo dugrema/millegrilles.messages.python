@@ -563,16 +563,12 @@ class MessageConsumer:
                     pass
 
         # Effectuer le traitement
-        if self._ressources.est_asyncio is True:
-            await self._ressources.callback(message, self._module_messages)
-        else:
-            # Utiliser threadpool de asyncio pour methode blocking
-            await asyncio.to_thread(self._ressources.callback, message, self._module_messages)
+        await self._ressources.callback(message, self._module_messages)
 
     def repondre_certificat(self, message: MessageWrapper):
         pems = ['']
         fingerprint = ''
-        reponse = {'pems': pems, 'fingerprint': fingerprint}
+        reponse = {'chaine_pem': pems, 'fingerprint': fingerprint}
         producer = self._module_messages.get_producer()
         producer.repondre(reponse, message.reply_to, message.correlation_id)
         self.ack_message(message)

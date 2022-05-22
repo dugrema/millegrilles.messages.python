@@ -1,6 +1,7 @@
 import asyncio
 import logging
 
+from asyncio.exceptions import TimeoutError
 from threading import Event
 from pika.exchange_type import ExchangeType
 
@@ -29,40 +30,53 @@ async def main():
     # messages_thread.ajouter_consumer(q1)
 
     # Demarrer traitement messages
-    messages_thread.start()
+    await messages_thread.start_async()
+
+    tasks = [
+        asyncio.create_task(messages_thread.run_async()),
+        asyncio.create_task(run_tests(messages_thread, stop_event)),
+    ]
+
+    # Execution de la loop avec toutes les tasks
+    await asyncio.tasks.wait(tasks, return_when=asyncio.tasks.FIRST_COMPLETED)
+
+
+async def run_tests(messages_thread, stop_event):
     producer = messages_thread.get_producer()
 
     # Demarrer test (attendre connexion prete)
-    messages_thread.attendre_pret()
+    await messages_thread.attendre_pret()
     logger.info("produire messages")
+
+    fingerprint = 'z2i3XjxFQTWsK71j7xk8KbNrVjZPvxZwKnETR6MC3MYtCeDQGdk'
+    # fingerprint = 'z2i3XjxEqcTWSj5xiuEfCX4DMDB31U8ZvtPNqDrmRiteGDnjC1u'
 
     reply_q = producer.get_reply_q()
     requete = {}
-    reponse = await producer.emettre_requete(requete, 'certificat', partition='z2i3XjxFQTWsK71j7xk8KbNrVjZPvxZwKnETR6MC3MYtCeDQGdk')
+    reponse = await producer.executer_requete(requete, 'certificat', action=fingerprint,
+                                              exchange=Constantes.SECURITE_PUBLIC)
+    enveloppe = reponse.certificat
+    logger.info("Reponse recue : %s", enveloppe)
+    if enveloppe.fingerprint == fingerprint:
+        logger.debug("Certificat correspond, meme fingerprint %s" % fingerprint)
+    else:
+        raise Exception("Mauvais certificat")
 
-    # evenement = {"value": i, "texte": "Allo"}
-    # producer.emettre_evenement(evenement, domaine='CoreBackup', action='t1', exchanges=[Constantes.SECURITE_PRIVE])
-
-    logger.info("Attente")
-    stop_event.wait(300)
     stop_event.set()
 
     logger.info("Fin main()")
 
 
-wait_event = Event()
-
-
-def callback_reply_q(message):
+async def callback_reply_q(message, messages_module):
     logger.info("Message recu : %s" % message)
     # wait_event.wait(0.7)
 
 
-def callback_q_1(message):
+async def callback_q_1(message, messages_module):
     logger.info("callback_q_1 Message recu : %s" % message)
 
 
-def callback_q_2(message):
+async def callback_q_2(message, messages_module):
     logger.info("callback_q_2 Message recu : %s" % message)
 
 
