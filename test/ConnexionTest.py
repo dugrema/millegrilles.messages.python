@@ -1,5 +1,10 @@
+import asyncio
 import logging
-from threading import Event
+import json
+
+#from threading import Event
+from asyncio import Event
+from asyncio.exceptions import TimeoutError
 from pika.exchange_type import ExchangeType
 
 from millegrilles.messages import Constantes
@@ -11,7 +16,7 @@ logger = logging.getLogger(__name__)
 LOGGING_FORMAT = '%(asctime)s %(threadName)s %(levelname)s: %(message)s'
 
 
-def main():
+async def main():
     logger.info("Debut main()")
     stop_event = Event()
 
@@ -35,41 +40,65 @@ def main():
     messages_thread.ajouter_consumer(q2)
 
     # Demarrer traitement messages
-    messages_thread.start()
-    producer = messages_thread.get_producer()
+    await messages_thread.start_async()
+    fut_run = messages_thread.run_async()
+    fut_run_tests = run_tests(messages_thread, stop_event)
 
-    # Demarrer test (attendre connexion prete)
-    messages_thread.attendre_pret()
-    logger.info("produire messages")
+    tasks = [
+        asyncio.create_task(fut_run),
+        asyncio.create_task(fut_run_tests),
+    ]
 
-    reply_q = producer.get_reply_q()
-    for i in range(0, 1000):
-        # message = 'message %d' % i
-        # producer.emettre(message, reply_q)
-        evenement = {"value": i, "texte": "Allo"}
-        producer.emettre_evenement(evenement, domaine='CoreBackup', action='t1', exchanges=[Constantes.SECURITE_PRIVE])
-        # stop_event.wait(0.001)
-
-    logger.info("Attente")
-    stop_event.wait(300)
-    stop_event.set()
+    # Execution de la loop avec toutes les tasks
+    await asyncio.tasks.wait(tasks, return_when=asyncio.tasks.FIRST_COMPLETED)
 
     logger.info("Fin main()")
 
 
-wait_event = Event()
+async def run_tests(messages_thread, stop_event):
+    producer = messages_thread.get_producer()
+
+    # Demarrer test (attendre connexion prete)
+    logger.info("Attendre pret")
+    await messages_thread.attendre_pret()
+    logger.info("produire messages")
+
+    reply_q = producer.get_reply_q()
+    for i in range(0, 1):
+        # message = 'message %d' % i
+        # producer.emettre(message, reply_q)
+        evenement = {"value": i, "texte": "Allo"}
+        await producer.emettre_evenement(evenement, domaine='CoreBackup', action='t1', exchanges=[Constantes.SECURITE_PRIVE])
+        # stop_event.wait(0.001)
+
+    # Faire une requete simple (topologie)
+    logger.debug("Requete liste noeuds")
+    try:
+        reponse_liste_noeuds = await producer.executer_requete(dict(), 'CoreTopologie', 'listeNoeuds', exchange=Constantes.SECURITE_PROTEGE)
+        est_valide = reponse_liste_noeuds.est_valide
+        reponse_parsed = reponse_liste_noeuds.parsed
+        logger.debug("Reponse liste noeuds (valide? %s) : %s" % (est_valide, json.dumps(reponse_parsed, indent=2)))
+    except TimeoutError:
+        logger.debug("Timeout attente reponse liste noeuds")
+
+    logger.info("Attente")
+    try:
+        await asyncio.wait_for(stop_event.wait(), 300)
+    except TimeoutError:
+        pass
+    stop_event.set()
 
 
-def callback_reply_q(message):
+def callback_reply_q(message, module_messages):
     logger.info("Message recu : %s" % message)
     # wait_event.wait(0.7)
 
 
-def callback_q_1(message):
+def callback_q_1(message, module_messages):
     logger.info("callback_q_1 Message recu : %s" % message)
 
 
-def callback_q_2(message):
+def callback_q_2(message, module_messages):
     logger.info("callback_q_2 Message recu : %s" % message)
 
 
@@ -78,4 +107,4 @@ if __name__ == '__main__':
     logging.basicConfig(format=LOGGING_FORMAT, level=logging.WARN)
     logging.getLogger(__name__).setLevel(logging.DEBUG)
     logging.getLogger('millegrilles').setLevel(logging.DEBUG)
-    main()
+    asyncio.run(main())

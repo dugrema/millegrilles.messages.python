@@ -1,7 +1,8 @@
 import asyncio
 import logging
 
-from threading import Thread, Event
+# from threading import Thread, Event
+from asyncio import Event
 from typing import Optional
 
 from millegrilles.messages.MessagesModule import MessagesModule, RessourcesConsommation, ExchangeConfiguration
@@ -13,7 +14,8 @@ class MessagesThread:
     def __init__(self, stop_event: Event, module_class: MessagesModule = PikaModule):
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__stop_event = stop_event
-        self.__thread: Optional[Thread] = None
+        # self.__thread: Optional[Thread] = None
+        self.__event_loop = None
 
         self.__logger.info("Utilisation module messages %s" % module_class.__name__)
         self.__messages_module: MessagesModule = module_class()
@@ -25,31 +27,42 @@ class MessagesThread:
 
         self.__locked = False
 
-    def start(self):
-        if self.__thread is not None:
+    # def start(self):
+    #     if self.__thread is not None:
+    #         raise Exception("Deja demarre")
+    #
+    #     await self.__messages_module.preparer_ressources(
+    #         self.__env_configuration, self.__reply_ressources, self.__consumer_ressources, self.__exchanges)
+    #
+    #     self.__thread = Thread(target=self.__run, daemon=True, name="asyncio_loop1")
+    #     self.__thread.start()
+
+    async def start_async(self):
+        self.__event_loop = asyncio.get_event_loop
+        if self.__locked is True:
             raise Exception("Deja demarre")
 
-        self.__messages_module.preparer_ressources(self.__env_configuration,
-                                                   self.__reply_ressources,
-                                                   self.__consumer_ressources,
-                                                   self.__exchanges)
+        await self.__messages_module.preparer_ressources(
+            self.__env_configuration, self.__reply_ressources, self.__consumer_ressources, self.__exchanges)
 
         self.__locked = True
-        self.__thread = Thread(target=self.__run, daemon=True, name="asyncio_loop1")
-        self.__thread.start()
 
-    def __run(self):
+    async def run_async(self):
         # Loop thread tant que stop_event est clear. Note: thread est daemon, devrait fermer immediatement
         # meme si en attente asyncio.
         while not self.__stop_event.is_set():
             self.__logger.info("Debut thread asyncio MessagesThread")
 
             # Run loop asyncio
-            asyncio.run(self.__messages_module.run_async())
+            # asyncio.run(self.__messages_module.run_async())
+            await self.__messages_module.run_async()
 
             # Attendre pour redemarrer execution module
             self.__logger.info("Fin thread asyncio MessagesThread, attendre 30 secondes pour redemarrer")
-            self.__stop_event.wait(30)
+            try:
+                await asyncio.wait_for(self.__stop_event.wait(), 30)
+            except TimeoutError:
+                pass
 
         self.__logger.info("Fin thread MessagesThread")
 
@@ -76,5 +89,5 @@ class MessagesThread:
             self.__exchanges = list()
         self.__exchanges.append(exchange)
 
-    def attendre_pret(self, max_delai=20):
-        self.__messages_module.attendre_pret(max_delai)
+    async def attendre_pret(self, max_delai=20):
+        await self.__messages_module.attendre_pret(max_delai)

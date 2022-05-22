@@ -9,6 +9,7 @@ from pika.adapters.asyncio_connection import AsyncioConnection
 from pika.adapters.utils.connection_workflow import AMQPConnectionWorkflowFailed
 from pika.channel import Channel
 
+from millegrilles.messages import Constantes
 from millegrilles.messages.CleCertificat import CleCertificat
 from millegrilles.messages.EnveloppeCertificat import EnveloppeCertificat
 from millegrilles.messages.MessagesModule \
@@ -30,15 +31,14 @@ class PikaModule(MessagesModule):
         self.__connexion: Optional[AsyncioConnection] = None
         self.__channel_main: Optional[Channel] = None
         self.__exchanges_pending: Optional[set] = None
-        self.__validateur_certificats: Optional[ValidateurCertificatRedis] = None
 
     def est_connecte(self) -> bool:
         return self.__connexion is not None
 
-    def preparer_ressources(self, env_configuration: Optional[dict] = None,
-                            reply_res: Optional[RessourcesConsommation] = None,
-                            consumers: Optional[list] = None,
-                            exchanges: Optional[list] = None):
+    async def preparer_ressources(self, env_configuration: Optional[dict] = None,
+                                  reply_res: Optional[RessourcesConsommation] = None,
+                                  consumers: Optional[list] = None,
+                                  exchanges: Optional[list] = None):
 
         self.__pika_configuration = ConfigurationPika()
         self.__pika_configuration.parse_config(env_configuration)
@@ -46,27 +46,36 @@ class PikaModule(MessagesModule):
         self._exchanges = exchanges
 
         enveloppe_ca = EnveloppeCertificat.from_file(self.__pika_configuration.ca_pem_path)
-        self.__validateur_certificats = ValidateurCertificatRedis(enveloppe_ca)
-        validateur_messages = ValidateurMessage(self.__validateur_certificats)
-        self.__validateur_certificats.entretien()  # Connecter redis
 
-        # Creer reply-q, consumer
-        if reply_res:
-            reply_q_consumer = PikaModuleConsumer(self, reply_res, validateur_messages)
-            self.ajouter_consumer(reply_q_consumer)
+        validateur_certificats = ValidateurCertificatRedis(enveloppe_ca)
+        validateur_messages = ValidateurMessage(validateur_certificats)
 
-        if consumers is not None:
-            for consumer_res in consumers:
-                consumer = PikaModuleConsumer(self, consumer_res, validateur_messages)
-                self.ajouter_consumer(consumer)
+        self._validateur_certificats = validateur_certificats
+        self._validateur_messages = validateur_messages
+
+        await self._validateur_certificats.entretien()  # Connecter redis
+
+        enveloppe_cert = EnveloppeCertificat.from_file(self.__pika_configuration.cert_pem_path)
+        fingerprint = enveloppe_cert.fingerprint
 
         # Creer producer
         self._producer = PikaModuleProducer(self, reply_res)
 
+        # Creer reply-q, consumer
+        if reply_res:
+            reply_res.ajouter_rk(Constantes.SECURITE_PUBLIC, 'requete.certificat.%s' % fingerprint)
+            reply_q_consumer = PikaModuleConsumer(self, reply_res)
+            self.ajouter_consumer(reply_q_consumer, True)
+
+        if consumers is not None:
+            for consumer_res in consumers:
+                consumer = PikaModuleConsumer(self, consumer_res)
+                self.ajouter_consumer(consumer)
+
     async def entretien(self):
         await super().entretien()
 
-        self.__validateur_certificats.entretien()
+        await self._validateur_certificats.entretien()
 
         if self.__channel_main is None:
             self.__logger.info("Connecter channel main")
@@ -193,9 +202,9 @@ class PikaModule(MessagesModule):
 
 class PikaModuleConsumer(MessageConsumerVerificateur):
 
-    def __init__(self, module_messages: PikaModule, ressources: RessourcesConsommation, validateur_messages: ValidateurMessage):
+    def __init__(self, module_messages: PikaModule, ressources: RessourcesConsommation):
 
-        super().__init__(module_messages, ressources, validateur_messages)
+        super().__init__(module_messages, ressources)
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__channel: Optional[Channel] = None
 
@@ -204,6 +213,13 @@ class PikaModuleConsumer(MessageConsumerVerificateur):
         self.__consumer_tag: Optional[str] = None
 
         self.__rk_pending = set()
+
+        self.__enveloppe_certificat: Optional[EnveloppeCertificat] = None
+        self.__rk_certificat: Optional[str] = None
+
+    def set_enveloppe_certificat(self, enveloppe_certificat: EnveloppeCertificat):
+        self.__enveloppe_certificat = enveloppe_certificat
+        self.__rk_certificat = 'requete.certificat.%s' % enveloppe_certificat.fingerprint
 
     def set_channel(self, channel: Channel):
         self.__channel = channel
@@ -310,6 +326,11 @@ class PikaModuleConsumer(MessageConsumerVerificateur):
 
         message = MessageWrapper(body, routing_key, self._ressources.q, exchange, reply_to, correlation_id, delivery_tag)
 
+        if routing_key == self.__rk_certificat:
+            # Intercepter le message, repondre avec notre certificat
+            self.repondre_certificat(message)
+            return
+
         # Note : recevoir va lancer une exception si le message precedent n'est pas fini de traiter
         self.recevoir_message(message)
 
@@ -331,7 +352,8 @@ class PikaModuleProducer(MessageProducerFormatteur):
     def set_channel(self, channel: Channel):
         self.__channel = channel
         channel.add_on_close_callback(self.clear_channel)
-        self._producer_pret.set()
+        event_loop = self._module_messages.get_event_loop()
+        event_loop.call_soon_threadsafe(self._producer_pret.set)
 
     def clear_channel(self, _channel=None, reason=None):
         self.__logger.debug("Fermeture channel producer : %s", reason)

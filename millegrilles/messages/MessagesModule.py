@@ -1,17 +1,23 @@
 import asyncio
+import datetime
 import json
 import logging
 
 from threading import Event as EventThreading
 from typing import Optional, Union
+from uuid import uuid4
 
 from asyncio import Event
 from asyncio.exceptions import TimeoutError
 
-from millegrilles.messages import Constantes
 from millegrilles.messages.CleCertificat import CleCertificat
+from millegrilles.messages.EnveloppeCertificat import EnveloppeCertificat
 from millegrilles.messages.FormatteurMessages import FormatteurMessageMilleGrilles, SignateurTransactionSimple
 from millegrilles.messages.ValidateurMessage import ValidateurMessage
+from millegrilles.messages.ValidateurCertificats import ValidateurCertificatRedis
+
+
+ATTENTE_MESSAGE_DUREE = 15  # Attente par defaut de 15 secondes
 
 
 class RessourcesConsommation:
@@ -84,12 +90,18 @@ class MessagesModule:
     def __init__(self):
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self._consumers = list()
+        self._reply_consumer = None
         self._producer = None
         self._exchanges: Optional[list] = None
 
         self.__event_pret = EventThreading()
 
         self.__event_attente: Optional[Event] = None
+
+        self._validateur_certificats: Optional[ValidateurCertificatRedis] = None
+        self._validateur_messages: Optional[ValidateurMessage] = None
+
+        self.__event_loop = None
 
     async def __entretien_task(self):
         self.__event_attente = Event()
@@ -111,6 +123,8 @@ class MessagesModule:
             await self._connect()
 
     async def run_async(self):
+        self.__event_loop = asyncio.get_event_loop()
+
         # Creer tasks pour producers, consumers et entretien
         tasks = [
             asyncio.create_task(self.__entretien_task()),
@@ -132,13 +146,15 @@ class MessagesModule:
     async def _close(self):
         raise NotImplementedError('Not implemented')
 
-    def ajouter_consumer(self, consumer: RessourcesConsommation):
+    def ajouter_consumer(self, consumer, reply=False):  # Type MessageConsumer
         self._consumers.append(consumer)
+        if reply is True:
+            self._reply_consumer = consumer
 
-    def preparer_ressources(self, env_configuration: Optional[dict] = None,
-                            reply_res: Optional[RessourcesConsommation] = None,
-                            consumers: Optional[list] = None,
-                            exchanges: Optional[list] = None):
+    async def preparer_ressources(self, env_configuration: Optional[dict] = None,
+                                  reply_res: Optional[RessourcesConsommation] = None,
+                                  consumers: Optional[list] = None,
+                                  exchanges: Optional[list] = None):
         raise NotImplementedError('Not implemented')
 
     def get_producer(self):
@@ -147,19 +163,33 @@ class MessagesModule:
     def get_consumers(self):
         return self._consumers
 
-    def attendre_pret(self, max_delai=20):
+    def get_reply_consumer(self):
+        return self._reply_consumer
+
+    def get_validateur_messages(self):
+        return self._validateur_messages
+
+    def get_validateur_certificats(self):
+        return self._validateur_certificats
+
+    async def attendre_pret(self, max_delai=20):
         event_producer = self._producer.producer_pret()
-        event_producer.wait(max_delai)
+        # event_producer.wait(max_delai)
+        await asyncio.wait_for(event_producer.wait(), max_delai)
 
         if event_producer.is_set() is False:
             raise Exception("Timeout attente producer")
 
         for consumer in self._consumers:
             event = consumer.consumer_pret()
-            event.wait(max_delai)
+            # event.wait(max_delai)
+            await asyncio.wait_for(event.wait(), max_delai)
 
             if event.is_set() is False:
                 raise Exception("Timeout attente consumer")
+
+    def get_event_loop(self):
+        return self.__event_loop
 
 
 class MessageWrapper:
@@ -175,15 +205,243 @@ class MessageWrapper:
 
         # Message traite et verifie
         self.parsed: Optional[dict] = None
-        self.certificat_pem: Optional[list] = None
-        self.millegrille_pem: Optional[str] = None
-        self.certificat = None
-        self.hachage_valide = False
-        self.signature_valide = False
-        self.certificat_valide = False
+        self.certificat: Optional[EnveloppeCertificat] = None
+        self.est_valide = False
 
     def __str__(self):
         return 'tag:%d' % self.delivery_tag
+
+
+class MessagePending:
+
+    def __init__(self, content: bytes, routing_key: str, exchanges: list, reply_to=None, correlation_id=None, headers: Optional[dict] = None):
+        self.content = content
+        self.routing_key = routing_key
+        self.reply_to = reply_to
+        self.correlation_id = correlation_id
+        self.exchanges = exchanges
+        self.headers = headers
+
+
+class CorrelationReponse:
+
+    def __init__(self, correlation_id: str):
+        self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
+        self.correlation_id = correlation_id
+
+        self.__creation = datetime.datetime.utcnow()
+        self.__duree_attente = ATTENTE_MESSAGE_DUREE
+
+        self.consumer = None  # MessageConsumer
+        self.__event_attente = Event()
+        self.__reponse: Optional[MessageWrapper] = None
+        self.__reponse_consommee = False
+        self.__reponse_annulee = False
+
+    async def attendre_reponse(self, duree=ATTENTE_MESSAGE_DUREE) -> MessageWrapper:
+        self.__duree_attente = duree
+        try:
+            await asyncio.wait_for(self.__event_attente.wait(), duree)
+            if self.__reponse_annulee:
+                raise Exception('Annulee')
+        #except TimeoutError:
+        finally:
+            # Effacer la correlation immediatement
+            self.consumer.retirer_correlation(self.correlation_id)
+
+        self.__reponse_consommee = True
+        return self.__reponse
+
+    async def recevoir_reponse(self, message: MessageWrapper):
+        self.__reponse = message
+        self.__event_attente.set()
+
+    def est_expire(self):
+        duree_message = datetime.timedelta(seconds=self.__duree_attente)
+        if self.__reponse_consommee:
+            duree_message = duree_message * 3  # On donne un delai supplementaire si la reponse n'est pas consommee
+
+        date_expiration = datetime.datetime.utcnow() - duree_message
+
+        return self.__creation < date_expiration
+
+    def annulee(self):
+        if self.__reponse_consommee is False:
+            self.__logger.debug("Correlation reponse %s annulee par le consumer" % self.correlation_id)
+            self.__reponse_annulee = True
+            self.__event_attente.set()
+
+
+class MessageProducer:
+
+    def __init__(self, module_messages: MessagesModule, reply_res: Optional[RessourcesConsommation] = None):
+        self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
+        self._module_messages = module_messages
+        self._reply_res = reply_res
+
+        self._message_number = 0
+        self.__deliveries = list()  # Q d'emission de message, permet d'emettre via thread IO-LOOP
+
+        self.__loop = None
+        self.__event_message: Optional[Event] = None
+        self._event_q_prete = EventThreading()
+        self.__NB_MESSAGE_MAX = 10
+
+        self.__actif = False
+        # self._producer_pret = EventThreading()
+        self._producer_pret = Event()
+
+    async def emettre(self, message: Union[str, bytes], routing_key: str,
+                      exchanges: Optional[Union[str, list]] = None, correlation_id: str = None, reply_to: str = None):
+
+        if not self._producer_pret.is_set():
+            raise Exception("Producer n'est pas pret (utiliser message thread ou producer .producer_pret().wait()")
+
+        self._event_q_prete.wait()
+
+        if isinstance(message, str):
+            message = message.encode('utf-8')
+
+        if isinstance(exchanges, str):
+            exchanges = [exchanges]
+
+        if reply_to is None:
+            # Tenter d'injecter la reply_q
+            if self._reply_res is not None:
+                reply_to = self._reply_res.q
+
+        pending = MessagePending(message, routing_key, exchanges, reply_to, correlation_id)
+        self.__deliveries.append(pending)
+
+        # Notifier thread en await
+        # self.__loop.call_soon_threadsafe(self.__event_message.set)
+        self.__event_message.set()
+
+    async def emettre_attendre(self, message: Union[str, bytes], routing_key: str,
+                               exchange: Optional[str] = None, correlation_id: str = None,
+                               reply_to: str = None):
+        if reply_to is None:
+            reply_to = self.get_reply_q()
+
+        if correlation_id is None:
+            correlation_id = str(uuid4())
+
+        # Conserver reference a la correlation
+        correlation_reponse = CorrelationReponse(correlation_id)
+        await self._module_messages.get_reply_consumer().ajouter_attendre_reponse(correlation_reponse)
+
+        await self.emettre(message, routing_key, exchange, correlation_id, reply_to)
+
+        reponse = await correlation_reponse.attendre_reponse()
+
+        return reponse
+
+    async def run_async(self):
+        self.__logger.info("Demarrage run_async producer")
+        self.__loop = asyncio.get_event_loop()
+        self.__actif = True
+        self.__event_message = Event()
+
+        try:
+            while self.__actif:
+                while len(self.__deliveries) > 0:
+                    message = self.__deliveries.pop(0)
+                    self.__logger.debug("producer : send message %s" % message)
+                    await self.send(message)
+
+                self._event_q_prete.set()  # Debloque reception de messages
+
+                # Attendre prochains messages
+                await self.__event_message.wait()
+                self.__logger.debug("Wake up producer")
+
+                self.__event_message.clear()  # Reset flag
+        except:
+            self.__logger.exception("Erreur traitement, producer arrete")
+
+        self.__actif = False
+
+    async def send(self, message: MessagePending):
+        self.__logger.warning("NOT IMPLEMENTED - Emettre message %s", message)
+
+    def get_reply_q(self):
+        return self._reply_res.q
+
+    def producer_pret(self) -> Event:
+        return self._producer_pret
+
+
+class MessageProducerFormatteur(MessageProducer):
+    """
+    Produceur qui formatte le message a emettre.
+    """
+
+    def __init__(self, module_messages: MessagesModule, clecert: CleCertificat,
+                 reply_res: Optional[RessourcesConsommation] = None):
+        super().__init__(module_messages, reply_res)
+        self.__formatteur_messages: FormatteurMessageMilleGrilles = \
+            MessageProducerFormatteur.__preparer_formatteur(clecert)
+
+    @staticmethod
+    def __preparer_formatteur(clecert: CleCertificat) -> FormatteurMessageMilleGrilles:
+        idmg = clecert.enveloppe.idmg
+        signateur = SignateurTransactionSimple(clecert)
+        formatteur = FormatteurMessageMilleGrilles(idmg, signateur)
+        return formatteur
+
+    async def emettre_evenement(self, evenement: dict, domaine: str, action: str,
+                                partition: Optional[str] = None, exchanges: Union[str, list] = None, version=1,
+                                reply_to=None, correlation_id=None):
+        message, uuid_message = self.__formatteur_messages.signer_message(
+            evenement, domaine, version, action=action, partition=partition)
+
+        if correlation_id is None:
+            correlation_id = str(uuid_message)
+
+        rk = ['evenement', domaine]
+        if partition is not None:
+            rk.append(partition)
+        rk.append(action)
+
+        message_bytes = json.dumps(message)
+
+        await self.emettre(message_bytes, '.'.join(rk), exchanges, correlation_id, reply_to)
+
+    def executer_commande(self, commande: dict, domaine: str, action: str,
+                          partition: Optional[str] = None, exchanges: Union[str, list] = None, version=1,
+                          reply_to=None, correlation_id=None):
+        pass
+
+    async def executer_requete(self, requete: dict, domaine: str, action: str,
+                               partition: Optional[str] = None, exchange: str = None, version=1,
+                               reply_to=None, correlation_id=None):
+
+        message, uuid_message = self.__formatteur_messages.signer_message(
+            requete, domaine, version, action=action, partition=partition)
+
+        if correlation_id is None:
+            correlation_id = str(uuid_message)
+
+        rk = ['requete', domaine]
+        if partition is not None:
+            rk.append(partition)
+        rk.append(action)
+
+        message_bytes = json.dumps(message)
+
+        reponse = await self.emettre_attendre(message_bytes, '.'.join(rk),
+                                              exchange=exchange, correlation_id=correlation_id, reply_to=reply_to)
+        return reponse
+
+    def soumettre_transaction(self, transaction: dict, domaine: str, action: str,
+                              partition: Optional[str] = None, exchanges: Union[str, list] = None, version=1,
+                              reply_to=None, correlation_id=None):
+        pass
+
+    async def repondre(self, reponse: dict, reply_to, correlation_id, version=1):
+        message, uuid_message = self.__formatteur_messages.signer_message(reponse, version=version)
+        message_bytes = json.dumps(message)
+        await self.emettre(message_bytes, correlation_id=correlation_id, reply_to=reply_to)
 
 
 class MessageConsumer:
@@ -196,16 +454,22 @@ class MessageConsumer:
         self._module_messages = module_messages
         self._ressources = ressources
 
+        self.__NB_ATTENTE_MAX = 100  # Nombre maximal de reponses en attente
+
         # self._consuming = False
         self.__loop = None
         self._event_channel: Optional[Event] = None
         self._event_consumer: Optional[Event] = None
         self._event_message: Optional[Event] = None
+        self._event_correlation_plein: Optional[Event] = None
 
         # Q de messages en memoire
         self._messages = list()
 
-        self._consumer_pret = EventThreading()
+        self._consumer_pret = Event()
+
+        # [correlation_id] = CorrelationReponse()
+        self._correlation_reponse: Optional[dict] = None
 
     async def run_async(self):
         self.__logger.info("Demarrage consumer %s" % self._module_messages)
@@ -215,6 +479,7 @@ class MessageConsumer:
         self._event_channel = Event()
         self._event_consumer = Event()
         self._event_message = Event()
+        self._event_correlation_plein = Event()
 
         # Attente ressources
         await self._event_channel.wait()
@@ -251,12 +516,32 @@ class MessageConsumer:
             self.ack_message(message)
 
     async def _traiter_message(self, message: MessageWrapper):
+        # Verifier si on intercepte une reponse
+        if self._correlation_reponse is not None:
+            correlation_id = message.correlation_id
+            if correlation_id is not None:
+                try:
+                    corr_reponse = self._correlation_reponse[correlation_id]
+                    del self._correlation_reponse[correlation_id]  # Cleanup
+                    await corr_reponse.recevoir_reponse(message)
+                    return  # Termine
+                except KeyError:
+                    pass
+
         # Effectuer le traitement
         if self._ressources.est_asyncio is True:
-            await self._ressources.callback(message)
+            await self._ressources.callback(message, self._module_messages)
         else:
             # Utiliser threadpool de asyncio pour methode blocking
-            await asyncio.to_thread(self._ressources.callback, message)
+            await asyncio.to_thread(self._ressources.callback, message, self._module_messages)
+
+    def repondre_certificat(self, message: MessageWrapper):
+        pems = ['']
+        fingerprint = ''
+        reponse = {'pems': pems, 'fingerprint': fingerprint}
+        producer = self._module_messages.get_producer()
+        producer.repondre(reponse, message.reply_to, message.correlation_id)
+        self.ack_message(message)
 
     def get_ressources(self):
         return self._ressources
@@ -264,17 +549,35 @@ class MessageConsumer:
     def ack_message(self, message: MessageWrapper):
         raise NotImplementedError('Not implemented')
 
-    def consumer_pret(self) -> EventThreading:
+    def consumer_pret(self) -> Event:
         return self._consumer_pret
+
+    async def ajouter_attendre_reponse(self, correlation_reponse: CorrelationReponse):
+        if self._correlation_reponse is None:
+            self._correlation_reponse = dict()
+
+        if len(self._correlation_reponse) > self.__NB_ATTENTE_MAX:
+            await asyncio.wait_for(self._event_correlation_plein.wait(), 15)
+            if len(self._correlation_reponse) > self.__NB_ATTENTE_MAX:
+                raise Exception('Nombre de correlations maximal atteint')
+
+        correlation_reponse.consumer = self
+        self._correlation_reponse[correlation_reponse.correlation_id] = correlation_reponse
+
+    def retirer_correlation(self, correlation_id: str):
+        try:
+            correlation = self._correlation_reponse[correlation_id]
+            del self._correlation_reponse[correlation_id]
+            correlation.annulee()
+        except KeyError:
+            pass
 
 
 class MessageConsumerVerificateur(MessageConsumer):
 
-    def __init__(self, module_messages: MessagesModule, ressources: RessourcesConsommation,
-                 validateur_messages: ValidateurMessage):
+    def __init__(self, module_messages: MessagesModule, ressources: RessourcesConsommation):
         super().__init__(module_messages, ressources)
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
-        self.__validateur_messages = validateur_messages
 
     async def _traiter_message(self, message: MessageWrapper):
         parsed = json.loads(message.contenu)
@@ -284,158 +587,11 @@ class MessageConsumerVerificateur(MessageConsumer):
 
         # Verifier le message (certificat, signature)
         try:
-            await self.__validateur_messages.verifier(parsed)
+            enveloppe_certificat = await self._module_messages.get_validateur_messages().verifier(parsed)
+            message.certificat = enveloppe_certificat
+            message.est_valide = True
             # Message OK
             await super()._traiter_message(message)
         except:
             # Message invalide
             self.__logger.exception("Erreur traitement message %s" % message.routing_key)
-
-
-class MessagePending:
-
-    def __init__(self, content: bytes, routing_key: str, exchanges: list, reply_to=None, correlation_id=None, headers: Optional[dict] = None):
-        self.content = content
-        self.routing_key = routing_key
-        self.reply_to = reply_to
-        self.correlation_id = correlation_id
-        self.exchanges = exchanges
-        self.headers = headers
-
-
-class MessageProducer:
-
-    def __init__(self, module_messages: MessagesModule, reply_res: Optional[RessourcesConsommation] = None):
-        self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
-        self._module_messages = module_messages
-        self._reply_res = reply_res
-
-        self._message_number = 0
-        self.__deliveries = list()  # Q d'emission de message, permet d'emettre via thread IO-LOOP
-
-        self.__loop = None
-        self.__event_message: Optional[Event] = None
-        self._event_q_prete = EventThreading()
-        self.__NB_MESSAGE_MAX = 10
-
-        self.__actif = False
-        self._producer_pret = EventThreading()
-
-    def emettre(self, message: Union[str, bytes], routing_key: str,
-                exchanges: Optional[Union[str, list]] = None, correlation_id: str = None, reply_to: str = None):
-
-        if not self._producer_pret.is_set():
-            raise Exception("Producer n'est pas pret (utiliser message thread ou producer .producer_pret().wait()")
-
-        self._event_q_prete.wait()
-
-        if isinstance(message, str):
-            message = message.encode('utf-8')
-
-        if isinstance(exchanges, str):
-            exchanges = [exchanges]
-
-        if reply_to is None:
-            # Tenter d'injecter la reply_q
-            if self._reply_res is not None:
-                reply_to = self._reply_res.q
-
-        pending = MessagePending(message, routing_key, exchanges, reply_to, correlation_id)
-        self.__deliveries.append(pending)
-        if len(self.__deliveries) > self.__NB_MESSAGE_MAX:
-            self._event_q_prete.clear()  # Va faire bloquer le prochain appel
-
-        # Notifier thread en await
-        # self.__event_message.set()
-        self.__loop.call_soon_threadsafe(self.__event_message.set)
-
-    async def run_async(self):
-        self.__logger.info("Demarrage run_async producer")
-        self.__loop = asyncio.get_event_loop()
-        self.__actif = True
-        self.__event_message = Event()
-
-        try:
-            while self.__actif:
-                while len(self.__deliveries) > 0:
-                    message = self.__deliveries.pop(0)
-                    self.__logger.debug("producer : send message %s" % message)
-                    await self.send(message)
-
-                self._event_q_prete.set()  # Debloque reception de messages
-
-                # Attendre prochains messages
-                await self.__event_message.wait()
-                self.__logger.debug("Wake up producer")
-
-                self.__event_message.clear()  # Reset flag
-        except:
-            self.__logger.exception("Erreur traitement, producer arrete")
-
-        self.__actif = False
-
-    async def send(self, message: MessagePending):
-        self.__logger.warning("NOT IMPLEMENTED - Emettre message %s", message)
-
-    def get_reply_q(self):
-        return self._reply_res.q
-
-    def producer_pret(self) -> EventThreading:
-        return self._producer_pret
-
-
-class MessageProducerFormatteur(MessageProducer):
-    """
-    Produceur qui formatte le message a emettre.
-    """
-
-    def __init__(self, module_messages: MessagesModule, clecert: CleCertificat,
-                 reply_res: Optional[RessourcesConsommation] = None):
-        super().__init__(module_messages, reply_res)
-        self.__formatteur_messages: FormatteurMessageMilleGrilles = \
-            MessageProducerFormatteur.__preparer_formatteur(clecert)
-
-    @staticmethod
-    def __preparer_formatteur(clecert: CleCertificat) -> FormatteurMessageMilleGrilles:
-        idmg = clecert.enveloppe.idmg
-        signateur = SignateurTransactionSimple(clecert)
-        formatteur = FormatteurMessageMilleGrilles(idmg, signateur)
-        return formatteur
-
-    def emettre_evenement(self, evenement: dict, domaine: str, action: str,
-                          partition: Optional[str] = None, exchanges: Union[str, list] = None, version=1,
-                          reply_to=None, correlation_id=None):
-        message, uuid_message = self.__formatteur_messages.signer_message(
-            evenement, domaine, version, action=action, partition=partition)
-
-        if correlation_id is None:
-            correlation_id = str(uuid_message)
-
-        rk = ['evenement', domaine]
-        if partition is not None:
-            rk.append(partition)
-        rk.append(action)
-
-        message_bytes = json.dumps(message)
-
-        self.emettre(message_bytes, '.'.join(rk), exchanges, correlation_id, reply_to)
-
-    def emettre_commande(self, commande: dict, domaine: str, action: str,
-                         partition: Optional[str] = None, exchanges: Union[str, list] = None, version=1,
-                         reply_to=None, correlation_id=None):
-        pass
-
-    def emettre_requete(self, requete: dict, domaine: str, action: str,
-                        partition: Optional[str] = None, exchanges: Union[str, list] = None, version=1,
-                        reply_to=None, correlation_id=None):
-        pass
-
-    def emettre_transaction(self, transaction: dict, domaine: str, action: str,
-                            partition: Optional[str] = None, exchanges: Union[str, list] = None, version=1,
-                            reply_to=None, correlation_id=None):
-        pass
-
-    def repondre(self, reponse: dict, domaine: str, action: str,
-                 partition: Optional[str], exchanges: Union[str, list], version=1,
-                 reply_to=None, correlation_id=None):
-        pass
