@@ -4,10 +4,12 @@ import json
 import logging
 import OpenSSL
 
+from asyncio.exceptions import TimeoutError
 from typing import Optional, Union
 
 import redis.asyncio as redis
 
+from millegrilles.messages import Constantes
 from millegrilles.messages.EnveloppeCertificat import EnveloppeCertificat
 from millegrilles.messages.ParamsEnvironnement import ConfigurationRedis
 
@@ -261,9 +263,13 @@ class ValidateurCertificatRedis(ValidateurCertificatCache):
 
     def __init__(self, enveloppe_ca: EnveloppeCertificat, cache_ttl_secs=CACHE_TTL_SECS):
         super().__init__(enveloppe_ca, cache_ttl_secs)
+        self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__configuration_redis = ValidateurCertificatRedis.__charger_configuration_redis()
         self.__enveloppe_ca = enveloppe_ca
         self.__redis_client: Optional[redis.Redis] = None
+
+        # Producer, permet de faire des requetes pour certificats inconnus
+        self.__producer_messages = None
 
     @staticmethod
     def __charger_configuration_redis():
@@ -289,18 +295,53 @@ class ValidateurCertificatRedis(ValidateurCertificatCache):
         await super().entretien()
         await self.__connecter()
 
-    async def __get_certficat(self, fingerprint) -> list:
-        if self.__redis_client is None:
-            raise CertificatInconnu('CONNEXION FERMEE', fingerprint=fingerprint)
+    async def __get_certficat(self, fingerprint, nofetch=False) -> list:
+        if self.__redis_client is not None:
+            cert_data = await self.__redis_client.getex('certificat_v1:%s' % fingerprint, REDIS_TTL_SECS)
 
-        cert_data = await self.__redis_client.getex('certificat_v1:%s' % fingerprint, REDIS_TTL_SECS)
+            if cert_data is not None:
+                # Parse json, format {"pems": [], "ca": ""}
+                cert_dict = json.loads(cert_data)
+                return cert_dict['pems']
 
-        if cert_data is None:
+        # Fallback sur MQ
+        if self.__producer_messages is None or nofetch is True:
             raise CertificatInconnu('PERSISTENT CACHE MISS', fingerprint=fingerprint)
 
-        # Parse json, format {"pems": [], "ca": ""}
-        cert_dict = json.loads(cert_data)
-        return cert_dict['pems']
+        pems = await self.fetch_certificat(fingerprint)
+
+        return pems
+
+    async def fetch_certificat(self, fingerprint: str):
+        await self.__producer_messages.producer_pret().wait()
+
+        requete = {'fingerprint': fingerprint}
+        try:
+            reponse_certificat = await self.__producer_messages.executer_requete(
+                requete, 'CorePki', action='infoCertificat', exchange=Constantes.SECURITE_PUBLIC, timeout=3)
+            parsed = reponse_certificat.parsed
+            if parsed.get('ok') is not False:
+                return parsed['chaine_pem']
+        except TimeoutError:
+            self.__logger.debug("Timeout requete certificat %s, tentative requete directe" % fingerprint)
+        except (KeyError, AttributeError):
+            self.__logger.exception("Erreur traitement reponse certificat directe pour %s" % fingerprint)
+
+        try:
+            reponse_certificat = await self.__producer_messages.executer_requete(
+                requete, 'certificat', action=fingerprint, exchange=Constantes.SECURITE_PUBLIC, timeout=5)
+            parsed = reponse_certificat.parsed
+            if parsed.get('ok') is not False:
+                enveloppe = reponse_certificat.certificat
+                if enveloppe.fingerprint == fingerprint:
+                    pems = enveloppe.chaine_pem
+                    return pems
+        except TimeoutError:
+            pass
+        except (KeyError, AttributeError):
+            self.__logger.exception("Erreur traitement reponse certificat directe pour %s" % fingerprint)
+
+        raise CertificatInconnu('INCONNU DU SYSTEME', fingerprint=fingerprint)
 
     async def valider_fingerprint(self, fingerprint: str, date_reference: datetime.datetime = None,
                                   idmg: str = None, usages: set = frozenset({'digital_signature'}),
@@ -309,8 +350,13 @@ class ValidateurCertificatRedis(ValidateurCertificatCache):
         try:
             return await super().valider_fingerprint(fingerprint, date_reference, idmg, usages, nofetch)
         except CertificatInconnu as ci:
-            pems = await self.__get_certficat(fingerprint)
+            pass
+
+        try:
+            pems = await self.__get_certficat(fingerprint, nofetch)
             return await self.valider(pems, date_reference, idmg, usages)
+        except CertificatInconnu as ci:
+            pass
 
     async def valider(self, certificat: Union[bytes, str, list], date_reference: datetime.datetime = None,
                       idmg: str = None, usages: set = {'digital_signature'}) -> EnveloppeCertificat:
@@ -329,3 +375,6 @@ class ValidateurCertificatRedis(ValidateurCertificatCache):
                 await self.__redis_client.setex(cle_redis, REDIS_TTL_SECS, entree_redis_bytes)
 
         return enveloppe
+
+    def set_producer_messages(self, producer):
+        self.__producer_messages = producer

@@ -2,10 +2,14 @@ import asyncio
 import datetime
 import logging
 
+from asyncio import Event
 from OpenSSL.crypto import X509StoreContextError
 
 from millegrilles.messages.EnveloppeCertificat import EnveloppeCertificat
 from millegrilles.messages.ValidateurCertificats import ValidateurCertificat, ValidateurCertificatRedis, IdmgInvalide
+
+from millegrilles.messages.MessagesThread import MessagesThread
+from millegrilles.messages.MessagesModule import RessourcesConsommation
 
 PATH_CA = '/home/mathieu/mgdev/certs/pki.millegrille'
 PATH_CORE_CERT = '/home/mathieu/mgdev/certs/pki.core.cert'
@@ -53,9 +57,46 @@ async def valider_redis():
     enveloppe = await validateur.valider(pem_bytes)
 
     # Charger cert arbitraire
-    fingerprint_1 = enveloppe.fingerprint
+    # fingerprint_1 = enveloppe.fingerprint
+    fingerprint_1 = 'mEiBvEkcpY4CKAfjhjoR0VVM74JCW7TrOqsY8daSbGNQKGA'
     enveloppe = await validateur.valider_fingerprint(fingerprint_1)
     logger.debug("Fingerprint %s enveloppe chargee redis : %s" % (fingerprint_1, enveloppe))
+
+
+async def valider_systeme():
+    # Test requete MQ pour charger certificat inconnu
+    stop_event = Event()
+    reply_res = RessourcesConsommation(callback_reply_q)
+
+    messages_thread = MessagesThread(stop_event)
+    messages_thread.set_reply_ressources(reply_res)
+
+    # Demarrer traitement messages
+    await messages_thread.start_async()
+
+    tasks = [
+        asyncio.create_task(messages_thread.run_async()),
+        asyncio.create_task(run_tests_mq(messages_thread)),
+    ]
+
+    # Execution de la loop avec toutes les tasks
+    await asyncio.tasks.wait(tasks, return_when=asyncio.tasks.FIRST_COMPLETED)
+
+    logger.info("Fin main()")
+
+
+async def run_tests_mq(messages_thread):
+    validateur = messages_thread.get_validateur_certificats()
+
+    # Charger cert arbitraire
+    fingerprint_1 = 'z2i3XjxFX5BHaDZMKjg2xN138eMhkucXvxM4c5CSU9h85rn452C'
+    # fingerprint_1 = 'mEiBvEkcpY4CKAfjhjoR0VVM74JCW7TrOqsY8daSbGNQKGA'
+    enveloppe = await validateur.valider_fingerprint(fingerprint_1)
+    logger.debug("Fingerprint %s enveloppe chargee redis : %s" % (fingerprint_1, enveloppe))
+
+
+async def callback_reply_q(message, module_messages):
+    pass
 
 
 def main():
@@ -63,8 +104,9 @@ def main():
     logging.getLogger(__name__).setLevel(logging.DEBUG)
     logging.getLogger('millegrilles').setLevel(logging.DEBUG)
 
-    valider_simple()
-    asyncio.run(valider_redis())
+    #valider_simple()
+    #asyncio.run(valider_redis())
+    asyncio.run(valider_systeme())
 
 
 if __name__ == '__main__':

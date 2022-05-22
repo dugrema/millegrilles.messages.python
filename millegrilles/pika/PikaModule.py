@@ -59,13 +59,15 @@ class PikaModule(MessagesModule):
         fingerprint = enveloppe_cert.fingerprint
 
         # Creer producer
-        self._producer = PikaModuleProducer(self, reply_res)
+        self._producer = PikaModuleProducer(self)
+        validateur_certificats.set_producer_messages(self._producer)  # Wiring pour requete certificats
 
         # Creer reply-q, consumer
         if reply_res:
             reply_res.ajouter_rk(Constantes.SECURITE_PUBLIC, 'requete.certificat.%s' % fingerprint)
             reply_q_consumer = PikaModuleConsumer(self, reply_res)
             self.ajouter_consumer(reply_q_consumer, True)
+            self._producer.set_reply_consumer(reply_q_consumer)
 
         if consumers is not None:
             for consumer_res in consumers:
@@ -340,11 +342,11 @@ class PikaModuleConsumer(MessageConsumerVerificateur):
 
 class PikaModuleProducer(MessageProducerFormatteur):
 
-    def __init__(self, pika_module: PikaModule, reply_res: Optional[RessourcesConsommation] = None):
+    def __init__(self, pika_module: PikaModule):
         configuration = pika_module.configuration
         clecert = CleCertificat.from_files(configuration.key_pem_path, configuration.cert_pem_path)
 
-        super().__init__(pika_module, clecert, reply_res)
+        super().__init__(pika_module, clecert)
 
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__channel: Optional[Channel] = None

@@ -91,3 +91,9 @@ class MessagesThread:
 
     async def attendre_pret(self, max_delai=20):
         await self.__messages_module.attendre_pret(max_delai)
+
+    def get_validateur_messages(self):
+        return self.__messages_module.get_validateur_messages()
+
+    def get_validateur_certificats(self):
+        return self.__messages_module.get_validateur_certificats()

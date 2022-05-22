@@ -238,10 +238,10 @@ class CorrelationReponse:
         self.__reponse_consommee = False
         self.__reponse_annulee = False
 
-    async def attendre_reponse(self, duree=ATTENTE_MESSAGE_DUREE) -> MessageWrapper:
-        self.__duree_attente = duree
+    async def attendre_reponse(self, timeout=ATTENTE_MESSAGE_DUREE) -> MessageWrapper:
+        self.__duree_attente = timeout
         try:
-            await asyncio.wait_for(self.__event_attente.wait(), duree)
+            await asyncio.wait_for(self.__event_attente.wait(), timeout)
             if self.__reponse_annulee:
                 raise Exception('Annulee')
         #except TimeoutError:
@@ -274,11 +274,11 @@ class CorrelationReponse:
 
 class MessageProducer:
 
-    def __init__(self, module_messages: MessagesModule, reply_res: Optional[RessourcesConsommation] = None):
+    def __init__(self, module_messages: MessagesModule):
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self._module_messages = module_messages
-        self._reply_res = reply_res
 
+        self._reply_consumer = None
         self._message_number = 0
         self.__deliveries = list()  # Q d'emission de message, permet d'emettre via thread IO-LOOP
 
@@ -307,8 +307,8 @@ class MessageProducer:
 
         if reply_to is None:
             # Tenter d'injecter la reply_q
-            if self._reply_res is not None:
-                reply_to = self._reply_res.q
+            if self._reply_consumer is not None:
+                reply_to = self._reply_consumer.get_ressources().q
 
         pending = MessagePending(message, routing_key, exchanges, reply_to, correlation_id)
         self.__deliveries.append(pending)
@@ -319,9 +319,9 @@ class MessageProducer:
 
     async def emettre_attendre(self, message: Union[str, bytes], routing_key: str,
                                exchange: Optional[str] = None, correlation_id: str = None,
-                               reply_to: str = None):
+                               reply_to: str = None, timeout=ATTENTE_MESSAGE_DUREE):
         if reply_to is None:
-            reply_to = self.get_reply_q()
+            reply_to = await  self.get_reply_q()
 
         if correlation_id is None:
             correlation_id = str(uuid4())
@@ -334,7 +334,7 @@ class MessageProducer:
         await self.emettre(message, routing_key, exchange, correlation_id, reply_to)
 
         # Attendre la reponse. raises TimeoutError
-        reponse = await correlation_reponse.attendre_reponse()
+        reponse = await correlation_reponse.attendre_reponse(timeout)
 
         return reponse
 
@@ -366,8 +366,14 @@ class MessageProducer:
     async def send(self, message: MessagePending):
         self.__logger.warning("NOT IMPLEMENTED - Emettre message %s", message)
 
-    def get_reply_q(self):
-        return self._reply_res.q
+    def set_reply_consumer(self, consumer):
+        self._reply_consumer = consumer
+
+    async def get_reply_q(self):
+        if self._reply_consumer is not None:
+            if not self._reply_consumer.consumer_pret().is_set():
+                await asyncio.wait_for(self._reply_consumer.consumer_pret().wait(), 20)
+            return self._reply_consumer.get_ressources().q
 
     def producer_pret(self) -> Event:
         return self._producer_pret
@@ -378,9 +384,8 @@ class MessageProducerFormatteur(MessageProducer):
     Produceur qui formatte le message a emettre.
     """
 
-    def __init__(self, module_messages: MessagesModule, clecert: CleCertificat,
-                 reply_res: Optional[RessourcesConsommation] = None):
-        super().__init__(module_messages, reply_res)
+    def __init__(self, module_messages: MessagesModule, clecert: CleCertificat):
+        super().__init__(module_messages)
         self.__formatteur_messages: FormatteurMessageMilleGrilles = \
             MessageProducerFormatteur.__preparer_formatteur(clecert)
 
@@ -432,7 +437,7 @@ class MessageProducerFormatteur(MessageProducer):
 
     async def executer_requete(self, requete: dict, domaine: str, action: str, exchange: str,
                                partition: Optional[str] = None, version=1,
-                               reply_to=None) -> MessageWrapper:
+                               reply_to=None, timeout=ATTENTE_MESSAGE_DUREE) -> MessageWrapper:
 
         message, uuid_message = self.__formatteur_messages.signer_message(
             requete, domaine, version, action=action, partition=partition)
@@ -447,7 +452,8 @@ class MessageProducerFormatteur(MessageProducer):
         message_bytes = json.dumps(message)
 
         reponse = await self.emettre_attendre(message_bytes, '.'.join(rk),
-                                              exchange=exchange, correlation_id=correlation_id, reply_to=reply_to)
+                                              exchange=exchange, correlation_id=correlation_id,
+                                              reply_to=reply_to, timeout=timeout)
         return reponse
 
     async def soumettre_transaction(self, transaction: dict, domaine: str, action: str, exchange: str,
