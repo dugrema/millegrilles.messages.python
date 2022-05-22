@@ -40,6 +40,9 @@ class CertificatInconnu(Exception):
     def fingerprint(self):
         return self.__fingerprint
 
+    def __str__(self):
+        return 'CertificatInconnu %s : %s' % (self.__fingerprint, super().__str__)
+
 
 class IdmgInvalide(Exception):
     pass
@@ -164,19 +167,19 @@ class ValidateurCertificat:
         except (KeyError, AttributeError):
             self.__logger.exception("Erreur traitement reponse certificat directe pour %s" % fingerprint)
 
-        try:
-            reponse_certificat = await self.__producer_messages.executer_requete(
-                requete, 'certificat', action=fingerprint, exchange=Constantes.SECURITE_PUBLIC, timeout=5)
-            parsed = reponse_certificat.parsed
-            if parsed.get('ok') is not False:
-                enveloppe = reponse_certificat.certificat
-                if enveloppe.fingerprint == fingerprint:
-                    pems = enveloppe.chaine_pem
-                    return pems
-        except TimeoutError:
-            pass
-        except (KeyError, AttributeError):
-            self.__logger.exception("Erreur traitement reponse certificat directe pour %s" % fingerprint)
+        # try:
+        #     reponse_certificat = await self.__producer_messages.executer_requete(
+        #         requete, 'certificat', action=fingerprint, exchange=Constantes.SECURITE_PUBLIC, timeout=5)
+        #     parsed = reponse_certificat.parsed
+        #     if parsed.get('ok') is not False:
+        #         enveloppe = reponse_certificat.certificat
+        #         if enveloppe.fingerprint == fingerprint:
+        #             pems = enveloppe.chaine_pem
+        #             return pems
+        # except TimeoutError:
+        #     pass
+        # except (KeyError, AttributeError):
+        #     self.__logger.exception("Erreur traitement reponse certificat directe pour %s" % fingerprint)
 
         raise CertificatInconnu('INCONNU DU SYSTEME', fingerprint=fingerprint)
 
@@ -361,11 +364,8 @@ class ValidateurCertificatRedis(ValidateurCertificatCache):
         except CertificatInconnu as ci:
             pass
 
-        try:
-            pems = await self.__get_certficat(fingerprint, nofetch)
-            return await self.valider(pems, date_reference, idmg, usages)
-        except CertificatInconnu as ci:
-            pass
+        pems = await self.__get_certficat(fingerprint, nofetch)
+        return await self.valider(pems, date_reference, idmg, usages)
 
     async def valider(self, certificat: Union[bytes, str, list], date_reference: datetime.datetime = None,
                       idmg: str = None, usages: set = {'digital_signature'}) -> EnveloppeCertificat:
@@ -373,11 +373,20 @@ class ValidateurCertificatRedis(ValidateurCertificatCache):
         enveloppe = await super().valider(certificat, date_reference, idmg, usages)
         fingerprint = enveloppe.fingerprint
 
+        self.__logger.debug("Verifier si on conserve certificat %s dans redis" % fingerprint)
+
         # Verifier si on a deja le certificat dans redis (just touch, maj TTL)
         if self.__redis_client is not None:
             cle_redis = 'certificat_v1:%s' % fingerprint
-            reponse = await self.__redis_client.expire(cle_redis, REDIS_TTL_SECS)
-            if reponse is not True:
+
+            cle_existe = await self.__redis_client.exists(cle_redis)
+            self.__logger.debug("Cle existant de redis : %s" % cle_existe)
+
+            if cle_existe == 1:
+                self.__logger.debug("Cle %s existe deja : %s" % (cle_redis, cle_existe))
+                await self.__redis_client.expire(cle_redis, REDIS_TTL_SECS)
+            else:
+                self.__logger.debug("Sauvegarder %s dans redis" % cle_redis)
                 pems = enveloppe.chaine_pem()
                 entree_redis = {'pems': pems, 'ca': None}
                 entree_redis_bytes = json.dumps(entree_redis).encode('utf-8')

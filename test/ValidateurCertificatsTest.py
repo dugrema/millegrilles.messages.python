@@ -3,6 +3,7 @@ import datetime
 import logging
 
 from asyncio import Event
+from asyncio.exceptions import TimeoutError
 from OpenSSL.crypto import X509StoreContextError
 
 from millegrilles.messages.EnveloppeCertificat import EnveloppeCertificat
@@ -86,6 +87,13 @@ async def valider_systeme():
 
 
 async def run_tests_mq(messages_thread):
+    wait_event = Event()
+
+    try:
+        await asyncio.wait_for(wait_event.wait(), 1)
+    except TimeoutError:
+        pass
+
     validateur = messages_thread.get_validateur_certificats()
 
     # Charger cert arbitraire
@@ -93,6 +101,12 @@ async def run_tests_mq(messages_thread):
     # fingerprint_1 = 'mEiBvEkcpY4CKAfjhjoR0VVM74JCW7TrOqsY8daSbGNQKGA'
     enveloppe = await validateur.valider_fingerprint(fingerprint_1)
     logger.debug("Fingerprint %s enveloppe chargee redis : %s" % (fingerprint_1, enveloppe))
+
+    try:
+        await asyncio.wait_for(wait_event.wait(), 30)
+    except TimeoutError:
+        pass
+
 
 
 async def callback_reply_q(message, module_messages):
