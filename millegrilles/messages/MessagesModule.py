@@ -247,7 +247,7 @@ class CorrelationReponse:
         #except TimeoutError:
         finally:
             # Effacer la correlation immediatement
-            self.consumer.retirer_correlation(self.correlation_id)
+            await self.consumer.retirer_correlation(self.correlation_id)
 
         self.__reponse_consommee = True
         return self.__reponse
@@ -265,7 +265,7 @@ class CorrelationReponse:
 
         return self.__creation < date_expiration
 
-    def annulee(self):
+    async def annulee(self):
         if self.__reponse_consommee is False:
             self.__logger.debug("Correlation reponse %s annulee par le consumer" % self.correlation_id)
             self.__reponse_annulee = True
@@ -494,14 +494,14 @@ class MessageConsumer:
         self._module_messages = module_messages
         self._ressources = ressources
 
-        self.__NB_ATTENTE_MAX = 100  # Nombre maximal de reponses en attente
+        self.__NB_ATTENTE_MAX = 10  # Nombre maximal de reponses en attente
 
         # self._consuming = False
         self.__loop = None
         self._event_channel: Optional[Event] = None
         self._event_consumer: Optional[Event] = None
         self._event_message: Optional[Event] = None
-        self._event_correlation_plein: Optional[Event] = None
+        self._event_correlation_pret: Optional[Event] = None
 
         # Q de messages en memoire
         self._messages = list()
@@ -519,13 +519,24 @@ class MessageConsumer:
         self._event_channel = Event()
         self._event_consumer = Event()
         self._event_message = Event()
-        self._event_correlation_plein = Event()
+        self._event_correlation_pret = Event()
 
         # Attente ressources
         await self._event_channel.wait()
         await self._event_consumer.wait()
 
         self.__logger.info("Consumer actif")
+        tasks = [
+            asyncio.create_task(self.__traiter_messages()),
+            asyncio.create_task(self.__entretien())
+        ]
+        # Execution de la loop avec toutes les tasks
+        await asyncio.tasks.wait(tasks, return_when=asyncio.tasks.FIRST_COMPLETED)
+
+        self._consumer_pret.clear()
+        self.__logger.info("Arret consumer %s" % self._module_messages)
+
+    async def __traiter_messages(self):
         while self._event_consumer.is_set():
             self._event_message.clear()
             # Traiter messages
@@ -534,8 +545,21 @@ class MessageConsumer:
                 await self.__traiter_message(message)
             await self._event_message.wait()
 
-        self._consumer_pret.clear()
-        self.__logger.info("Arret consumer %s" % self._module_messages)
+    async def __entretien(self):
+        while self._event_consumer.is_set():
+
+            if self._correlation_reponse is not None:
+                correlations = list(self._correlation_reponse.values())
+                for corr in correlations:
+                    if corr.est_expire():
+                        correlation_id = corr.correlation_id
+                        del self._correlation_reponse[correlation_id]
+                        await corr.annulee()
+
+            try:
+                await asyncio.wait_for(self._event_consumer.wait(), 30)
+            except TimeoutError:
+                pass
 
     def recevoir_message(self, message: MessageWrapper):
         self.__logger.debug("recevoir_message")
@@ -563,6 +587,8 @@ class MessageConsumer:
                 try:
                     corr_reponse = self._correlation_reponse[correlation_id]
                     del self._correlation_reponse[correlation_id]  # Cleanup
+                    if not self._event_correlation_pret.is_set():
+                        self._event_correlation_pret.set()
                     await corr_reponse.recevoir_reponse(message)
                     return  # Termine
                 except KeyError:
@@ -593,18 +619,22 @@ class MessageConsumer:
             self._correlation_reponse = dict()
 
         if len(self._correlation_reponse) > self.__NB_ATTENTE_MAX:
-            await asyncio.wait_for(self._event_correlation_plein.wait(), 15)
+            self._event_correlation_pret.clear()
+            await asyncio.wait_for(self._event_correlation_pret.wait(), 15)
+
             if len(self._correlation_reponse) > self.__NB_ATTENTE_MAX:
                 raise Exception('Nombre de correlations maximal atteint')
 
         correlation_reponse.consumer = self
         self._correlation_reponse[correlation_reponse.correlation_id] = correlation_reponse
 
-    def retirer_correlation(self, correlation_id: str):
+    async def retirer_correlation(self, correlation_id: str):
         try:
             correlation = self._correlation_reponse[correlation_id]
             del self._correlation_reponse[correlation_id]
-            correlation.annulee()
+            if not self._event_correlation_pret.is_set():
+                self._event_correlation_pret.set()
+            await correlation.annulee()
         except KeyError:
             pass
 
