@@ -2,6 +2,8 @@
 import datetime
 import json
 import logging
+from asyncio import TimeoutError
+
 import OpenSSL
 
 from asyncio.exceptions import TimeoutError
@@ -59,6 +61,9 @@ class ValidateurCertificat:
         self.__root_cert_openssl = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM,
                                                                    certificat_millegrille_pem)
         self.__store.add_cert(self.__root_cert_openssl)
+
+        # Producer, permet de faire des requetes pour certificats inconnus
+        self.__producer_messages = None
 
     def _charger_certificat(self, certificat: Union[bytes, str, list]) -> EnveloppeCertificat:
         if isinstance(certificat, list):
@@ -139,6 +144,44 @@ class ValidateurCertificat:
             store.add_cert(self.__root_cert_openssl)
             store.set_time(date_reference)
             return store
+
+    async def fetch_certificat(self, fingerprint: str):
+
+        if self.__producer_messages is None:
+            raise CertificatInconnu('PERSISTENT CACHE MISS', fingerprint=fingerprint)
+
+        await self.__producer_messages.producer_pret().wait()
+
+        requete = {'fingerprint': fingerprint}
+        try:
+            reponse_certificat = await self.__producer_messages.executer_requete(
+                requete, 'CorePki', action='infoCertificat', exchange=Constantes.SECURITE_PUBLIC, timeout=3)
+            parsed = reponse_certificat.parsed
+            if parsed.get('ok') is not False:
+                return parsed['chaine_pem']
+        except TimeoutError:
+            self.__logger.debug("Timeout requete certificat %s, tentative requete directe" % fingerprint)
+        except (KeyError, AttributeError):
+            self.__logger.exception("Erreur traitement reponse certificat directe pour %s" % fingerprint)
+
+        try:
+            reponse_certificat = await self.__producer_messages.executer_requete(
+                requete, 'certificat', action=fingerprint, exchange=Constantes.SECURITE_PUBLIC, timeout=5)
+            parsed = reponse_certificat.parsed
+            if parsed.get('ok') is not False:
+                enveloppe = reponse_certificat.certificat
+                if enveloppe.fingerprint == fingerprint:
+                    pems = enveloppe.chaine_pem
+                    return pems
+        except TimeoutError:
+            pass
+        except (KeyError, AttributeError):
+            self.__logger.exception("Erreur traitement reponse certificat directe pour %s" % fingerprint)
+
+        raise CertificatInconnu('INCONNU DU SYSTEME', fingerprint=fingerprint)
+
+    def set_producer_messages(self, producer):
+        self.__producer_messages = producer
 
 
 class ValidateurCertificatCache(ValidateurCertificat):
@@ -268,9 +311,6 @@ class ValidateurCertificatRedis(ValidateurCertificatCache):
         self.__enveloppe_ca = enveloppe_ca
         self.__redis_client: Optional[redis.Redis] = None
 
-        # Producer, permet de faire des requetes pour certificats inconnus
-        self.__producer_messages = None
-
     @staticmethod
     def __charger_configuration_redis():
         config = ConfigurationRedis()
@@ -305,43 +345,12 @@ class ValidateurCertificatRedis(ValidateurCertificatCache):
                 return cert_dict['pems']
 
         # Fallback sur MQ
-        if self.__producer_messages is None or nofetch is True:
+        if nofetch is True:
             raise CertificatInconnu('PERSISTENT CACHE MISS', fingerprint=fingerprint)
 
         pems = await self.fetch_certificat(fingerprint)
 
         return pems
-
-    async def fetch_certificat(self, fingerprint: str):
-        await self.__producer_messages.producer_pret().wait()
-
-        requete = {'fingerprint': fingerprint}
-        try:
-            reponse_certificat = await self.__producer_messages.executer_requete(
-                requete, 'CorePki', action='infoCertificat', exchange=Constantes.SECURITE_PUBLIC, timeout=3)
-            parsed = reponse_certificat.parsed
-            if parsed.get('ok') is not False:
-                return parsed['chaine_pem']
-        except TimeoutError:
-            self.__logger.debug("Timeout requete certificat %s, tentative requete directe" % fingerprint)
-        except (KeyError, AttributeError):
-            self.__logger.exception("Erreur traitement reponse certificat directe pour %s" % fingerprint)
-
-        try:
-            reponse_certificat = await self.__producer_messages.executer_requete(
-                requete, 'certificat', action=fingerprint, exchange=Constantes.SECURITE_PUBLIC, timeout=5)
-            parsed = reponse_certificat.parsed
-            if parsed.get('ok') is not False:
-                enveloppe = reponse_certificat.certificat
-                if enveloppe.fingerprint == fingerprint:
-                    pems = enveloppe.chaine_pem
-                    return pems
-        except TimeoutError:
-            pass
-        except (KeyError, AttributeError):
-            self.__logger.exception("Erreur traitement reponse certificat directe pour %s" % fingerprint)
-
-        raise CertificatInconnu('INCONNU DU SYSTEME', fingerprint=fingerprint)
 
     async def valider_fingerprint(self, fingerprint: str, date_reference: datetime.datetime = None,
                                   idmg: str = None, usages: set = frozenset({'digital_signature'}),
@@ -376,5 +385,3 @@ class ValidateurCertificatRedis(ValidateurCertificatCache):
 
         return enveloppe
 
-    def set_producer_messages(self, producer):
-        self.__producer_messages = producer
