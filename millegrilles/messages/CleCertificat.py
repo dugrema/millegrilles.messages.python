@@ -84,7 +84,6 @@ class CleCertificat:
     def fingerprint(self) -> str:
         return self.__enveloppe.fingerprint
 
-    @property
     def private_key_bytes(self, password: Optional[Union[str, bytes]] = None) -> bytes:
 
         if password is not None:

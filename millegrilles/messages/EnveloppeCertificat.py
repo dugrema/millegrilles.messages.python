@@ -35,32 +35,32 @@ class EnveloppeCertificat:
     ENCODING_FINGERPRINT = 'base58btc'
     HASH_FINGERPRINT = 'blake2s-256'
 
-    def __init__(self, certificat: Certificate):
+    def __init__(self, certificat: Certificate, pems: Union[str, bytes, list]):
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__certificat = certificat
 
         self.__est_verifie = False  # Flag qui est change une fois la chaine verifiee
-        self.__chaine_pem: Optional[list] = None  # Chaine certificats, moins root
+        self.__chaine_pem = preparer_chaine_certificats(pems)  # Chaine certificats, moins root
         self.__millegrille_pem: Optional[str] = None  # PEM du certificat de la millegrille
 
         self.__fingerprint = calculer_fingerprint(certificat)
         self.__idmg = trouver_idmg(self)
-
-    def _set_chaine_certificats(self, pems: Union[str, bytes, list]):
-        if isinstance(pems, bytes):
-            pems = pems.decode('utf-8')
-        if isinstance(pems, str):
-            self.__chaine_pem = split_chaine_certificats(pems)
-        else:
-            self.__chaine_pem = pems
 
     @staticmethod
     def from_pem(pem: Union[str, bytes]):
         if isinstance(pem, str):
             pem = pem.encode('utf-8')
         certificat = load_pem_x509_certificate(pem, backend=default_backend())
-        enveloppe = EnveloppeCertificat(certificat)
-        enveloppe._set_chaine_certificats(pem)
+        enveloppe = EnveloppeCertificat(certificat, pem)
+        return enveloppe
+
+    @staticmethod
+    def from_certificate(certificat: Certificate, intermediaires_pem: Optional[list] = None):
+        pem_certificat = str(certificat.public_bytes(serialization.Encoding.PEM), 'utf-8')
+        chaine_pems = [pem_certificat]
+        if intermediaires_pem is not None:
+            chaine_pems.extend(intermediaires_pem)
+        enveloppe = EnveloppeCertificat(certificat, chaine_pems)
         return enveloppe
 
     @staticmethod
@@ -525,6 +525,15 @@ def expiration_idmg(idmg: str):
     date_expiration = datetime.datetime.fromtimestamp(date_exp_int_recu * 1000, pytz.UTC)
 
     return date_expiration
+
+
+def preparer_chaine_certificats(pems: Union[str, bytes, list]):
+    if isinstance(pems, bytes):
+        pems = pems.decode('utf-8')
+    if isinstance(pems, str):
+        return split_chaine_certificats(pems)
+    else:
+        return pems
 
 
 class IdmgInvalide(BaseException):
