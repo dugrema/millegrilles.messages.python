@@ -35,11 +35,15 @@ class CleCertificat:
         return CleCertificat(private_key, enveloppe)
 
     @staticmethod
-    def from_files(path_key, path_certificat, password=None):
+    def from_files(path_key, path_certificat, path_password=None, password=None):
         with open(path_key, 'rb') as fichier:
             cle = fichier.read()
         with open(path_certificat, 'rb') as fichier:
             cert = fichier.read()
+
+        if path_password is not None:
+            with open(path_password, 'rb') as fichier:
+                password = fichier.read()
 
         return CleCertificat.from_pems(cle, cert, password)
 
