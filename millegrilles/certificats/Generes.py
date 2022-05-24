@@ -12,6 +12,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
 from millegrilles.messages.EnveloppeCertificat import EnveloppeCertificat
 from millegrilles.messages.CleCertificat import CleCertificat
@@ -255,7 +256,7 @@ class CleCertificatGenere:
             critical=False
         )
 
-        enveloppe = signer_certificat(builder, cle_privee, password, type_genere=type_genere)
+        enveloppe = signer_certificat(builder, cle_privee, password)
         clecertificat = CleCertificat(cle_privee, enveloppe)
         return CleCertificatGenere(clecertificat, password)
 
@@ -271,16 +272,16 @@ class CleCertificatGenere:
         return self.__password
 
 
-def signer_certificat(builder: CertificateBuilder, cle_privee_signature, chaine_intermediaire: Optional[list] = None,
-                      type_genere=TypeGenere.ED25519) -> EnveloppeCertificat:
+def signer_certificat(builder: CertificateBuilder, cle_privee_signature,
+                      chaine_intermediaire: Optional[list] = None) -> EnveloppeCertificat:
 
-    if type_genere == TypeGenere.RSA:
+    if isinstance(cle_privee_signature, RSAPrivateKey):
         certificate = builder.sign(
             private_key=cle_privee_signature,
             algorithm=hashes.SHA512(),
             backend=default_backend()
         )
-    elif type_genere == TypeGenere.ED25519:
+    elif isinstance(cle_privee_signature, Ed25519PrivateKey):
         certificate = builder.sign(
             private_key=cle_privee_signature,
             algorithm=None,
@@ -296,7 +297,7 @@ def signer_certificat(builder: CertificateBuilder, cle_privee_signature, chaine_
 
 def generer_cle_rsa(generer_password=False, keysize=2048, public_exponent=65537):
     if generer_password:
-        password = base64.b64encode(secrets.token_bytes(16)).decode('utf-8')
+        password = base64.b64encode(secrets.token_bytes(32)).decode('utf-8').replace('=', '')
     else:
         password = None
 
@@ -311,7 +312,7 @@ def generer_cle_rsa(generer_password=False, keysize=2048, public_exponent=65537)
 
 def generer_cle_ed25519(generer_password=False):
     if generer_password:
-        password = base64.b64encode(secrets.token_bytes(16)).decode('utf-8')
+        password = base64.b64encode(secrets.token_bytes(32)).decode('utf-8').replace('=', '')
     else:
         password = None
 
