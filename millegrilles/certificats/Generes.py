@@ -113,7 +113,7 @@ class CleCsrGenere:
         self.__password = password
 
     @staticmethod
-    def build(idmg: str, cn: str, builder: Optional[CertificateSigningRequestBuilder] = None, generer_password=False,
+    def build(cn: str, idmg: Optional[str], builder: Optional[CertificateSigningRequestBuilder] = None, generer_password=False,
               type_genere=TypeGenere.ED25519, keysize=2048):
 
         if builder is None:
@@ -128,11 +128,10 @@ class CleCsrGenere:
         else:
             raise TypeAlgorithmeInconnu()
 
-        subject = x509.Name([
-            x509.NameAttribute(x509.name.NameOID.COMMON_NAME, cn),
-            x509.NameAttribute(x509.name.NameOID.ORGANIZATION_NAME, idmg),
-        ])
-        builder = builder.subject_name(subject)
+        subject = [x509.NameAttribute(x509.name.NameOID.COMMON_NAME, cn)]
+        if idmg is not None:
+            subject.append(x509.NameAttribute(x509.name.NameOID.ORGANIZATION_NAME, idmg))
+        builder = builder.subject_name(x509.Name(subject))
 
         request = builder.sign(cle_privee, None, default_backend())
 

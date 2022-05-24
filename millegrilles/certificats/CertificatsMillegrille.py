@@ -1,5 +1,7 @@
 import logging
 
+from typing import Optional
+
 from cryptography.x509 import BasicConstraints
 from cryptography.x509.base import CertificateBuilder
 
@@ -8,8 +10,8 @@ from millegrilles.certificats.Generes import CleCsrGenere, CleCertificat, Envelo
 logger = logging.getLogger(__name__)
 
 
-def generer_csr_intermediaire(idmg: str, cn: str):
-    csr_genere = CleCsrGenere.build(idmg, cn, generer_password=True)
+def generer_csr_intermediaire(instance_id: str, idmg: Optional[str] = None):
+    csr_genere = CleCsrGenere.build(instance_id, idmg, generer_password=True)
     logger.debug("CSR intermediaire PEM\n%s" % csr_genere.get_pem_csr())
     return csr_genere
 
