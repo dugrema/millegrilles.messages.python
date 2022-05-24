@@ -124,7 +124,8 @@ class DockerHandler:
                 try:
                     action.executer(self.__docker)
                 except Exception as e:
-                    self.__logger.exception("Erreur execution action docker")
+                    #if self.__logger.isEnabledFor(logging.DEBUG):
+                    #    self.__logger.exception("Erreur execution action docker")
                     try:
                         action.erreur(e)
                     except:
