@@ -18,6 +18,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.x509 import load_pem_x509_certificate, ObjectIdentifier, NameOID, SubjectKeyIdentifier, \
     AuthorityKeyIdentifier, BasicConstraints
 from cryptography.x509.base import Certificate
+from cryptography.x509.extensions import ExtensionNotFound
 from multihash.constants import HASH_CODES
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PublicKey
@@ -232,10 +233,13 @@ class EnveloppeCertificat:
 
     @property
     def is_ca(self):
-        basic_constraints = self.certificat.extensions.get_extension_for_class(BasicConstraints)
-        if basic_constraints is not None:
-            return basic_constraints.value.ca
-        return False
+        try:
+            basic_constraints = self.certificat.extensions.get_extension_for_class(BasicConstraints)
+            if basic_constraints is not None:
+                return basic_constraints.value.ca
+            return False
+        except ExtensionNotFound:
+            return False
 
     @property
     def _is_valid_at_current_time(self):

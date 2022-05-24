@@ -61,7 +61,11 @@ class CleCertificat:
         return signature
 
     @property
-    def enveloppe(self):
+    def private_key(self):
+        return self.__private_key
+
+    @property
+    def enveloppe(self) -> EnveloppeCertificat:
         return self.__enveloppe
 
     @property
