@@ -3,7 +3,7 @@ from setuptools import setup
 setup(
     name='millegrilles.messages',
     version='2022.3.0',
-    packages=['millegrilles.messages', 'millegrilles.pika'],
+    packages=['millegrilles.messages', 'millegrilles.pika', 'millegrilles.certificats', 'millegrilles.docker'],
     url='https://github.com/dugrema/millegrilles.messages.python',
     license='AFFERO',
     author='Mathieu Dugre',
