@@ -118,3 +118,6 @@ class CleCertificat:
         x25519_private_key = X25519PrivateKey.from_private_bytes(cle_x25519_prive.encode())
 
         return x25519_private_key
+
+    def __str__(self):
+        return 'CleCertificat %s (CN=%s)' % (self.fingerprint, self.enveloppe.subject_common_name)
