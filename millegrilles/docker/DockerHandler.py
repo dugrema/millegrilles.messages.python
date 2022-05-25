@@ -2,6 +2,7 @@ import asyncio
 import docker
 import logging
 import json
+import psutil
 
 from asyncio import Event as EventAsyncio
 from asyncio.events import AbstractEventLoop
@@ -131,9 +132,16 @@ class DockerHandler:
                     except:
                         pass
 
-                if self.__throttle_actions is not None:
-                    # Appliquer le throttle (slow mode) pour docker au besoin
-                    self.__stop_event.wait(self.__throttle_actions)
+                # Throttling commandes docker en fonction du CPU load
+                cpu_load, _cpu_load5, _cpu_load10 = psutil.getloadavg()
+                wait_time = cpu_load * 3  # Attendre load*n en secondes
+                self.__logger.debug("Throttling commandes docker, cpu_load:%f attente %f secondes" % (cpu_load, wait_time))
+                self.__stop_event.wait(wait_time)
+                self.__logger.debug("Throttling commandes docker, pret pour prochaine commande")
+
+                # if self.__throttle_actions is not None:
+                #     # Appliquer le throttle (slow mode) pour docker au besoin
+                #     self.__stop_event.wait(self.__throttle_actions)
 
                 if self.__stop_event.is_set() is True:
                     return  # Abort thread
