@@ -4,7 +4,7 @@ import datetime
 import secrets
 
 from enum import Enum
-from typing import Optional
+from typing import Optional, Union
 
 from cryptography import x509
 from cryptography.x509.base import CertificateBuilder, CertificateSigningRequestBuilder, CertificateSigningRequest
@@ -14,6 +14,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
+from millegrilles.certificats import Extensions
 from millegrilles.messages.EnveloppeCertificat import EnveloppeCertificat
 from millegrilles.messages.CleCertificat import CleCertificat
 
@@ -29,12 +30,6 @@ class TypeGenere(Enum):
     ED25519 = 2
 
 
-class Csr:
-
-    def __init__(self):
-        pass
-
-
 class EnveloppeCsr:
 
     def __init__(self, csr_request: CertificateSigningRequest):
@@ -43,6 +38,8 @@ class EnveloppeCsr:
     @staticmethod
     def from_str(csr_str: str):
         csr = x509.load_pem_x509_csr(csr_str.encode('utf-8'), backend=default_backend())
+        if csr.is_signature_valid is False:
+            raise Exception('Signature CSR invalide')
         return EnveloppeCsr(csr)
 
     @staticmethod
@@ -58,12 +55,13 @@ class EnveloppeCsr:
     def get_pem(self) -> str:
         return self.csr.public_bytes(serialization.Encoding.PEM).decode('utf-8')
 
-    def signer(self, cle_signature: CleCertificat, idmg: str, role: str,
+    def signer(self, cle_signature: CleCertificat, role: str,
                builder: Optional[CertificateBuilder] = None, duree=DUREE_CERT_DEFAUT):
 
         if builder is None:
             builder = CertificateBuilder()
 
+        idmg = cle_signature.enveloppe.idmg
         subject = self.__csr_request.subject
         cle_publique = self.__csr_request.public_key()
 
@@ -322,3 +320,39 @@ def generer_cle_ed25519(generer_password=False):
 
 class TypeAlgorithmeInconnu(Exception):
     pass
+
+
+def ajouter_exchanges(builder: CertificateBuilder, exchanges: Union[str, list]) -> CertificateBuilder:
+    oid = Extensions.EXCHANGES_OID
+    if isinstance(exchanges, str):
+        exchanges = [exchanges]
+    value = (','.join(exchanges).encode('utf-8'))
+    return builder.add_extension(x509.UnrecognizedExtension(oid, value), critical=False)
+
+
+def ajouter_roles(builder: CertificateBuilder, roles: Union[str, list]) -> CertificateBuilder:
+    oid = Extensions.ROLES_OID
+    if isinstance(roles, str):
+        roles = [roles]
+    value = (','.join(roles)).encode('utf-8')
+    return builder.add_extension(x509.UnrecognizedExtension(oid, value), critical=False)
+
+
+def ajouter_domaines(builder: CertificateBuilder, domaines: Union[str, list]) -> CertificateBuilder:
+    oid = Extensions.DOMAINES_OID
+    if isinstance(domaines, str):
+        domaines = [domaines]
+    value = (','.join(domaines)).encode('utf-8')
+    return builder.add_extension(x509.UnrecognizedExtension(oid, value), critical=False)
+
+
+def ajouter_delegation_globale(builder: CertificateBuilder, delegation: str) -> CertificateBuilder:
+    oid = Extensions.DELEGATION_GLOBALE_OID
+    value = delegation.encode('utf-8')
+    return builder.add_extension(x509.UnrecognizedExtension(oid, value), critical=False)
+
+
+def ajouter_user_id(builder: CertificateBuilder, user_id: str) -> CertificateBuilder:
+    oid = Extensions.DOMAINES_OID
+    value = user_id.encode('utf-8')
+    return builder.add_extension(x509.UnrecognizedExtension(oid, value), critical=False)

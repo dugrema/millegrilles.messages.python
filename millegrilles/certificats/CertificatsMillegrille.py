@@ -26,7 +26,7 @@ def signer_csr_intermediaire(csr_pem: str, root_genere: CleCertificat):
 
 
 def generer_csr_leaf(idmg: str, cn: str):
-    csr_genere = CleCsrGenere.build(idmg, cn)
+    csr_genere = CleCsrGenere.build(cn, idmg)
     logger.debug("CSR PEM\n%s" % csr_genere.get_pem_csr())
     return csr_genere
 
