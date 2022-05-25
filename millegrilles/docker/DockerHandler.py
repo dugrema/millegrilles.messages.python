@@ -130,7 +130,7 @@ class DockerHandler:
                     try:
                         action.erreur(e)
                     except:
-                        pass
+                        self.__logger.exception("Erreur emission action.erreur() commen reponse pour commande docker")
 
                 # Throttling commandes docker en fonction du CPU load
                 cpu_load, _cpu_load5, _cpu_load10 = psutil.getloadavg()
