@@ -113,7 +113,7 @@ class CleCsrGenere:
         self.__password = password
 
     @staticmethod
-    def build(cn: str, idmg: Optional[str], builder: Optional[CertificateSigningRequestBuilder] = None, generer_password=False,
+    def build(cn: str, idmg: Optional[str] = None, builder: Optional[CertificateSigningRequestBuilder] = None, generer_password=False,
               type_genere=TypeGenere.ED25519, keysize=2048):
 
         if builder is None:
