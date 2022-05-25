@@ -21,7 +21,7 @@ def signer_csr_intermediaire(csr_pem: str, root_genere: CleCertificat):
     builder = builder.add_extension(BasicConstraints(ca=True, path_length=None), critical=True)
     enveloppe_csr = EnveloppeCsr.from_str(csr_pem)
     idmg = root_genere.enveloppe.idmg
-    enveloppe_certificat = enveloppe_csr.signer(root_genere, idmg, 'intermediaire', builder=builder)
+    enveloppe_certificat = enveloppe_csr.signer(root_genere, 'intermediaire', builder=builder)
     return enveloppe_certificat
 
 

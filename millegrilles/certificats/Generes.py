@@ -4,6 +4,7 @@ import datetime
 import secrets
 
 from enum import Enum
+from ipaddress import IPv4Address, IPv6Address
 from typing import Optional, Union
 
 from cryptography import x509
@@ -344,6 +345,27 @@ def ajouter_domaines(builder: CertificateBuilder, domaines: Union[str, list]) ->
         domaines = [domaines]
     value = (','.join(domaines)).encode('utf-8')
     return builder.add_extension(x509.UnrecognizedExtension(oid, value), critical=False)
+
+
+def ajouter_dns(builder: CertificateBuilder, hostnames: list = None, localhost=False) -> CertificateBuilder:
+
+    liste = list()
+
+    if hostnames is not None:
+        liste.extend([x509.DNSName(u'%s' % h) for h in hostnames])
+
+    if localhost is True:
+        liste.extend([
+            x509.DNSName(u'localhost'),
+            x509.IPAddress(IPv4Address('127.0.0.1')),
+            x509.IPAddress(IPv6Address('::1')),
+        ])
+
+    # Ajouter noms DNS valides pour MQ
+    if len(liste) > 0:
+        builder = builder.add_extension(x509.SubjectAlternativeName(liste), critical=False)
+
+    return builder
 
 
 def ajouter_delegation_globale(builder: CertificateBuilder, delegation: str) -> CertificateBuilder:
