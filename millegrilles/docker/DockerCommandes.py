@@ -1,5 +1,6 @@
 import base64
 import json
+import logging
 
 from typing import Union
 
@@ -258,6 +259,42 @@ class CommandeGetImage(CommandeDocker):
     async def get_resultat(self) -> dict:
         resultat = await self.attendre()
         return resultat['args'][0]
+
+
+class CommandeEnsureNodeLabels(CommandeDocker):
+    """
+    S'assure de l'existence de labels dans la swarm. Creer le label sur le node de management sinon.
+    """
+
+    def __init__(self, labels: list, callback=None, aio=False):
+        super().__init__(callback, aio)
+        self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
+        self.__labels = labels
+
+    def executer(self, docker_client: DockerClient, attendre=True):
+        nodes = docker_client.nodes.list()
+
+        labels_connus = set()
+        for node in nodes:
+            for label in node.attrs['Spec']['Labels']:
+                labels_connus.add(label)
+
+        node_create = nodes.pop()  # Choisir node random
+        node_spec = node_create.attrs['Spec']
+        labels = node_spec['Labels']
+        node_name = node_create.attrs['Description']['Hostname']
+
+        changement = False
+        for label in self.__labels:
+            if label not in labels_connus:
+                self.__logger.debug("Ajouter label %s a node %s" % (label, node_name))
+                labels[label] = 'true'
+                changement = True
+
+        if changement is True:
+            node_create.update(node_spec)
+
+        self.callback()
 
 
 class CommandeGetConfigurationsDatees(CommandeDocker):
