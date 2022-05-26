@@ -174,10 +174,10 @@ class ConfigurationService:
                 id_c = config_current['key']['id']
                 secret_name = config_current['key']['name']
             elif elem_secret.get('password') is True:
-                secret_name = self.__params['__certificat_info']['label_prefix']
+                secret_name = self.__params['__password_info']['label_prefix']
                 config_current = self.__params['__docker_config_datee'][secret_name]['current']
                 id_c = config_current['password']['id']
-                secret_name = secret_name + '.passwd'
+                secret_name = config_current['password']['name']
             else:
                 secret_name = elem_secret['name']
                 configs = self.__params['__secrets']
