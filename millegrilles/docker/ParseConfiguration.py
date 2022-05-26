@@ -141,6 +141,7 @@ class ConfigurationService:
                 config_name = self.__params['__certificat_info']['label_prefix']
                 config_current = self.__params['__docker_config_datee'][config_name]['current']
                 id_c = config_current['cert']['id']
+                config_name = config_name + '.cert'
             else:
                 config_name = elem_config['name']
                 configs = self.__params['__configs']
@@ -160,37 +161,40 @@ class ConfigurationService:
         self.__config = liste_configs
 
     def _parse_secrets(self):
-        # # Secrets
-        # config_secrets = config_service.get('secrets')
-        # if config_secrets:
-        #     liste_secrets = list()
-        #     for secret in config_secrets:
-        #         self.__logger.debug("Mapping secret %s" % secret)
-        #         secret_name = secret['name']
-        #         if secret.get('regex'):
-        #             references = self.__trouver_secret_regex(secret)
-        #             for secret_reference in references:
-        #                 # secret_reference['filename'] = secret['filename']
-        #                 secret_reference['uid'] = secret.get('uid') or 0
-        #                 secret_reference['gid'] = secret.get('gid') or 0
-        #                 secret_reference['mode'] = secret.get('mode') or 0o444
-        #                 liste_secrets.append(SecretReference(**secret_reference))
-        #         else:
-        #             if secret.get('match_config'):
-        #                 secret_reference = self.__trouver_secret_matchdate(secret_name, dates_configs)
-        #             else:
-        #                 secret_reference = self.trouver_secret(secret_name)
-        #
-        #             secret_reference['filename'] = secret['filename']
-        #             secret_reference['uid'] = secret.get('uid') or 0
-        #             secret_reference['gid'] = secret.get('gid') or 0
-        #             secret_reference['mode'] = secret.get('mode') or 0o444
-        #
-        #             del secret_reference['date']  # Cause probleme lors du chargement du secret
-        #             liste_secrets.append(SecretReference(**secret_reference))
-        #
-        #     dict_config_docker['secrets'] = liste_secrets
-        pass
+        try:
+            docker_secrets = self.__configuration['secrets']
+        except KeyError:
+            return
+
+        liste_secrets = list()
+        for elem_secret in docker_secrets:
+            if elem_secret.get('key') is True:
+                secret_name = self.__params['__certificat_info']['label_prefix']
+                config_current = self.__params['__docker_config_datee'][secret_name]['current']
+                id_c = config_current['cert']['id']
+                secret_name = secret_name + '.key'
+            elif elem_secret.get('password') is True:
+                secret_name = self.__params['__certificat_info']['label_prefix']
+                config_current = self.__params['__docker_config_datee'][secret_name]['current']
+                id_c = config_current['cert']['id']
+                secret_name = secret_name + '.passwd'
+            else:
+                secret_name = elem_secret['name']
+                configs = self.__params['__secrets']
+                id_c = configs[secret_name]
+
+            secret_reference = {
+                'secret_id': id_c,
+                'secret_name': secret_name,
+                'filename': elem_secret['filename'],
+                'uid': elem_secret.get('uid') or 0,
+                'gid': elem_secret.get('gid') or 0,
+                'mode': elem_secret.get('mode') or 0o444,
+            }
+
+            liste_secrets.append(SecretReference(**secret_reference))
+
+        self.__secrets = liste_secrets
 
     def _parse_labels(self):
         try:
