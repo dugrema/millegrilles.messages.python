@@ -66,6 +66,7 @@ class CommandeDocker:
         self.__event_asyncio: Optional[EventAsyncio] = None
         self.__resultat = None
         self.__is_error = False
+        self.__exception = None
 
         if aio is True:
             self.__initasync()
@@ -76,6 +77,7 @@ class CommandeDocker:
 
     def erreur(self, e: Exception):
         self.__is_error = True
+        self.__exception = e
         if self.callback is not None:
             self.callback(e, is_error=True)
 
@@ -91,12 +93,11 @@ class CommandeDocker:
     async def attendre(self):
         if self.__event_asyncio is not None:
             await self.__event_asyncio.wait()
-            try:
-                if self.__resultat['argv']['is_error'] is True:
-                    raise self.__resultat['args'][0]
-            except KeyError:
-                pass
-            return self.__resultat
+
+        if self.__is_error:
+            raise self.__exception
+
+        return self.__resultat
 
 
 class DockerHandler:

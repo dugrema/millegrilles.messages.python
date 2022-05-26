@@ -208,17 +208,55 @@ class CommandeSupprimerSecret(CommandeDocker):
 
 class CommandeCreerService(CommandeDocker):
 
-    def __init__(self, configuration: dict, callback=None, aio=False):
+    def __init__(self, image: str, configuration: dict, callback=None, aio=False):
         super().__init__(callback, aio)
+        self.__image = image
         self.__configuration = configuration
 
     def executer(self, docker_client: DockerClient, attendre=True):
-        reponse = docker_client.services.create()
-        self.callback(reponse)
+        config_ajustee = self.__configuration.copy()
+        del config_ajustee['image']
+
+        # try:
+        #     del config_ajustee['certificat']
+        # except KeyError:
+        #     pass
+        # try:
+        #     del config_ajustee['passwords']
+        # except KeyError:
+        #     pass
+        #
+        # command = config_ajustee.get('command')
+        # try:
+        #     del config_ajustee['command']
+        # except KeyError:
+        #     pass
+
+        resultat = docker_client.services.create(self.__image, **config_ajustee)
+        info_service = {'id': resultat.id, 'name': resultat.name}
+        self.callback(info_service)
 
     async def get_resultat(self) -> list:
         resultat = await self.attendre()
         return resultat['args'][0]
+
+
+class CommandeCreerNetworkOverlay(CommandeDocker):
+
+    def __init__(self, network_name: str, callback=None, aio=False):
+        super().__init__(callback, aio)
+        self.__network_name = network_name
+
+    def executer(self, docker_client: DockerClient, attendre=True):
+        try:
+            docker_client.networks.create(name=self.__network_name, scope="swarm", driver="overlay", attachable=True)
+        except APIError as apie:
+            if apie.status_code == 409:
+                pass  # OK, existe deja
+            else:
+                raise apie
+
+        self.callback()
 
 
 class CommandeGetImage(CommandeDocker):
@@ -383,6 +421,6 @@ class CommandeGetConfigurationsDatees(CommandeDocker):
             except KeyError:
                 pass  # Pas un certificat
 
-    async def get_resultat(self) -> list:
+    async def get_resultat(self) -> dict:
         resultat = await self.attendre()
         return resultat['args'][0]

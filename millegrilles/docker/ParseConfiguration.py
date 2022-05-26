@@ -141,7 +141,7 @@ class ConfigurationService:
                 config_name = self.__params['__certificat_info']['label_prefix']
                 config_current = self.__params['__docker_config_datee'][config_name]['current']
                 id_c = config_current['cert']['id']
-                config_name = config_name + '.cert'
+                config_name = config_current['cert']['name']
             else:
                 config_name = elem_config['name']
                 configs = self.__params['__configs']
@@ -171,12 +171,12 @@ class ConfigurationService:
             if elem_secret.get('key') is True:
                 secret_name = self.__params['__certificat_info']['label_prefix']
                 config_current = self.__params['__docker_config_datee'][secret_name]['current']
-                id_c = config_current['cert']['id']
-                secret_name = secret_name + '.key'
+                id_c = config_current['key']['id']
+                secret_name = config_current['key']['name']
             elif elem_secret.get('password') is True:
                 secret_name = self.__params['__certificat_info']['label_prefix']
                 config_current = self.__params['__docker_config_datee'][secret_name]['current']
-                id_c = config_current['cert']['id']
+                id_c = config_current['password']['id']
                 secret_name = secret_name + '.passwd'
             else:
                 secret_name = elem_secret['name']
@@ -293,7 +293,7 @@ class ConfigurationService:
             config['constraints'] = self.__constraints
 
         if self.__config is not None:
-            config['config'] = self.__config
+            config['configs'] = self.__config
 
         if self.__secrets is not None:
             config['secrets'] = self.__secrets
@@ -305,6 +305,14 @@ class ConfigurationService:
             config['resources'] = self.__resources
 
         return config
+
+    @property
+    def constraints(self):
+        return self.__constraints
+
+    @property
+    def image(self):
+        return self.__image
 
 
 class ConfigurationContainer:
