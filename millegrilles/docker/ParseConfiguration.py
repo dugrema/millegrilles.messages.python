@@ -1,8 +1,8 @@
 # Parsing de la configuration d'un service/container
 from typing import Optional
 
-from docker.types import SecretReference, NetworkAttachmentConfig, Resources, RestartPolicy, ServiceMode, \
-    ConfigReference, EndpointSpec, Mount
+from docker.types import NetworkAttachmentConfig, Resources, RestartPolicy, ServiceMode, EndpointSpec, Mount, \
+    SecretReference, ConfigReference
 
 
 class ConfigurationService:
@@ -24,7 +24,7 @@ class ConfigurationService:
         self.__constraints: Optional[list] = None
         self.__config: Optional[list] = None
         self.__secrets: Optional[list] = None
-        self.__endpoint_spec: Optional[dict] = None
+        self.__endpoint_spec: Optional[EndpointSpec] = None
         self.__networks: Optional[list] = None
         self.__labels: Optional[list] = None
         self.__resources: Optional[Resources] = None
@@ -50,11 +50,6 @@ class ConfigurationService:
         except KeyError:
             pass
 
-        try:
-            self.__networks = self.__configuration['networks']
-        except KeyError:
-            pass
-
         self._parse_resources()
         self._parse_restart_policy()
         self._parse_service_mode()
@@ -64,6 +59,7 @@ class ConfigurationService:
         self._parse_secrets()
         self._parse_labels()
         self._parse_networks()
+        self._parse_endpoint_specs()
 
     def _mapping_valeur(self, value: str):
         if self.__params:
@@ -134,32 +130,29 @@ class ConfigurationService:
         self.__environment = config_env_list
 
     def _parse_configs(self):
-        # # Configs
-        # config_configs = config_service.get('configs')
-        # dates_configs = dict()
-        # if config_configs:
-        #     liste_configs = list()
-        #     for config in config_configs:
-        #         self.__logger.debug("Mapping configs %s" % config)
-        #         config_name = config['name']
-        #         try:
-        #             config_dict = self.__trouver_config(config_name)
-        #
-        #             config_reference = config_dict['config_reference']
-        #             config_reference['filename'] = config['filename']
-        #             config_reference['uid'] = config.get('uid') or 0
-        #             config_reference['gid'] = config.get('gid') or 0
-        #             config_reference['mode'] = config.get('mode') or 0o444
-        #             liste_configs.append(ConfigReference(**config_reference))
-        #
-        #             date_config = config_dict.get('date')
-        #             if date_config:
-        #                 dates_configs[config_name] = date_config
-        #         except AttributeError as ae:
-        #             self.__logger.error("Parametres de configuration manquants pour service %s : %s" % (config_name, str(ae)))
-        #
-        #     dict_config_docker['configs'] = liste_configs
-        pass
+        try:
+            docker_configs = self.__configuration['configs']
+        except KeyError:
+            return
+
+        liste_configs = list()
+        for elem_config in docker_configs:
+            if elem_config.get('certificate') is True:
+                config_name = self.__params['__certificat_info']['label_certificat']
+            else:
+                config_name = elem_config['name']
+
+            config_reference = {
+                'config_name': config_name,
+                'filename': elem_config['filename'],
+                'uid': elem_config.get('uid') or 0,
+                'gid': elem_config.get('gid') or 0,
+                'mode': elem_config.get('mode') or 0o444,
+            }
+
+            liste_configs.append(ConfigReference(**config_reference))
+
+        self.__config = liste_configs
 
     def _parse_secrets(self):
         # # Secrets
@@ -220,47 +213,42 @@ class ConfigurationService:
             except KeyError:
                 pass
 
-        # if kwargs.get('application'):
-        #     updated_labels['application'] = kwargs.get('application')
-        #     if config_service.get('certificat_compte'):
-        #         updated_labels['certificat'] = 'true'
-        #         updated_labels['certificat_nom'] = config_service['certificat_compte']
-        #     dict_config_docker['labels'] = updated_labels
-        #
-
         self.__labels = labels
 
     def _parse_networks(self):
-        # # Networks
-        # config_networks = config_service.get('networks')
-        # if config_networks:
-        #     networks = list()
-        #     for network in config_networks:
-        #         network['target'] = self.__mapping(network['target'])
-        #         networks.append(NetworkAttachmentConfig(**network))
-        #
-        #     dict_config_docker['networks'] = networks
-        pass
+        try:
+            config_networks = self.__configuration['networks']
+        except KeyError:
+            return
+
+        networks = list()
+        for network in config_networks:
+            network['target'] = self._mapping_valeur(network['target'])
+            networks.append(NetworkAttachmentConfig(**network))
+
+        self.__networks = networks
 
     def _parse_endpoint_specs(self):
-        # # Ports
-        # config_endpoint_spec = config_service.get('endpoint_spec')
-        # if config_endpoint_spec:
-        #     ports = dict()
-        #     mode = config_endpoint_spec.get('mode') or 'vip'
-        #     for port in config_endpoint_spec.get('ports'):
-        #         published_port = port['published_port']
-        #         target_port = port['target_port']
-        #         protocol = port.get('protocol') or 'tcp'
-        #         publish_mode = port.get('publish_mode')
-        #
-        #         if protocol or publish_mode:
-        #             ports[published_port] = (target_port, protocol, publish_mode)
-        #         else:
-        #             ports[published_port] = target_port
-        #
-        #     dict_config_docker['endpoint_spec'] = EndpointSpec(mode=mode, ports=ports)
-        pass
+        # Ports
+        try:
+            config_endpoint_spec = self.__configuration['endpoint_spec']
+        except KeyError:
+            return
+
+        ports = dict()
+        mode = config_endpoint_spec.get('mode') or 'vip'
+        for port in config_endpoint_spec.get('ports'):
+            published_port = port['published_port']
+            target_port = port['target_port']
+            protocol = port.get('protocol') or 'tcp'
+            publish_mode = port.get('publish_mode')
+
+            if protocol or publish_mode:
+                ports[published_port] = (target_port, protocol, publish_mode)
+            else:
+                ports[published_port] = target_port
+
+        self.__endpoint_spec = EndpointSpec(mode=mode, ports=ports)
 
     def generer_docker_config(self) -> dict:
         config = {

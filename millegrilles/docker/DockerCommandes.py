@@ -165,3 +165,77 @@ class CommandeCreerService(CommandeDocker):
     async def get_resultat(self) -> list:
         resultat = await self.attendre()
         return resultat['args'][0]
+
+
+class CommandeGetConfigurationsDatees(CommandeDocker):
+    """
+    Fait la liste des config et secrets avec label certificat=true et password=true
+    """
+    def __init__(self, callback=None, aio=False):
+        super().__init__(callback, aio)
+
+    def executer(self, docker_client: DockerClient):
+
+        dict_secrets = dict()
+        dict_configs = dict()
+
+        reponse = docker_client.secrets.list(filters={'label': 'certificat=true'})
+        dict_secrets.update(self.parse_reponse(reponse))
+
+        reponse = docker_client.secrets.list(filters={'label': 'password=true'})
+        dict_secrets.update(self.parse_reponse(reponse))
+
+        reponse = docker_client.configs.list(filters={'label': 'certificat=true'})
+        dict_configs.update(self.parse_reponse(reponse))
+
+        correspondance = self.correspondre_cle_cert(dict_secrets, dict_configs)
+
+        self.callback({'configs': dict_configs, 'secrets': dict_secrets, 'correspondance': correspondance})
+
+    def parse_reponse(self, reponse) -> dict:
+        data = dict()
+
+        for r in reponse:
+            r_id = r.id
+            name = r.name
+            attrs = r.attrs
+            labels = attrs['Spec']['Labels']
+            data[name] = {'id': r_id, 'name': name, 'labels': labels}
+
+        return data
+
+    def correspondre_cle_cert(self, dict_secrets: dict, dict_configs: dict):
+
+        dict_correspondance = dict()
+        self.__mapper_params(dict_correspondance, list(dict_secrets.values()), 'key')
+        self.__mapper_params(dict_correspondance, list(dict_configs.values()), 'cert')
+
+        # Ajouter key "current" pour chaque certificat
+        for prefix, dict_dates in dict_correspondance.items():
+            sorted_dates = sorted(dict_dates.keys(), reverse=True)
+            dict_dates['current'] = dict_dates[sorted_dates[0]]
+
+        return dict_correspondance
+
+    def __mapper_params(self, dict_correspondance: dict, vals: list, key_param: str):
+        for v in vals:
+            if v['labels']['certificat'] == 'true':
+                prefix = v['labels']['label_prefix']
+                v_date = v['labels']['date']
+                try:
+                    dict_prefix = dict_correspondance[prefix]
+                except KeyError:
+                    dict_prefix = dict()
+                    dict_correspondance[prefix] = dict_prefix
+
+                try:
+                    dict_date = dict_prefix[v_date]
+                except KeyError:
+                    dict_date = dict()
+                    dict_prefix[v_date] = dict_date
+
+                dict_date[key_param] = {'name': v['name'], 'id': v['id']}
+
+    async def get_resultat(self) -> list:
+        resultat = await self.attendre()
+        return resultat['args'][0]
