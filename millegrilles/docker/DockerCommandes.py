@@ -213,7 +213,14 @@ class CommandeGetConfigurationsDatees(CommandeDocker):
         # Ajouter key "current" pour chaque certificat
         for prefix, dict_dates in dict_correspondance.items():
             sorted_dates = sorted(dict_dates.keys(), reverse=True)
-            dict_dates['current'] = dict_dates[sorted_dates[0]]
+            for sdate in sorted_dates:
+                try:
+                    contenu = dict_dates[sdate]
+                    if contenu['cert'] is not None and contenu['key'] is not None:
+                        dict_dates['current'] = contenu
+                        break
+                except KeyError:
+                    pass
 
         return dict_correspondance
 
