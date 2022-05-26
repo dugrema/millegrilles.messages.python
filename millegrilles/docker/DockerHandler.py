@@ -7,6 +7,7 @@ import psutil
 from asyncio import Event as EventAsyncio
 from asyncio.events import AbstractEventLoop
 from docker import DockerClient
+from docker.errors import APIError, NotFound
 from threading import Thread, Event
 from typing import Optional
 
@@ -124,9 +125,11 @@ class DockerHandler:
                 self.__logger.debug("Traiter action docker %s" % action)
                 try:
                     action.executer(self.__docker)
+                except APIError as e:
+                    # Monter silencieusement, erreur habituelle
+                    action.erreur(e)
                 except Exception as e:
-                    if self.__logger.isEnabledFor(logging.DEBUG):
-                        self.__logger.exception("Erreur execution action docker")
+                    self.__logger.exception("Erreur execution action docker")
                     try:
                         action.erreur(e)
                     except:
