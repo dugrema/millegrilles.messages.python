@@ -149,3 +149,19 @@ class CommandeSupprimerSecret(CommandeDocker):
     async def get_resultat(self) -> list:
         resultat = await self.attendre()
         return resultat['args'][0]
+
+
+class CommandeCreerService(CommandeDocker):
+
+    def __init__(self, configuration: dict, callback=None, aio=False):
+        super().__init__(callback, aio)
+        self.__configuration = configuration
+
+    def executer(self, docker_client: DockerClient):
+        config = docker_client.secrets.get(self.__nom)
+        reponse = config.remove()
+        self.callback(reponse)
+
+    async def get_resultat(self) -> list:
+        resultat = await self.attendre()
+        return resultat['args'][0]
