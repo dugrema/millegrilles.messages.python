@@ -138,11 +138,16 @@ class ConfigurationService:
         liste_configs = list()
         for elem_config in docker_configs:
             if elem_config.get('certificate') is True:
-                config_name = self.__params['__certificat_info']['label_certificat']
+                config_name = self.__params['__certificat_info']['label_prefix']
+                config_current = self.__params['__docker_config_datee'][config_name]['current']
+                id_c = config_current['cert']['id']
             else:
                 config_name = elem_config['name']
+                configs = self.__params['__configs']
+                id_c = configs[config_name]
 
             config_reference = {
+                'config_id': id_c,
                 'config_name': config_name,
                 'filename': elem_config['filename'],
                 'uid': elem_config.get('uid') or 0,

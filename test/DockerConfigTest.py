@@ -15,9 +15,47 @@ PARAMS_SERVICE_2 = {
     '__nom_application': 'dummy_app',
     '__certificat_info': {
         'label_prefix': 'pki.mq',
-        'label_certificat': 'pki.mq.cert.20220525233951',
-        'label_cle': 'pki.mq.cle.20220525233951',
-    }
+    },
+    '__secrets': {'pki.mq.key.20220525233951': 'd50cl4w5ejvld3uygx21uau6o', 'passwd.mqadmin.20220526132352': 'zsh04jo3za5syw5qfk446l527'},
+    '__configs': {'instance.securite': '1vzbldqgo19vgfp1tkyyl56xs', 'pki.mq.cert.20220525233951': '330mn73z2adttl9f7akqewdkj', 'instance.idmg': 'miyf3jifho0b4isic8xgzceah', 'instance.id': 'o6jswncu6d993pa71p1arcc84', 'pki.millegrille': 'x67clk6zp9rjezcn3psttw539'},
+    '__docker_config_datee': {
+        'pki.mq': {
+          '20220525233951': {
+            'key': {
+              'name': 'pki.mq.key.20220525233951',
+              'id': 'd50cl4w5ejvld3uygx21uau6o'
+            },
+            'cert': {
+              'name': 'pki.mq.cert.20220525233951',
+              'id': '330mn73z2adttl9f7akqewdkj'
+            }
+          },
+          'current': {
+            'key': {
+              'name': 'pki.mq.key.20220525233951',
+              'id': 'd50cl4w5ejvld3uygx21uau6o'
+            },
+            'cert': {
+              'name': 'pki.mq.cert.20220525233951',
+              'id': '330mn73z2adttl9f7akqewdkj'
+            }
+          }
+        },
+        'passwd.mqadmin': {
+          '20220526132352': {
+            'password': {
+              'name': 'passwd.mqadmin.20220526132352',
+              'id': 'zsh04jo3za5syw5qfk446l527'
+            }
+          },
+          'current': {
+            'password': {
+              'name': 'passwd.mqadmin.20220526132352',
+              'id': 'zsh04jo3za5syw5qfk446l527'
+            }
+          }
+        }
+      }
 }
 
 CONFIG_SERVICE_2 = {

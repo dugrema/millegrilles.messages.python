@@ -40,6 +40,58 @@ class CommandeListerServices(CommandeDocker):
         return liste
 
 
+class CommandeListerConfigs(CommandeDocker):
+
+    def __init__(self, callback=None, aio=False, filters: dict = None, id_only=True):
+        super().__init__(callback, aio)
+        self.__filters = filters
+        self.__id_only = id_only
+
+    def executer(self, docker_client: DockerClient):
+        liste = docker_client.configs.list(filters=self.__filters)
+
+        resultat = liste
+        if self.__id_only:
+            resultat = dict()
+            for c in liste:
+                id_c = c.id
+                name = c.name
+                resultat[name] = id_c
+
+        self.callback(resultat)
+
+    async def get_resultat(self) -> list:
+        resultat = await self.attendre()
+        liste = resultat['args'][0]
+        return liste
+
+
+class CommandeListerSecrets(CommandeDocker):
+
+    def __init__(self, callback=None, aio=False, filters: dict = None, id_only=True):
+        super().__init__(callback, aio)
+        self.__filters = filters
+        self.__id_only = id_only
+
+    def executer(self, docker_client: DockerClient):
+        liste = docker_client.secrets.list(filters=self.__filters)
+
+        resultat = liste
+        if self.__id_only:
+            resultat = dict()
+            for c in liste:
+                id_c = c.id
+                name = c.name
+                resultat[name] = id_c
+
+        self.callback(resultat)
+
+    async def get_resultat(self) -> list:
+        resultat = await self.attendre()
+        liste = resultat['args'][0]
+        return liste
+
+
 class CommandeAjouterConfiguration(CommandeDocker):
 
     def __init__(self, nom: str, data: Union[dict, str, bytes], labels: dict = None, callback=None, aio=False):
