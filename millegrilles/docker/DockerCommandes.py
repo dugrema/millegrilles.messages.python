@@ -4,6 +4,8 @@ import json
 from typing import Union
 
 from docker import DockerClient
+from docker.errors import APIError, NotFound
+
 
 from millegrilles.docker.DockerHandler import CommandeDocker
 
@@ -209,12 +211,51 @@ class CommandeCreerService(CommandeDocker):
         super().__init__(callback, aio)
         self.__configuration = configuration
 
-    def executer(self, docker_client: DockerClient):
-        config = docker_client.secrets.get(self.__nom)
-        reponse = config.remove()
+    def executer(self, docker_client: DockerClient, attendre=True):
+        reponse = docker_client.services.create()
         self.callback(reponse)
 
     async def get_resultat(self) -> list:
+        resultat = await self.attendre()
+        return resultat['args'][0]
+
+
+class CommandeGetImage(CommandeDocker):
+
+    def __init__(self, nom_image: str, pull=False, callback=None, aio=False):
+        super().__init__(callback, aio)
+        self.__nom_image = nom_image
+        self.__pull = pull
+
+    def executer(self, docker_client: DockerClient):
+        try:
+            reponse = docker_client.images.get(self.__nom_image)
+            self.callback({'id': reponse.id, 'tags': reponse.tags})
+            return
+        except NotFound:
+            pass
+
+        if self.__pull is True:
+            nom_split = self.__nom_image.split(':')
+            if len(nom_split) == 1:
+                nom_image = nom_split[0]
+                tag = None
+            elif len(nom_split) == 2:
+                nom_image = nom_split[0]
+                tag = nom_split[1]
+            else:
+                raise Exception("Nom image incorrect : %s" % self.__nom_image)
+
+            try:
+                reponse = docker_client.images.pull(nom_image, tag)
+                self.callback({'id': reponse.id, 'tags': reponse.tags})
+                return
+            except NotFound:
+                pass
+
+        self.callback(None)
+
+    async def get_resultat(self) -> dict:
         resultat = await self.attendre()
         return resultat['args'][0]
 
