@@ -209,14 +209,21 @@ class CommandeGetConfigurationsDatees(CommandeDocker):
         dict_correspondance = dict()
         self.__mapper_params(dict_correspondance, list(dict_secrets.values()), 'key')
         self.__mapper_params(dict_correspondance, list(dict_configs.values()), 'cert')
+        self.__mapper_params(dict_correspondance, list(dict_secrets.values()), 'password', label_type='password')
 
         # Ajouter key "current" pour chaque certificat
         for prefix, dict_dates in dict_correspondance.items():
             sorted_dates = sorted(dict_dates.keys(), reverse=True)
             for sdate in sorted_dates:
+                contenu = dict_dates[sdate]
                 try:
-                    contenu = dict_dates[sdate]
                     if contenu['cert'] is not None and contenu['key'] is not None:
+                        dict_dates['current'] = contenu
+                        break
+                except KeyError:
+                    pass
+                try:
+                    if contenu['password'] is not None:
                         dict_dates['current'] = contenu
                         break
                 except KeyError:
@@ -224,24 +231,27 @@ class CommandeGetConfigurationsDatees(CommandeDocker):
 
         return dict_correspondance
 
-    def __mapper_params(self, dict_correspondance: dict, vals: list, key_param: str):
+    def __mapper_params(self, dict_correspondance: dict, vals: list, key_param: str, label_type: str = 'certificat'):
         for v in vals:
-            if v['labels']['certificat'] == 'true':
-                prefix = v['labels']['label_prefix']
-                v_date = v['labels']['date']
-                try:
-                    dict_prefix = dict_correspondance[prefix]
-                except KeyError:
-                    dict_prefix = dict()
-                    dict_correspondance[prefix] = dict_prefix
+            try:
+                if v['labels'][label_type] == 'true':
+                    prefix = v['labels']['label_prefix']
+                    v_date = v['labels']['date']
+                    try:
+                        dict_prefix = dict_correspondance[prefix]
+                    except KeyError:
+                        dict_prefix = dict()
+                        dict_correspondance[prefix] = dict_prefix
 
-                try:
-                    dict_date = dict_prefix[v_date]
-                except KeyError:
-                    dict_date = dict()
-                    dict_prefix[v_date] = dict_date
+                    try:
+                        dict_date = dict_prefix[v_date]
+                    except KeyError:
+                        dict_date = dict()
+                        dict_prefix[v_date] = dict_date
 
-                dict_date[key_param] = {'name': v['name'], 'id': v['id']}
+                    dict_date[key_param] = {'name': v['name'], 'id': v['id']}
+            except KeyError:
+                pass  # Pas un certificat
 
     async def get_resultat(self) -> list:
         resultat = await self.attendre()

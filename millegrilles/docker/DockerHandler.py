@@ -125,12 +125,14 @@ class DockerHandler:
                 try:
                     action.executer(self.__docker)
                 except Exception as e:
-                    #if self.__logger.isEnabledFor(logging.DEBUG):
-                    #    self.__logger.exception("Erreur execution action docker")
+                    if self.__logger.isEnabledFor(logging.DEBUG):
+                        self.__logger.exception("Erreur execution action docker")
                     try:
                         action.erreur(e)
                     except:
                         self.__logger.exception("Erreur emission action.erreur() commen reponse pour commande docker")
+                    finally:
+                        continue
 
                 # Throttling commandes docker en fonction du CPU load
                 # Sous 1.5 de load, aucun throttling. Apres, c'est 3*cpu_load jusqu'a limite de 30.0 secondes
