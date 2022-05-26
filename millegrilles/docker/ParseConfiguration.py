@@ -10,8 +10,9 @@ class ConfigurationService:
     Converti format config MilleGrilles en format du module docker
     """
 
-    def __init__(self, configuration: dict):
+    def __init__(self, configuration: dict, params: Optional[dict] = None):
         self.__configuration = configuration
+        self.__params = params
         self.__parsed: Optional[dict] = None
 
         self.__name: Optional[str] = None
@@ -54,75 +55,85 @@ class ConfigurationService:
         except KeyError:
             pass
 
-        self.parse_resources()
-        self.parse_restart_policy()
-        self.parse_service_mode()
-        self.parse_mounts()
-        self.parse_env()
-        self.parse_configs()
-        self.parse_secrets()
-        self.parse_networks()
+        self._parse_resources()
+        self._parse_restart_policy()
+        self._parse_service_mode()
+        self._parse_mounts()
+        self._parse_env()
+        self._parse_configs()
+        self._parse_secrets()
+        self._parse_labels()
+        self._parse_networks()
 
-    def parse_resources(self):
+    def _mapping_valeur(self, value: str):
+        if self.__params:
+            for param_key, param_value in self.__params.items():
+                if isinstance(param_value, str):
+                    value = value.replace('${%s}' % param_key, param_value)
+        return value
+
+    def _parse_resources(self):
         try:
             resources = self.__configuration['resources']
             self.__resources = Resources(**resources)
         except KeyError:
             pass
 
-    def parse_restart_policy(self):
+    def _parse_restart_policy(self):
         try:
             policy = self.__configuration['restart_policy']
             self.__restart_policy = RestartPolicy(**policy)
         except KeyError:
             pass
 
-    def parse_service_mode(self):
+    def _parse_service_mode(self):
         try:
             config = self.__configuration['mode']
-            self.__restart_policy = ServiceMode(**config)
+            self.__mode = ServiceMode(**config)
         except KeyError:
             pass
 
-    def parse_mounts(self):
-        # # Mounts
-        # config_mounts = config_service.get('mounts')
-        # if config_mounts:
-        #     if not mode_container:
-        #         dict_config_docker['mounts'] = [self.__mapping(mount) for mount in config_mounts]
-        #     else:
-        #         self.__logger.warning("Mounts : Format des containers, ignorer pour l'instant")
-        #         mounts = list()
-        #         for mount in config_mounts:
-        #             mount_obj = Mount(mount['target'], mount['source'], mount['type'])
-        #             mounts.append(mount_obj)
-        #         dict_config_docker['mounts'] = mounts
-        pass
+    def _parse_mounts(self):
+        try:
+            mounts = self.__configuration['mounts']
+        except KeyError:
+            return
 
-    def parse_env(self):
+        mounts_list = list()
+        for mount in mounts:
+            target = self._mapping_valeur(mount['target'])
+            source = self._mapping_valeur(mount['source'])
+            volume_type = mount['type']
+            read_only = mount.get('read_only') or False
+            mount_obj = Mount(target, source, volume_type, read_only)
+            mounts_list.append(mount_obj)
+
+        self.__mounts = mounts_list
+
+    def _parse_env(self):
         try:
             env_config = self.__configuration['env'].copy()
+
+            for key, value in env_config.items():
+                env_config[key] = self._mapping_valeur(env_config[key])
+
         except KeyError:
             env_config = dict()
 
-        #env_config["INSTANCE_ID"] = self.__service_monitor.noeud_id
-        #env_config["MG_IDMG"] = self.__service_monitor.idmg
-
-        # connexion_mq = self.__service_monitor.get_info_connexion_mq(nowait=True)
-        # for key, value in connexion_mq.items():
-        #     # config_env.append(key + "=" + str(value))
-        #     config_env_dict[key] = str(value)
-        #
-        # # Toujours ajouter l'id du noeud, le IDMG, MQ connexion params
-        # # config_env.append("MG_NOEUD_ID=" + self.__service_monitor.noeud_id)
-        # # config_env.append("MG_IDMG=" + self.__service_monitor.idmg)
-        # config_env_dict["MG_NOEUD_ID"] = self.__service_monitor.noeud_id
-        # config_env_dict["MG_IDMG"] = self.__service_monitor.idmg
+        if self.__params is not None:
+            try:
+                env_config["INSTANCE_ID"] = self.__params['instance_id']
+            except KeyError:
+                pass
+            try:
+                env_config["IDMG"] = self.__params['idmg']
+            except KeyError:
+                pass
 
         config_env_list = ['='.join(i) for i in env_config.items()]
-        self.__configuration = config_env_list
+        self.__environment = config_env_list
 
-    def parse_configs(self):
+    def _parse_configs(self):
         # # Configs
         # config_configs = config_service.get('configs')
         # dates_configs = dict()
@@ -150,7 +161,7 @@ class ConfigurationService:
         #     dict_config_docker['configs'] = liste_configs
         pass
 
-    def parse_secrets(self):
+    def _parse_secrets(self):
         # # Secrets
         # config_secrets = config_service.get('secrets')
         # if config_secrets:
@@ -183,17 +194,32 @@ class ConfigurationService:
         #     dict_config_docker['secrets'] = liste_secrets
         pass
 
-    def parse_labels(self):
-        # # Service labels
-        # config_labels = config_service.get('labels')
-        # updated_labels = dict()
-        # dict_config_docker['labels'] = updated_labels
-        #
-        # if config_labels:
-        #     for key, value in config_labels.items():
-        #         value = self.__mapping(value)
-        #         updated_labels[key] = value
-        #
+    def _parse_labels(self):
+        try:
+            labels_src = self.__configuration['labels']
+        except KeyError:
+            labels_src = dict()
+
+        # Map labels
+        labels = dict()
+        for key, value in labels_src.items():
+            value = self._mapping_valeur(value)
+            labels[key] = value
+
+        if self.__params is not None:
+            try:
+                certificat_info = self.__params['__certificat_info']
+                labels['certificat'] = 'true'
+                labels['certificat_label_prefix'] = certificat_info['label_prefix']
+            except KeyError:
+                pass
+
+            try:
+                nom_application = self.__params['__nom_application']
+                labels['nom_application'] = nom_application
+            except KeyError:
+                pass
+
         # if kwargs.get('application'):
         #     updated_labels['application'] = kwargs.get('application')
         #     if config_service.get('certificat_compte'):
@@ -201,17 +227,10 @@ class ConfigurationService:
         #         updated_labels['certificat_nom'] = config_service['certificat_compte']
         #     dict_config_docker['labels'] = updated_labels
         #
-        # # Container labels
-        # config_container_labels = config_service.get('container_labels')
-        # if config_container_labels:
-        #     updated_labels = dict()
-        #     for key, value in config_container_labels.items():
-        #         value = self.__mapping(value)
-        #         updated_labels[key] = value
-        #     dict_config_docker['container_labels'] = updated_labels
-        pass
 
-    def parse_networks(self):
+        self.__labels = labels
+
+    def _parse_networks(self):
         # # Networks
         # config_networks = config_service.get('networks')
         # if config_networks:
@@ -223,7 +242,7 @@ class ConfigurationService:
         #     dict_config_docker['networks'] = networks
         pass
 
-    def parse_endpoint_specs(self):
+    def _parse_endpoint_specs(self):
         # # Ports
         # config_endpoint_spec = config_service.get('endpoint_spec')
         # if config_endpoint_spec:
