@@ -137,15 +137,26 @@ class ConfigurationService:
 
         liste_configs = list()
         for elem_config in docker_configs:
-            if elem_config.get('certificate') is True:
-                config_name = self.__params['__certificat_info']['label_prefix']
+            type_current = elem_config.get('current')
+            config_name = elem_config['name']
+            if type_current is not None:
                 config_current = self.__params['__docker_config_datee'][config_name]['current']
-                id_c = config_current['cert']['id']
-                config_name = config_current['cert']['name']
+                id_c = config_current[type_current]['id']
+                config_name = config_current[type_current]['name']
             else:
                 config_name = elem_config['name']
                 configs = self.__params['__configs']
                 id_c = configs[config_name]
+
+            # if elem_config.get('certificate') is True:
+            #     config_name = self.__params['__certificat_info']['label_prefix']
+            #     config_current = self.__params['__docker_config_datee'][config_name]['current']
+            #     id_c = config_current['cert']['id']
+            #     config_name = config_current['cert']['name']
+            # else:
+            #     config_name = elem_config['name']
+            #     configs = self.__params['__configs']
+            #     id_c = configs[config_name]
 
             config_reference = {
                 'config_id': id_c,
@@ -168,20 +179,27 @@ class ConfigurationService:
 
         liste_secrets = list()
         for elem_secret in docker_secrets:
-            if elem_secret.get('key') is True:
-                secret_name = self.__params['__certificat_info']['label_prefix']
-                config_current = self.__params['__docker_config_datee'][secret_name]['current']
-                id_c = config_current['key']['id']
-                secret_name = config_current['key']['name']
-            elif elem_secret.get('password') is True:
-                secret_name = self.__params['__password_info']['label_prefix']
-                config_current = self.__params['__docker_config_datee'][secret_name]['current']
-                id_c = config_current['password']['id']
-                secret_name = config_current['password']['name']
+            # if elem_secret.get('key') is True:
+            #     secret_name = self.__params['__certificat_info']['label_prefix']
+            #     config_current = self.__params['__docker_config_datee'][secret_name]['current']
+            #     id_c = config_current['key']['id']
+            #     secret_name = config_current['key']['name']
+            # elif elem_secret.get('password') is True:
+            #     secret_name = self.__params['__password_info']['label_prefix']
+            #     config_current = self.__params['__docker_config_datee'][secret_name]['current']
+            #     id_c = config_current['password']['id']
+            #     secret_name = config_current['password']['name']
+            # else:
+            type_current = elem_secret.get('current')
+            secret_name = elem_secret['name']
+            if type_current is not None:
+                config_datee = self.__params['__docker_config_datee']
+                current_secret = config_datee[secret_name]['current'][type_current]
+                id_c = current_secret['id']
+                secret_name = current_secret['name']
             else:
-                secret_name = elem_secret['name']
-                configs = self.__params['__secrets']
-                id_c = configs[secret_name]
+                secrets = self.__params['__secrets']
+                id_c = secrets[secret_name]
 
             secret_reference = {
                 'secret_id': id_c,
