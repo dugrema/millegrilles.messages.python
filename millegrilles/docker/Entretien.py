@@ -19,6 +19,9 @@ class TacheEntretien:
         """
         self.__dernier_entretien = None
 
+    def set_intervalle(self, intervalle: datetime.timedelta):
+        self.__intervalle = intervalle
+
     async def run(self):
         if self.__dernier_entretien is None:
             pass
