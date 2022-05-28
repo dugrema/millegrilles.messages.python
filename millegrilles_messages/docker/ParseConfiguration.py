@@ -118,11 +118,11 @@ class ConfigurationService:
 
         if self.__params is not None:
             try:
-                env_config["INSTANCE_ID"] = self.__params['instance_id']
+                env_config["INSTANCE_ID"] = self.__params['__instance_id']
             except KeyError:
                 pass
             try:
-                env_config["IDMG"] = self.__params['idmg']
+                env_config["IDMG"] = self.__params['__idmg']
             except KeyError:
                 pass
 
