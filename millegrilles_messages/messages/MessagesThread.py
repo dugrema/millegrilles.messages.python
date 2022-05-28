@@ -5,8 +5,8 @@ import logging
 from asyncio import Event
 from typing import Optional
 
-from millegrilles.messages.MessagesModule import MessagesModule, RessourcesConsommation, ExchangeConfiguration
-from millegrilles.pika.PikaModule import PikaModule
+from millegrilles_messages.messages.MessagesModule import MessagesModule, RessourcesConsommation, ExchangeConfiguration
+from millegrilles_messages.pika.PikaModule import PikaModule
 
 
 class MessagesThread:

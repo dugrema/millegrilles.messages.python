@@ -1,7 +1,7 @@
 # Genere des certificats/cles self-signed pour des applications web
 from cryptography import x509
 
-from millegrilles.certificats.Generes import CleCertificatGenere, TypeGenere
+from millegrilles_messages.certificats.Generes import CleCertificatGenere, TypeGenere
 
 
 def generer_self_signed_rsa(server_name: str):

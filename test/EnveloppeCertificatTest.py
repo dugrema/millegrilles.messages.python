@@ -1,6 +1,6 @@
 import logging
 
-from millegrilles.messages.EnveloppeCertificat import EnveloppeCertificat
+from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
 
 PATH_CA = '/home/mathieu/mgdev/certs/pki.millegrille'
 PATH_CORE = '/home/mathieu/mgdev/certs/pki.core.cert'

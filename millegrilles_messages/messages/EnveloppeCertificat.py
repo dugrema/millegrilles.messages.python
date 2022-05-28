@@ -24,7 +24,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PublicKey
 from nacl.signing import VerifyKey
 
-from millegrilles.messages.Hachage import hacher, map_code_to_hashes
+from millegrilles_messages.messages.Hachage import hacher, map_code_to_hashes
 
 BEGIN_CERTIFICATE = '-----BEGIN CERTIFICATE-----'
 END_CERTIFICATE = '-----END CERTIFICATE-----'

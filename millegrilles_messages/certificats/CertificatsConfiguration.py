@@ -3,10 +3,10 @@ from typing import Optional
 
 from cryptography.x509.base import CertificateBuilder
 
-from millegrilles.certificats.Generes import EnveloppeCsr, ajouter_roles, ajouter_exchanges, ajouter_domaines, \
+from millegrilles_messages.certificats.Generes import EnveloppeCsr, ajouter_roles, ajouter_exchanges, ajouter_domaines, \
     ajouter_user_id, ajouter_delegation_globale, ajouter_dns
-from millegrilles.messages.CleCertificat import CleCertificat
-from millegrilles.messages import Constantes
+from millegrilles_messages.messages.CleCertificat import CleCertificat
+from millegrilles_messages.messages import Constantes
 
 
 def signer_configuration(cle_intermediaire: CleCertificat, csr_pem: str, configuration: dict):

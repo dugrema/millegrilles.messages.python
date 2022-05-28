@@ -6,11 +6,11 @@ from asyncio import Event
 from asyncio.exceptions import TimeoutError
 from OpenSSL.crypto import X509StoreContextError
 
-from millegrilles.messages.EnveloppeCertificat import EnveloppeCertificat
-from millegrilles.messages.ValidateurCertificats import ValidateurCertificat, ValidateurCertificatRedis, IdmgInvalide
+from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
+from millegrilles_messages.messages.ValidateurCertificats import ValidateurCertificat, ValidateurCertificatRedis, IdmgInvalide
 
-from millegrilles.messages.MessagesThread import MessagesThread
-from millegrilles.messages.MessagesModule import RessourcesConsommation
+from millegrilles_messages.messages.MessagesThread import MessagesThread
+from millegrilles_messages.messages.MessagesModule import RessourcesConsommation
 
 PATH_CA = '/home/mathieu/mgdev/certs/pki.millegrille'
 PATH_CORE_CERT = '/home/mathieu/mgdev/certs/pki.core.cert'

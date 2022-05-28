@@ -1,9 +1,10 @@
+import setuptools
 from setuptools import setup
 
 setup(
-    name='millegrilles.messages',
+    name='millegrilles_messages',
     version='2022.3.0',
-    packages=['millegrilles.messages', 'millegrilles.pika', 'millegrilles.certificats', 'millegrilles.docker'],
+    packages=setuptools.find_packages(),
     url='https://github.com/dugrema/millegrilles.messages.python',
     license='AFFERO',
     author='Mathieu Dugre',

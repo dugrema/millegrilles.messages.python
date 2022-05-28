@@ -15,9 +15,9 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
-from millegrilles.certificats import Extensions
-from millegrilles.messages.EnveloppeCertificat import EnveloppeCertificat
-from millegrilles.messages.CleCertificat import CleCertificat
+from millegrilles_messages.certificats import Extensions
+from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
+from millegrilles_messages.messages.CleCertificat import CleCertificat
 
 DELTA_INITIAL = datetime.timedelta(seconds=20)  # Initialiser a 20 secondes avant temps courant
 ONE_DAY = datetime.timedelta(hours=2)

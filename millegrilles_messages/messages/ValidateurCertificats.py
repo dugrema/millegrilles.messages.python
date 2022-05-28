@@ -11,9 +11,9 @@ from typing import Optional, Union
 
 import redis.asyncio as redis
 
-from millegrilles.messages import Constantes
-from millegrilles.messages.EnveloppeCertificat import EnveloppeCertificat
-from millegrilles.messages.ParamsEnvironnement import ConfigurationRedis
+from millegrilles_messages.messages import Constantes
+from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
+from millegrilles_messages.messages.ParamsEnvironnement import ConfigurationRedis
 
 
 CACHE_TTL_SECS = 300

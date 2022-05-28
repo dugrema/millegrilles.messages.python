@@ -1,6 +1,6 @@
 import logging
 
-from millegrilles.certificats.CertificatsWeb import generer_self_signed_rsa, generer_self_signed_ed25519
+from millegrilles_messages.certificats.CertificatsWeb import generer_self_signed_rsa, generer_self_signed_ed25519
 
 logger = logging.getLogger(__name__)
 

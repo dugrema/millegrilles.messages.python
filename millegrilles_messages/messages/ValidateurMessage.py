@@ -9,11 +9,11 @@ import multibase
 from cryptography.hazmat.primitives import hashes
 from typing import Union
 
-from millegrilles.messages import Constantes
-from millegrilles.messages.EnveloppeCertificat import EnveloppeCertificat
-from millegrilles.messages.FormatteurMessages import DateFormatEncoder, parse_float
-from millegrilles.messages.Hachage import verifier_hachage
-from millegrilles.messages.ValidateurCertificats import ValidateurCertificatCache, CertificatInconnu
+from millegrilles_messages.messages import Constantes
+from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
+from millegrilles_messages.messages.FormatteurMessages import DateFormatEncoder, parse_float
+from millegrilles_messages.messages.Hachage import verifier_hachage
+from millegrilles_messages.messages.ValidateurCertificats import ValidateurCertificatCache, CertificatInconnu
 
 
 class ValidateurMessage:

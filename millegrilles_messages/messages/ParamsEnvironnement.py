@@ -1,6 +1,6 @@
 import os
 
-from millegrilles.messages import Constantes
+from millegrilles_messages.messages import Constantes
 
 from typing import Optional
 

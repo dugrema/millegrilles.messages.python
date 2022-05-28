@@ -7,9 +7,9 @@ from asyncio import Event
 from asyncio.exceptions import TimeoutError
 from pika.exchange_type import ExchangeType
 
-from millegrilles.messages import Constantes
-from millegrilles.messages.MessagesThread import MessagesThread
-from millegrilles.messages.MessagesModule import RessourcesConsommation, ExchangeConfiguration
+from millegrilles_messages.messages import Constantes
+from millegrilles_messages.messages.MessagesThread import MessagesThread
+from millegrilles_messages.messages.MessagesModule import RessourcesConsommation, ExchangeConfiguration
 
 logger = logging.getLogger(__name__)
 

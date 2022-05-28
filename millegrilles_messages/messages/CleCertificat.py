@@ -6,8 +6,8 @@ from cryptography.hazmat.primitives.serialization import load_pem_private_key, E
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 from nacl.signing import SigningKey
 
-from millegrilles.messages.EnveloppeCertificat import EnveloppeCertificat
-from millegrilles.messages.Ed25519Utils import chiffrer_cle_ed25519
+from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
+from millegrilles_messages.messages.Ed25519Utils import chiffrer_cle_ed25519
 
 
 class CleCertificat:

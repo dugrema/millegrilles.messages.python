@@ -1,8 +1,8 @@
 import json
 import logging
 
-from millegrilles.messages.CleCertificat import CleCertificat
-from millegrilles.messages.FormatteurMessages import SignateurTransactionSimple, FormatteurMessageMilleGrilles
+from millegrilles_messages.messages.CleCertificat import CleCertificat
+from millegrilles_messages.messages.FormatteurMessages import SignateurTransactionSimple, FormatteurMessageMilleGrilles
 
 PATH_CORE_CERT = '/home/mathieu/mgdev/certs/pki.core.cert'
 PATH_CORE_CLE = '/home/mathieu/mgdev/certs/pki.core.key'

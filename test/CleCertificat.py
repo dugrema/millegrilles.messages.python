@@ -1,6 +1,6 @@
 import logging
 
-from millegrilles.messages.CleCertificat import CleCertificat
+from millegrilles_messages.messages.CleCertificat import CleCertificat
 
 PATH_CORE_CERT = '/home/mathieu/mgdev/certs/pki.core.cert'
 PATH_CORE_CLE = '/home/mathieu/mgdev/certs/pki.core.key'

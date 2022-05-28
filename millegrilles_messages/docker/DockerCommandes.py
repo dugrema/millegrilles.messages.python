@@ -8,7 +8,7 @@ from docker import DockerClient
 from docker.errors import APIError, NotFound
 
 
-from millegrilles.docker.DockerHandler import CommandeDocker
+from millegrilles_messages.docker.DockerHandler import CommandeDocker
 
 
 class CommandeListerContainers(CommandeDocker):

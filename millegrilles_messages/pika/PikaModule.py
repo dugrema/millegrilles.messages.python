@@ -9,15 +9,15 @@ from pika.adapters.asyncio_connection import AsyncioConnection
 from pika.adapters.utils.connection_workflow import AMQPConnectionWorkflowFailed
 from pika.channel import Channel
 
-from millegrilles.messages import Constantes
-from millegrilles.messages.CleCertificat import CleCertificat
-from millegrilles.messages.EnveloppeCertificat import EnveloppeCertificat
-from millegrilles.messages.MessagesModule \
+from millegrilles_messages.messages import Constantes
+from millegrilles_messages.messages.CleCertificat import CleCertificat
+from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
+from millegrilles_messages.messages.MessagesModule \
     import MessagesModule, MessageConsumerVerificateur, MessageProducerFormatteur, RessourcesConsommation, \
     MessageWrapper, MessagePending
-from millegrilles.messages.ParamsEnvironnement import ConfigurationPika
-from millegrilles.messages.ValidateurMessage import ValidateurMessage
-from millegrilles.messages.ValidateurCertificats import ValidateurCertificatRedis
+from millegrilles_messages.messages.ParamsEnvironnement import ConfigurationPika
+from millegrilles_messages.messages.ValidateurMessage import ValidateurMessage
+from millegrilles_messages.messages.ValidateurCertificats import ValidateurCertificatRedis
 
 
 class PikaModule(MessagesModule):

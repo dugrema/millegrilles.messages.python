@@ -3,13 +3,13 @@ import asyncio
 
 from cryptography.exceptions import InvalidSignature
 
-from millegrilles.messages import Constantes
-from millegrilles.messages.CleCertificat import CleCertificat
-from millegrilles.messages.FormatteurMessages import SignateurTransactionSimple, FormatteurMessageMilleGrilles
-from millegrilles.messages.EnveloppeCertificat import EnveloppeCertificat
-from millegrilles.messages.ValidateurCertificats import ValidateurCertificatCache
-from millegrilles.messages.ValidateurMessage import ValidateurMessage
-from millegrilles.messages.Hachage import ErreurHachage
+from millegrilles_messages.messages import Constantes
+from millegrilles_messages.messages.CleCertificat import CleCertificat
+from millegrilles_messages.messages.FormatteurMessages import SignateurTransactionSimple, FormatteurMessageMilleGrilles
+from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
+from millegrilles_messages.messages.ValidateurCertificats import ValidateurCertificatCache
+from millegrilles_messages.messages.ValidateurMessage import ValidateurMessage
+from millegrilles_messages.messages.Hachage import ErreurHachage
 
 PATH_CA = '/home/mathieu/mgdev/certs/pki.millegrille'
 PATH_CORE_CERT = '/home/mathieu/mgdev/certs/pki.core.cert'

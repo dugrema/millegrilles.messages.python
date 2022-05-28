@@ -5,7 +5,7 @@ from typing import Optional
 from cryptography.x509 import BasicConstraints
 from cryptography.x509.base import CertificateBuilder
 
-from millegrilles.certificats.Generes import CleCsrGenere, CleCertificat, EnveloppeCsr
+from millegrilles_messages.certificats.Generes import CleCsrGenere, CleCertificat, EnveloppeCsr
 
 logger = logging.getLogger(__name__)
 

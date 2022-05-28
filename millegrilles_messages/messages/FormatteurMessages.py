@@ -7,10 +7,10 @@ import pytz
 
 from cryptography.hazmat.primitives import hashes
 
-from millegrilles.messages import Constantes
-from millegrilles.messages.Hachage import hacher
-from millegrilles.messages.CleCertificat import CleCertificat
-from millegrilles.messages.Encoders import DateFormatEncoder
+from millegrilles_messages.messages import Constantes
+from millegrilles_messages.messages.Hachage import hacher
+from millegrilles_messages.messages.CleCertificat import CleCertificat
+from millegrilles_messages.messages.Encoders import DateFormatEncoder
 
 VERSION_SIGNATURE = 2
 

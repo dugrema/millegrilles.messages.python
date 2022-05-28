@@ -1,9 +1,9 @@
 import logging
 
-from millegrilles.certificats.CertificatsWeb import generer_self_signed_ed25519
-from millegrilles.certificats.CertificatsMillegrille import generer_csr_intermediaire, signer_csr_intermediaire, \
+from millegrilles_messages.certificats.CertificatsWeb import generer_self_signed_ed25519
+from millegrilles_messages.certificats.CertificatsMillegrille import generer_csr_intermediaire, signer_csr_intermediaire, \
     generer_csr_leaf, signer_csr_leaf
-from millegrilles.certificats.Generes import CleCertificat
+from millegrilles_messages.certificats.Generes import CleCertificat
 
 logger = logging.getLogger(__name__)
 

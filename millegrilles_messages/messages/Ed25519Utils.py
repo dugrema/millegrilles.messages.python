@@ -4,7 +4,7 @@ from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
 from cryptography.hazmat.primitives import serialization
 
-from millegrilles.messages.Hachage import hacher_to_digest
+from millegrilles_messages.messages.Hachage import hacher_to_digest
 
 
 def chiffrer_cle_ed25519(enveloppe, cle_secrete: bytes) -> str:
