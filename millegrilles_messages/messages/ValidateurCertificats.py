@@ -307,17 +307,17 @@ class EnveloppeCache:
 
 class ValidateurCertificatRedis(ValidateurCertificatCache):
 
-    def __init__(self, enveloppe_ca: EnveloppeCertificat, cache_ttl_secs=CACHE_TTL_SECS):
+    def __init__(self, enveloppe_ca: EnveloppeCertificat, cache_ttl_secs=CACHE_TTL_SECS, configuration: dict = None):
         super().__init__(enveloppe_ca, cache_ttl_secs)
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
-        self.__configuration_redis = ValidateurCertificatRedis.__charger_configuration_redis()
+        self.__configuration_redis = ValidateurCertificatRedis.__charger_configuration_redis(configuration)
         self.__enveloppe_ca = enveloppe_ca
         self.__redis_client: Optional[redis.Redis] = None
 
     @staticmethod
-    def __charger_configuration_redis():
+    def __charger_configuration_redis(configuration: dict = None):
         config = ConfigurationRedis()
-        config.parse_config()
+        config.parse_config(configuration)
         return config
 
     async def __connecter(self):

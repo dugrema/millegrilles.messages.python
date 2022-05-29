@@ -49,7 +49,7 @@ class CommandeRedemarrerService(CommandeDocker):
         super().__init__(callback, aio)
         self.__nom_service = nom_service
 
-        self.facteur_throttle = 5.0
+        self.facteur_throttle = 2.0
 
     def executer(self, docker_client: DockerClient):
         service = docker_client.services.get(self.__nom_service)
@@ -138,7 +138,7 @@ class CommandeAjouterConfiguration(CommandeDocker):
 
         self.__data = data_string
 
-        self.facteur_throttle = 1.5
+        self.facteur_throttle = 0.5
 
     def executer(self, docker_client: DockerClient):
         reponse = docker_client.configs.create(name=self.__nom, data=self.__data, labels=self.__labels)
@@ -208,7 +208,7 @@ class CommandeAjouterSecret(CommandeDocker):
 
         self.__data = data_string
 
-        self.facteur_throttle = 1.5
+        self.facteur_throttle = 0.5
 
     def executer(self, docker_client: DockerClient):
         reponse = docker_client.secrets.create(name=self.__nom, data=self.__data, labels=self.__labels)
@@ -242,7 +242,7 @@ class CommandeCreerService(CommandeDocker):
         self.__image = image
         self.__configuration = configuration
 
-        self.facteur_throttle = 5.0
+        self.facteur_throttle = 3.0
 
     def executer(self, docker_client: DockerClient, attendre=True):
         config_ajustee = self.__configuration.copy()
@@ -277,7 +277,7 @@ class CommandeCreerSwarm(CommandeDocker):
     def __init__(self, callback=None, aio=False):
         super().__init__(callback, aio)
 
-        self.facteur_throttle = 3.0
+        self.facteur_throttle = 1.0
 
     def executer(self, docker_client: DockerClient, attendre=True):
         try:
@@ -297,7 +297,7 @@ class CommandeCreerNetworkOverlay(CommandeDocker):
         super().__init__(callback, aio)
         self.__network_name = network_name
 
-        self.facteur_throttle = 3.0
+        self.facteur_throttle = 1.0
 
     def executer(self, docker_client: DockerClient, attendre=True):
         try:
@@ -319,9 +319,9 @@ class CommandeGetImage(CommandeDocker):
         self.__pull = pull
 
         if pull is True:
-            self.facteur_throttle = 3.0
+            self.facteur_throttle = 1.0
         else:
-            self.facteur_throttle = 2.0
+            self.facteur_throttle = 0.5
 
     def executer(self, docker_client: DockerClient):
         try:

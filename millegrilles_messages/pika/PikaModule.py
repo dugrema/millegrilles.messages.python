@@ -47,7 +47,7 @@ class PikaModule(MessagesModule):
 
         enveloppe_ca = EnveloppeCertificat.from_file(self.__pika_configuration.ca_pem_path)
 
-        validateur_certificats = ValidateurCertificatRedis(enveloppe_ca)
+        validateur_certificats = ValidateurCertificatRedis(enveloppe_ca, configuration=env_configuration)
         validateur_messages = ValidateurMessage(validateur_certificats)
 
         self._validateur_certificats = validateur_certificats
@@ -132,7 +132,10 @@ class PikaModule(MessagesModule):
 
     def on_connect_done(self, connexion: Union[AsyncioConnection, AMQPConnectionWorkflowFailed] = None):
         if isinstance(connexion, AMQPConnectionWorkflowFailed):
-            self.__logger.error("Erreur de connexion a MQ : %s" % connexion.exceptions)
+            try:
+                self.__logger.error("Erreur de connexion a MQ : %s" % connexion.exceptions)
+            except:
+                self.__logger.error("Erreur de connexion a MQ : %s" % connexion)
             self.__connexion = None
         else:
             self.__logger.debug("Connexion a MQ reussi")
