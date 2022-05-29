@@ -113,6 +113,8 @@ class DockerHandler:
 
         self.__action_fifo = list()
 
+        self.__docker_initialise = False
+
     def start(self):
         self.__thread = Thread(name="docker", target=self.run, daemon=True)
         self.__thread.start()

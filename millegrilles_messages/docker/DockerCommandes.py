@@ -241,6 +241,23 @@ class CommandeCreerService(CommandeDocker):
         return resultat['args'][0]
 
 
+class CommandeCreerSwarm(CommandeDocker):
+
+    def __init__(self, callback=None, aio=False):
+        super().__init__(callback, aio)
+
+    def executer(self, docker_client: DockerClient, attendre=True):
+        try:
+            docker_client.swarm.init(advertise_addr="127.0.0.1")
+        except APIError as apie:
+            if apie.status_code == 409:
+                pass  # OK, existe deja
+            else:
+                raise apie
+
+        self.callback()
+
+
 class CommandeCreerNetworkOverlay(CommandeDocker):
 
     def __init__(self, network_name: str, callback=None, aio=False):
