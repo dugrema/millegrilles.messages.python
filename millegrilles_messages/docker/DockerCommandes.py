@@ -45,23 +45,25 @@ class CommandeListerServices(CommandeDocker):
 
 class CommandeRedemarrerService(CommandeDocker):
 
-    def __init__(self, nom_service: str, callback=None, aio=False, filters: dict = None, id_only=True):
+    def __init__(self, nom_service: str, callback=None, aio=False, id_only=True):
         super().__init__(callback, aio)
-        self.__filters = filters
-        self.__id_only = id_only
+        self.__nom_service = nom_service
 
         self.facteur_throttle = 5.0
 
     def executer(self, docker_client: DockerClient):
-        liste = docker_client.configs.list(filters=self.__filters)
-
-        resultat = liste
-        if self.__id_only:
-            resultat = dict()
-            for c in liste:
-                id_c = c.id
-                name = c.name
-                resultat[name] = id_c
+        service = docker_client.services.get(self.__nom_service)
+        attrs = service.attrs
+        resultat = False
+        try:
+            spec = attrs['Spec']
+            mode = spec['Mode']
+            replicated = mode['Replicated']
+            replicas = replicated['Replicas']
+            if replicas > 0:
+                resultat = service.force_update()
+        except KeyError:
+            pass
 
         self.callback(resultat)
 
