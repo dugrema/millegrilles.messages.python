@@ -53,6 +53,12 @@ class EnveloppeCsr:
     def csr(self):
         return self.__csr_request
 
+    @property
+    def cn(self):
+        cn_val = self.__csr_request.subject.get_attributes_for_oid(x509.name.NameOID.COMMON_NAME)
+        val = cn_val.pop()
+        return val.value
+
     def get_pem(self) -> str:
         return self.csr.public_bytes(serialization.Encoding.PEM).decode('utf-8')
 
@@ -375,6 +381,6 @@ def ajouter_delegation_globale(builder: CertificateBuilder, delegation: str) -> 
 
 
 def ajouter_user_id(builder: CertificateBuilder, user_id: str) -> CertificateBuilder:
-    oid = Extensions.DOMAINES_OID
+    oid = Extensions.USERID_OID
     value = user_id.encode('utf-8')
     return builder.add_extension(x509.UnrecognizedExtension(oid, value), critical=False)
