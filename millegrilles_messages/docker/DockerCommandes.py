@@ -43,6 +43,29 @@ class CommandeListerServices(CommandeDocker):
         return liste
 
 
+class CommandeRedemarrerService(CommandeDocker):
+
+    def __init__(self, nom_service: str, callback=None, aio=False, filters: dict = None, id_only=True):
+        super().__init__(callback, aio)
+        self.__filters = filters
+        self.__id_only = id_only
+
+        self.facteur_throttle = 5.0
+
+    def executer(self, docker_client: DockerClient):
+        liste = docker_client.configs.list(filters=self.__filters)
+
+        resultat = liste
+        if self.__id_only:
+            resultat = dict()
+            for c in liste:
+                id_c = c.id
+                name = c.name
+                resultat[name] = id_c
+
+        self.callback(resultat)
+
+
 class CommandeListerConfigs(CommandeDocker):
 
     def __init__(self, callback=None, aio=False, filters: dict = None, id_only=True):
@@ -113,6 +136,8 @@ class CommandeAjouterConfiguration(CommandeDocker):
 
         self.__data = data_string
 
+        self.facteur_throttle = 1.5
+
     def executer(self, docker_client: DockerClient):
         reponse = docker_client.configs.create(name=self.__nom, data=self.__data, labels=self.__labels)
         self.callback(reponse)
@@ -181,6 +206,8 @@ class CommandeAjouterSecret(CommandeDocker):
 
         self.__data = data_string
 
+        self.facteur_throttle = 1.5
+
     def executer(self, docker_client: DockerClient):
         reponse = docker_client.secrets.create(name=self.__nom, data=self.__data, labels=self.__labels)
         self.callback(reponse)
@@ -212,6 +239,8 @@ class CommandeCreerService(CommandeDocker):
         super().__init__(callback, aio)
         self.__image = image
         self.__configuration = configuration
+
+        self.facteur_throttle = 5.0
 
     def executer(self, docker_client: DockerClient, attendre=True):
         config_ajustee = self.__configuration.copy()
@@ -246,6 +275,8 @@ class CommandeCreerSwarm(CommandeDocker):
     def __init__(self, callback=None, aio=False):
         super().__init__(callback, aio)
 
+        self.facteur_throttle = 3.0
+
     def executer(self, docker_client: DockerClient, attendre=True):
         try:
             docker_client.swarm.init(advertise_addr="127.0.0.1")
@@ -263,6 +294,8 @@ class CommandeCreerNetworkOverlay(CommandeDocker):
     def __init__(self, network_name: str, callback=None, aio=False):
         super().__init__(callback, aio)
         self.__network_name = network_name
+
+        self.facteur_throttle = 3.0
 
     def executer(self, docker_client: DockerClient, attendre=True):
         try:
@@ -282,6 +315,11 @@ class CommandeGetImage(CommandeDocker):
         super().__init__(callback, aio)
         self.__nom_image = nom_image
         self.__pull = pull
+
+        if pull is True:
+            self.facteur_throttle = 3.0
+        else:
+            self.facteur_throttle = 2.0
 
     def executer(self, docker_client: DockerClient):
         try:

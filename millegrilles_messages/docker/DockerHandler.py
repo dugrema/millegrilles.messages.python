@@ -68,6 +68,8 @@ class CommandeDocker:
         self.__is_error = False
         self.__exception = None
 
+        self.facteur_throttle = 1.0  # Utilise pour throttling, represente un cout relatif de la commande
+
         if aio is True:
             self.__initasync()
 
@@ -143,11 +145,13 @@ class DockerHandler:
                 # Throttling commandes docker en fonction du CPU load
                 # Sous 1.5 de load, aucun throttling. Apres, c'est 3*cpu_load jusqu'a limite de 30.0 secondes
                 cpu_load, _cpu_load5, _cpu_load10 = psutil.getloadavg()
-                if cpu_load > 1.5:
-                    wait_time = min(cpu_load * 3.0, 30.0)  # Attendre load*n en secondes, max 30 secondes
-                    self.__logger.debug("Throttling commandes docker, cpu_load:%f attente %f secondes" % (cpu_load, wait_time))
-                    self.__stop_event.wait(wait_time)
-                    self.__logger.debug("Throttling commandes docker, pret pour prochaine commande")
+                cpu_load = max(cpu_load, 0.3)  # Fixer a au moins 0.3 pour creer un throttle sur chaque commande
+                facteur_throttle = max(cpu_load, 0.3) * action.facteur_throttle
+                wait_time = min(facteur_throttle, 30.0)  # Attendre load*n en secondes, max 30 secondes
+
+                self.__logger.debug("Throttling commandes docker, cpu_load:%f attente %f secondes" % (cpu_load, wait_time))
+                self.__stop_event.wait(wait_time)
+                self.__logger.debug("Throttling commandes docker, pret pour prochaine commande")
 
                 if self.__stop_event.is_set() is True:
                     return  # Abort thread
