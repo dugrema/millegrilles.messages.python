@@ -140,6 +140,8 @@ class MessagesModule:
         # Execution de la loop avec toutes les tasks
         await asyncio.tasks.wait(tasks, return_when=asyncio.tasks.FIRST_COMPLETED)
 
+        self.__logger.info("run_async thread completee")
+
     def est_connecte(self) -> bool:
         raise NotImplementedError('Not implemented')
 
@@ -148,6 +150,14 @@ class MessagesModule:
 
     async def _close(self):
         raise NotImplementedError('Not implemented')
+
+    async def fermer(self):
+
+        await self._reply_consumer.fermer()
+        for consumer in self._consumers:
+            await consumer.fermer()
+
+        await self._close()
 
     def ajouter_consumer(self, consumer, reply=False):  # Type MessageConsumer
         self._consumers.append(consumer)
@@ -505,6 +515,7 @@ class MessageConsumer:
         self._event_consumer: Optional[Event] = None
         self._event_message: Optional[Event] = None
         self._event_correlation_pret: Optional[Event] = None
+        self._stop_event: Optional[Event] = None
 
         # Q de messages en memoire
         self._messages = list()
@@ -514,6 +525,12 @@ class MessageConsumer:
         # [correlation_id] = CorrelationReponse()
         self._correlation_reponse: Optional[dict] = None
 
+    async def fermer(self):
+        # Liberer boucles
+        self._stop_event.set()
+        self._event_consumer.clear()
+        self._event_message.set()
+
     async def run_async(self):
         self.__logger.info("Demarrage consumer %s" % self._module_messages)
 
@@ -522,6 +539,7 @@ class MessageConsumer:
         self._event_channel = Event()
         self._event_consumer = Event()
         self._event_message = Event()
+        self._stop_event = Event()
         self._event_correlation_pret = Event()
 
         # Attente ressources
@@ -560,8 +578,7 @@ class MessageConsumer:
                         await corr.annulee()
 
             try:
-                await asyncio.wait_for(self._event_consumer.wait(), 30)
-                self._event_consumer.clear()
+                await asyncio.wait_for(self._stop_event.wait(), 30)
             except TimeoutError:
                 pass
 

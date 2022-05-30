@@ -50,7 +50,10 @@ class MessagesThread:
     async def run_async(self):
         # Loop thread tant que stop_event est clear. Note: thread est daemon, devrait fermer immediatement
         # meme si en attente asyncio.
-        await self.__messages_module.run_async()
+        try:
+            await self.__messages_module.run_async()
+        finally:
+            await self.__messages_module.fermer()
 
         # while not self.__stop_event.is_set():
         #     self.__logger.info("Debut thread asyncio MessagesThread")
