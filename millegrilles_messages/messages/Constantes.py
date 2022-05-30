@@ -31,6 +31,7 @@ SECURITE_SECURE = '4.secure'
 ROLE_CORE = 'core'
 
 
+DOMAINE_INSTANCE = 'instance'
 DOMAINE_CORE_CATALOGUES = 'CoreCatalogues'
 
 
