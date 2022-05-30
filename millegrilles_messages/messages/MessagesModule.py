@@ -443,7 +443,9 @@ class MessageProducerFormatteur(MessageProducer):
 
         message_bytes = json.dumps(message)
 
-        if nowait is not True:
+        if nowait is True:
+            await self.emettre(message_bytes, '.'.join(rk), exchanges=exchange, correlation_id=correlation_id)
+        else:
             reponse = await self.emettre_attendre(message_bytes, '.'.join(rk),
                                                   exchange=exchange, correlation_id=correlation_id, reply_to=reply_to)
             return reponse

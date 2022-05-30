@@ -27,6 +27,13 @@ SECURITE_PRIVE = '2.prive'
 SECURITE_PROTEGE = '3.protege'
 SECURITE_SECURE = '4.secure'
 
+
+ROLE_CORE = 'core'
+
+
+DOMAINE_CORE_CATALOGUES = 'CoreCatalogues'
+
+
 # Champs messages
 MESSAGE_ENTETE='en-tete'
 MESSAGE_FINGERPRINT_CERTIFICAT = 'fingerprint_certificat'
