@@ -28,6 +28,9 @@ SECURITE_PROTEGE = '3.protege'
 SECURITE_SECURE = '4.secure'
 
 
+DELEGATION_GLOBALE_PROPRIETAIRE = 'proprietaire'
+
+
 ROLE_CORE = 'core'
 
 
