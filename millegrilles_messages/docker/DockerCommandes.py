@@ -49,7 +49,7 @@ class CommandeRedemarrerService(CommandeDocker):
         super().__init__(callback, aio)
         self.__nom_service = nom_service
 
-        self.facteur_throttle = 2.0
+        self.facteur_throttle = 1.5
 
     def executer(self, docker_client: DockerClient):
         service = docker_client.services.get(self.__nom_service)
@@ -138,7 +138,7 @@ class CommandeAjouterConfiguration(CommandeDocker):
 
         self.__data = data_string
 
-        self.facteur_throttle = 0.5
+        self.facteur_throttle = 0.25
 
     def executer(self, docker_client: DockerClient):
         reponse = docker_client.configs.create(name=self.__nom, data=self.__data, labels=self.__labels)
@@ -154,6 +154,7 @@ class CommandeSupprimerConfiguration(CommandeDocker):
     def __init__(self, nom: str, callback=None, aio=False):
         super().__init__(callback, aio)
         self.__nom = nom
+        self.facteur_throttle = 0.25
 
     def executer(self, docker_client: DockerClient):
         config = docker_client.configs.get(self.__nom)
@@ -170,6 +171,7 @@ class CommandeGetConfiguration(CommandeDocker):
     def __init__(self, nom: str, callback=None, aio=False):
         super().__init__(callback, aio)
         self.__nom = nom
+        self.facteur_throttle = 0.25
 
     def executer(self, docker_client: DockerClient):
         config = docker_client.configs.get(self.__nom)
@@ -208,7 +210,7 @@ class CommandeAjouterSecret(CommandeDocker):
 
         self.__data = data_string
 
-        self.facteur_throttle = 0.5
+        self.facteur_throttle = 0.25
 
     def executer(self, docker_client: DockerClient):
         reponse = docker_client.secrets.create(name=self.__nom, data=self.__data, labels=self.__labels)
@@ -224,6 +226,7 @@ class CommandeSupprimerSecret(CommandeDocker):
     def __init__(self, nom: str, callback=None, aio=False):
         super().__init__(callback, aio)
         self.__nom = nom
+        self.facteur_throttle = 0.25
 
     def executer(self, docker_client: DockerClient):
         config = docker_client.secrets.get(self.__nom)
@@ -242,26 +245,11 @@ class CommandeCreerService(CommandeDocker):
         self.__image = image
         self.__configuration = configuration
 
-        self.facteur_throttle = 3.0
+        self.facteur_throttle = 2.0
 
     def executer(self, docker_client: DockerClient, attendre=True):
         config_ajustee = self.__configuration.copy()
         del config_ajustee['image']
-
-        # try:
-        #     del config_ajustee['certificat']
-        # except KeyError:
-        #     pass
-        # try:
-        #     del config_ajustee['passwords']
-        # except KeyError:
-        #     pass
-        #
-        # command = config_ajustee.get('command')
-        # try:
-        #     del config_ajustee['command']
-        # except KeyError:
-        #     pass
 
         resultat = docker_client.services.create(self.__image, **config_ajustee)
         info_service = {'id': resultat.id, 'name': resultat.name}
@@ -277,7 +265,7 @@ class CommandeCreerSwarm(CommandeDocker):
     def __init__(self, callback=None, aio=False):
         super().__init__(callback, aio)
 
-        self.facteur_throttle = 1.0
+        self.facteur_throttle = 0.5
 
     def executer(self, docker_client: DockerClient, attendre=True):
         try:
@@ -297,7 +285,7 @@ class CommandeCreerNetworkOverlay(CommandeDocker):
         super().__init__(callback, aio)
         self.__network_name = network_name
 
-        self.facteur_throttle = 1.0
+        self.facteur_throttle = 0.5
 
     def executer(self, docker_client: DockerClient, attendre=True):
         try:
@@ -365,6 +353,7 @@ class CommandeEnsureNodeLabels(CommandeDocker):
         super().__init__(callback, aio)
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__labels = labels
+        self.facteur_throttle = 0.25
 
     def executer(self, docker_client: DockerClient, attendre=True):
         nodes = docker_client.nodes.list()
@@ -398,6 +387,7 @@ class CommandeGetConfigurationsDatees(CommandeDocker):
     """
     def __init__(self, callback=None, aio=False):
         super().__init__(callback, aio)
+        self.facteur_throttle = 0.5
 
     def executer(self, docker_client: DockerClient):
 
