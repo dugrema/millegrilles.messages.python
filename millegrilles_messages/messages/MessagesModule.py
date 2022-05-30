@@ -561,6 +561,7 @@ class MessageConsumer:
 
             try:
                 await asyncio.wait_for(self._event_consumer.wait(), 30)
+                self._event_consumer.clear()
             except TimeoutError:
                 pass
 
