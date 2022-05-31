@@ -108,6 +108,25 @@ class CommandeArreterService(CommandeDocker):
         return succes
 
 
+class CommandeSupprimerService(CommandeDocker):
+
+    def __init__(self, nom_service: str, callback=None, aio=True):
+        super().__init__(callback, aio)
+        self.__nom_service = nom_service
+
+        self.facteur_throttle = 0.5
+
+    def executer(self, docker_client: DockerClient):
+        service = docker_client.services.get(self.__nom_service)
+        resultat = service.remove()
+        self.callback(resultat)
+
+    async def get_resultat(self) -> bool:
+        resultats = await self.attendre()
+        succes = resultats['args'][0]
+        return succes
+
+
 class CommandeListerConfigs(CommandeDocker):
 
     def __init__(self, callback=None, aio=False, filters: dict = None, id_only=True):
