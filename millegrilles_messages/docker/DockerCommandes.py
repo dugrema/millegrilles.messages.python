@@ -299,16 +299,28 @@ class CommandeSupprimerSecret(CommandeDocker):
 
 class CommandeCreerService(CommandeDocker):
 
-    def __init__(self, image: str, configuration: dict, callback=None, aio=False):
+    def __init__(self, image: str, configuration: dict, reinstaller=False, callback=None, aio=False):
         super().__init__(callback, aio)
         self.__image = image
         self.__configuration = configuration
+        self.__reinstaller = reinstaller
 
         self.facteur_throttle = 2.0
 
     def executer(self, docker_client: DockerClient, attendre=True):
         config_ajustee = self.__configuration.copy()
         del config_ajustee['image']
+
+        if self.__reinstaller is True:
+            nom_app = self.__configuration['name']
+            try:
+                service = docker_client.services.get(nom_app)
+                service.remove()
+            except APIError as apie:
+                if apie.status_code == 404:
+                    pass  # N'existe pas, OK
+                else:
+                    raise apie
 
         resultat = docker_client.services.create(self.__image, **config_ajustee)
         info_service = {'id': resultat.id, 'name': resultat.name}
