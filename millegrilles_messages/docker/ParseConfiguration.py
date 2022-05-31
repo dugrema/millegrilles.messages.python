@@ -236,7 +236,11 @@ class ConfigurationService:
 
             try:
                 nom_application = self.__params['__nom_application']
-                labels['nom_application'] = nom_application
+                labels['application'] = nom_application
+
+                # Nom human readable
+                if labels.get('nom_application') is None:
+                    labels['nom_application'] = nom_application
             except KeyError:
                 pass
 
