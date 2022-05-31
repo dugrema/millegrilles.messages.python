@@ -6,6 +6,7 @@ from typing import Union
 
 from docker import DockerClient
 from docker.errors import APIError, NotFound
+from docker.types import ServiceMode
 
 
 from millegrilles_messages.docker.DockerHandler import CommandeDocker
@@ -66,6 +67,45 @@ class CommandeRedemarrerService(CommandeDocker):
             pass
 
         self.callback(resultat)
+
+
+class CommandeDemarrerService(CommandeDocker):
+
+    def __init__(self, nom_service: str, replicas=1, callback=None, aio=True):
+        super().__init__(callback, aio)
+        self.__nom_service = nom_service
+        self.__replicas = replicas
+
+        self.facteur_throttle = 1.5
+
+    def executer(self, docker_client: DockerClient):
+        service = docker_client.services.get(self.__nom_service)
+        resultat = service.scale(self.__replicas)
+        self.callback(resultat)
+
+    async def get_resultat(self) -> bool:
+        resultats = await self.attendre()
+        succes = resultats['args'][0]
+        return succes
+
+
+class CommandeArreterService(CommandeDocker):
+
+    def __init__(self, nom_service: str, callback=None, aio=True):
+        super().__init__(callback, aio)
+        self.__nom_service = nom_service
+
+        self.facteur_throttle = 0.5
+
+    def executer(self, docker_client: DockerClient):
+        service = docker_client.services.get(self.__nom_service)
+        resultat = service.scale(0)
+        self.callback(resultat)
+
+    async def get_resultat(self) -> bool:
+        resultats = await self.attendre()
+        succes = resultats['args'][0]
+        return succes
 
 
 class CommandeListerConfigs(CommandeDocker):
