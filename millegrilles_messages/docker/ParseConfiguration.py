@@ -1,5 +1,5 @@
 # Parsing de la configuration d'un service/container
-from typing import Optional
+from typing import Optional, Any
 
 from docker.types import NetworkAttachmentConfig, Resources, RestartPolicy, ServiceMode, EndpointSpec, Mount, \
     SecretReference, ConfigReference
@@ -61,7 +61,11 @@ class ConfigurationService:
         self._parse_networks()
         self._parse_endpoint_specs()
 
-    def _mapping_valeur(self, value: str):
+    def _mapping_valeur(self, value: Any):
+
+        if not isinstance(value, str):
+            return value
+
         if self.__params:
             for param_key, param_value in self.__params.items():
                 if isinstance(param_value, str):
