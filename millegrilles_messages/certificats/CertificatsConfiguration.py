@@ -1,10 +1,11 @@
 # Certificats a partir d'une configuration json
+import datetime
 from typing import Optional
 
 from cryptography.x509.base import CertificateBuilder
 
 from millegrilles_messages.certificats.Generes import EnveloppeCsr, ajouter_roles, ajouter_exchanges, ajouter_domaines, \
-    ajouter_user_id, ajouter_delegation_globale, ajouter_dns
+    ajouter_user_id, ajouter_delegation_globale, ajouter_dns, DUREE_CERT_DEFAUT
 from millegrilles_messages.messages.CleCertificat import CleCertificat
 from millegrilles_messages.messages import Constantes
 
@@ -16,7 +17,13 @@ def signer_configuration(cle_intermediaire: CleCertificat, csr_pem: str, configu
     role = configuration['roles'][0]
 
     builder = builder_for_application(configuration)
-    enveloppe_certificat = enveloppe_csr.signer(cle_intermediaire, role, builder=builder)
+
+    try:
+        duree = datetime.timedelta(seconds=configuration['duree'])
+    except (TypeError, KeyError):
+        duree = DUREE_CERT_DEFAUT
+
+    enveloppe_certificat = enveloppe_csr.signer(cle_intermediaire, role, builder=builder, duree=duree)
 
     return enveloppe_certificat
 
