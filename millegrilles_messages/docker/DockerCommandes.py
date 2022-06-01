@@ -470,7 +470,7 @@ class CommandeGetConfigurationsDatees(CommandeDocker):
     """
     Fait la liste des config et secrets avec label certificat=true et password=true
     """
-    def __init__(self, callback=None, aio=False):
+    def __init__(self, callback=None, aio=True):
         super().__init__(callback, aio)
         self.facteur_throttle = 0.5
 
