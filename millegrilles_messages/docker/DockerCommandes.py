@@ -69,6 +69,20 @@ class CommandeRedemarrerService(CommandeDocker):
         self.callback(resultat)
 
 
+class CommandeMajService(CommandeDocker):
+
+    def __init__(self, nom_service: str, config: dict, callback=None, aio=True):
+        super().__init__(callback, aio)
+        self.__nom_service = nom_service
+        self.__config = config
+
+        self.facteur_throttle = 1.5
+
+    def executer(self, docker_client: DockerClient):
+        service = docker_client.services.get(self.__nom_service)
+        service.update(**self.__config)
+        self.callback(True)
+
 class CommandeDemarrerService(CommandeDocker):
 
     def __init__(self, nom_service: str, replicas=1, callback=None, aio=True):
