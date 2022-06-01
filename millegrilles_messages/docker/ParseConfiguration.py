@@ -1,4 +1,5 @@
 # Parsing de la configuration d'un service/container
+import logging
 from typing import Optional, Any
 
 from docker.types import NetworkAttachmentConfig, Resources, RestartPolicy, ServiceMode, EndpointSpec, Mount, \
@@ -11,6 +12,7 @@ class ConfigurationService:
     """
 
     def __init__(self, configuration: dict, params: Optional[dict] = None):
+        self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__configuration = configuration
         self.__params = params
         self.__parsed: Optional[dict] = None
@@ -33,7 +35,11 @@ class ConfigurationService:
 
     def parse(self):
         self.__name = self.__configuration['name']
-        self.__image = self.__configuration['image']
+
+        try:
+            self.__image = self.__configuration['image']
+        except KeyError:
+            self.__logger.warning("Configuration %s sans image - entretien generateurs uniquement" % self.__name)
 
         try:
             self.__hostname = self.__configuration['hostname']
