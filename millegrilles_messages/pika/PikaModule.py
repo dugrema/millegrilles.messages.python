@@ -8,6 +8,7 @@ from typing import Optional, Union
 from pika.adapters.asyncio_connection import AsyncioConnection
 from pika.adapters.utils.connection_workflow import AMQPConnectionWorkflowFailed
 from pika.channel import Channel
+from redis.exceptions import ConnectionError
 
 from millegrilles_messages.messages import Constantes
 from millegrilles_messages.messages.CleCertificat import CleCertificat
@@ -17,7 +18,7 @@ from millegrilles_messages.messages.MessagesModule \
     MessageWrapper, MessagePending
 from millegrilles_messages.messages.ParamsEnvironnement import ConfigurationPika
 from millegrilles_messages.messages.ValidateurMessage import ValidateurMessage
-from millegrilles_messages.messages.ValidateurCertificats import ValidateurCertificatRedis
+from millegrilles_messages.messages.ValidateurCertificats import ValidateurCertificatRedis, ValidateurCertificatCache
 
 
 class PikaModule(MessagesModule):
@@ -48,12 +49,16 @@ class PikaModule(MessagesModule):
         enveloppe_ca = EnveloppeCertificat.from_file(self.__pika_configuration.ca_pem_path)
 
         validateur_certificats = ValidateurCertificatRedis(enveloppe_ca, configuration=env_configuration)
+        try:
+            await validateur_certificats.entretien()  # Connecter redis
+        except ConnectionError:
+            self.__logger.warning("Erreur connexion a redis - fallback sur validateur avec cache memoire")
+            validateur_certificats = ValidateurCertificatCache(enveloppe_ca)
+
         validateur_messages = ValidateurMessage(validateur_certificats)
 
         self._validateur_certificats = validateur_certificats
         self._validateur_messages = validateur_messages
-
-        await self._validateur_certificats.entretien()  # Connecter redis
 
         enveloppe_cert = EnveloppeCertificat.from_file(self.__pika_configuration.cert_pem_path)
         fingerprint = enveloppe_cert.fingerprint
