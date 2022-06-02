@@ -14,6 +14,28 @@ def signer_configuration(cle_intermediaire: CleCertificat, csr_pem: str, configu
     enveloppe_csr = EnveloppeCsr.from_str(csr_pem)
 
     # Le role principal est le premier de la liste
+    # try:
+    #     # Configuration d'instance prive ou public
+    #     role = configuration['role']
+    #     if role == 'prive':
+    #         configuration['exchanges'] = ['2.prive', '1.public']
+    #     elif role == 'public':
+    #         configuration['exchanges'] = ['1.public']
+    #     else:
+    #         raise ValueError('Role %s non supporte pour instance' % role)
+    #
+    #     # Ajustement de la configuration
+    #     role = 'instance'
+    #     configuration['roles'] = role
+    #     try:
+    #         dns = configuration['dns']
+    #     except KeyError:
+    #         dns = dict()
+    #     dns['localhost'] = True
+    #
+    # except KeyError:
+    #     role = configuration['roles'][0]
+
     role = configuration['roles'][0]
 
     builder = builder_for_application(configuration)
