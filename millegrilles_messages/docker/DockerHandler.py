@@ -133,6 +133,12 @@ class DockerHandler:
                 except APIError as e:
                     # Monter silencieusement, erreur habituelle
                     action.erreur(e)
+                except DockerException as e:
+                    try:
+                        # Bubble up sans logging
+                        action.erreur(e)
+                    except:
+                        self.__logger.exception("Erreur emission action.erreur() commen reponse pour commande docker")
                 except Exception as e:
                     self.__logger.exception("Erreur execution action docker")
                     try:
@@ -162,3 +168,7 @@ class DockerHandler:
     def ajouter_commande(self, action: CommandeDocker):
         self.__action_fifo.append(action)
         self.__action_pending.set()
+
+
+class DockerException(Exception):
+    pass
