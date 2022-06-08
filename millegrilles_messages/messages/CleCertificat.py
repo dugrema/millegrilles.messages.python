@@ -48,10 +48,23 @@ class CleCertificat:
         return CleCertificat.from_pems(cle, cert, password)
 
     def cle_correspondent(self):
-        if self.__private_key is not None and self.__enveloppe is not None:
-            public1_bytes = self.__private_key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
-            public2_bytes = self.__enveloppe.get_public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
-            return public1_bytes == public2_bytes
+        # Determiner format
+        if self.is_rsa():
+            public1 = self.private_key.public_key().public_numbers()
+            public2 = self.enveloppe.certificat.public_key().public_numbers()
+
+            n1 = public1.n
+            n2 = public2.n
+
+            return n1 == n2
+        elif self.is_ed25519():
+            if self.__private_key is not None and self.__enveloppe is not None:
+                public1_bytes = self.__private_key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+                public2_bytes = self.__enveloppe.get_public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+                return public1_bytes == public2_bytes
+
+        else:
+            raise ValueError('Type de cle non supporte')
 
         return False
 
@@ -63,6 +76,12 @@ class CleCertificat:
     def signer(self, message_bytes: bytes):
         signature = self.__private_key.sign(message_bytes)
         return signature
+
+    def is_rsa(self):
+        return self.enveloppe.is_rsa()
+
+    def is_ed25519(self):
+        return self.enveloppe.is_ed25519()
 
     @property
     def private_key(self):
