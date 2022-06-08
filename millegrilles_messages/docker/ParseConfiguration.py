@@ -64,6 +64,7 @@ class ConfigurationService:
         self._parse_configs()
         self._parse_secrets()
         self._parse_labels()
+        self._parse_container_labels()
         self._parse_networks()
         self._parse_endpoint_specs()
 
@@ -256,6 +257,20 @@ class ConfigurationService:
 
         self.__labels = labels
 
+    def _parse_container_labels(self):
+        try:
+            labels_src = self.__configuration['container_labels']
+        except KeyError:
+            labels_src = dict()
+
+        # Map labels
+        labels = dict()
+        for key, value in labels_src.items():
+            value = self._mapping_valeur(value)
+            labels[key] = value
+
+        self.__container_labels = labels
+
     def _parse_networks(self):
         try:
             config_networks = self.__configuration['networks']
@@ -314,6 +329,9 @@ class ConfigurationService:
 
         if self.__labels is not None:
             config['labels'] = self.__labels
+
+        if self.__container_labels is not None:
+            config['container_labels'] = self.__container_labels
 
         if self.__networks is not None:
             config['networks'] = self.__networks
