@@ -22,8 +22,7 @@ from cryptography.x509.extensions import ExtensionNotFound
 from multihash.constants import HASH_CODES
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PublicKey
-from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+from cryptography.hazmat.primitives.asymmetric import rsa, ed25519
 from nacl.signing import VerifyKey
 
 from millegrilles_messages.messages.Hachage import hacher, map_code_to_hashes
@@ -337,17 +336,13 @@ class EnveloppeCertificat:
 
     def is_rsa(self):
         public_key = self.__certificat.public_key()
-        try:
-            public_key.curve  # N'est pas present sur RSA
-            return False
-        except AttributeError:
-            has_key_size = hasattr(public_key, 'key_size')
-            return has_key_size
+        est_rsa = isinstance(public_key, rsa.RSAPublicKey)
+        return est_rsa
 
     def is_ed25519(self):
         public_key = self.__certificat.public_key()
-        curve = public_key.curve
-        raise NotImplementedError('todo')
+        est_ed25519 = isinstance(public_key, ed25519.Ed25519PublicKey)
+        return est_ed25519
 
     def __str__(self):
         return 'EnveloppeCertificat %s (%s) ' % (self.fingerprint, self.subject_rfc4514_string())
