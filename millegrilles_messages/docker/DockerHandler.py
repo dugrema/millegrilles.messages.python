@@ -7,7 +7,7 @@ import psutil
 from asyncio import Event as EventAsyncio
 from asyncio.events import AbstractEventLoop
 from docker import DockerClient
-from docker.errors import APIError, NotFound
+from docker.errors import APIError, DockerException
 from threading import Thread, Event
 from typing import Optional
 
@@ -17,18 +17,31 @@ class DockerState:
     def __init__(self):
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         path_socket = '/run/docker.sock'
-        self.__docker = docker.DockerClient('unix://' + path_socket)
+        try:
+            self.__docker = docker.DockerClient('unix://' + path_socket)
+        except DockerException:
+            self.__docker = None
+
         self.__logger.info("Docker socket a connecte %s" % path_socket)
 
         self.__docker_actif: Optional[bool] = None
 
     def docker_present(self):
-        version_docker = self.__docker.version()
+        try:
+            version_docker = self.__docker.version()
+        except AttributeError:
+            # __docker = None
+            return False
+
         self.__logger.debug("Version docker : %s" % json.dumps(version_docker, indent=2))
         return True
 
     def swarm_present(self):
-        info_docker = self.__docker.info()
+        try:
+            info_docker = self.__docker.info()
+        except AttributeError:
+            return False  # __docker est None
+
         try:
             swarm_config = info_docker['Swarm']
             self.__logger.info("Information swarm docker %s" % json.dumps(swarm_config, indent=2))
@@ -133,7 +146,7 @@ class DockerHandler:
                 except APIError as e:
                     # Monter silencieusement, erreur habituelle
                     action.erreur(e)
-                except DockerException as e:
+                except DockerHandlerException as e:
                     try:
                         # Bubble up sans logging
                         action.erreur(e)
@@ -170,5 +183,5 @@ class DockerHandler:
         self.__action_pending.set()
 
 
-class DockerException(Exception):
+class DockerHandlerException(Exception):
     pass

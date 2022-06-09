@@ -134,7 +134,7 @@ class ConfigurationRedis:
         self.port = int(dict_params.get(Constantes.ENV_REDIS_PORT) or '6379')
         self.username = dict_params.get(Constantes.ENV_REDIS_USERNAME) or 'client_nodejs'
 
-        # Charger le mot de pass (mandatory)
+        # Charger le mot de passe (mandatory)
         try:
             self.password = dict_params[Constantes.ENV_REDIS_PASSWORD]
         except KeyError:

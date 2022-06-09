@@ -48,11 +48,11 @@ class PikaModule(MessagesModule):
 
         enveloppe_ca = EnveloppeCertificat.from_file(self.__pika_configuration.ca_pem_path)
 
-        validateur_certificats = ValidateurCertificatRedis(enveloppe_ca, configuration=env_configuration)
         try:
+            validateur_certificats = ValidateurCertificatRedis(enveloppe_ca, configuration=env_configuration)
             await validateur_certificats.entretien()  # Connecter redis
-        except ConnectionError:
-            self.__logger.warning("Erreur connexion a redis - fallback sur validateur avec cache memoire")
+        except (FileNotFoundError, ConnectionError):
+            self.__logger.warning("Erreur configuraiton ou connexion a redis - fallback sur validateur avec cache memoire")
             validateur_certificats = ValidateurCertificatCache(enveloppe_ca)
 
         validateur_messages = ValidateurMessage(validateur_certificats)
