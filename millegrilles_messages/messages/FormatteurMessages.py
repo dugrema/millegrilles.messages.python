@@ -11,6 +11,7 @@ from millegrilles_messages.messages import Constantes
 from millegrilles_messages.messages.Hachage import hacher
 from millegrilles_messages.messages.CleCertificat import CleCertificat
 from millegrilles_messages.messages.Encoders import DateFormatEncoder
+from millegrilles_messages.messages.EnveloppeCertificat import CertificatExpire
 
 VERSION_SIGNATURE = 2
 
@@ -29,6 +30,12 @@ class SignateurTransactionSimple:
         :param dict_message: Message a signer.
         :return: Nouvelle version du message, signee.
         """
+
+        # S'assurer que le certificat n'est pas expire
+        maintenant = datetime.datetime.now(tz=pytz.UTC)
+        expiration_certificat = self.__clecert.enveloppe.not_valid_after
+        if maintenant > expiration_certificat:
+            raise CertificatExpire()
 
         # Copier la base du message et l'en_tete puisqu'ils seront modifies
         dict_message_effectif = dict_message.copy()

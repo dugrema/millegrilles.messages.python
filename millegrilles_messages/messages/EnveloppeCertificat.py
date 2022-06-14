@@ -553,3 +553,7 @@ def preparer_chaine_certificats(pems: Union[str, bytes, list]):
 
 class IdmgInvalide(BaseException):
     pass
+
+
+class CertificatExpire(BaseException):
+    pass
