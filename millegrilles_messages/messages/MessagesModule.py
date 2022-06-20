@@ -429,10 +429,14 @@ class MessageProducerFormatteur(MessageProducer):
 
     async def executer_commande(self, commande: dict, domaine: str, action: str, exchange: str,
                                 partition: Optional[str] = None, version=1,
-                                reply_to=None, nowait=False) -> Optional[MessageWrapper]:
+                                reply_to=None, nowait=False, noformat=False) -> Optional[MessageWrapper]:
 
-        message, uuid_message = self.__formatteur_messages.signer_message(
-            commande, domaine, version, action=action, partition=partition)
+        if noformat is True:
+            message = commande
+            uuid_message = commande['en-tete']['uuid_transaction']
+        else:
+            message, uuid_message = self.__formatteur_messages.signer_message(
+                commande, domaine, version, action=action, partition=partition)
 
         correlation_id = str(uuid_message)
 
