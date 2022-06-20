@@ -334,7 +334,7 @@ class MessageProducer:
                                exchange: Optional[str] = None, correlation_id: str = None,
                                reply_to: str = None, timeout=ATTENTE_MESSAGE_DUREE):
         if reply_to is None:
-            reply_to = await  self.get_reply_q()
+            reply_to = await self.get_reply_q()
 
         if correlation_id is None:
             correlation_id = str(uuid4())

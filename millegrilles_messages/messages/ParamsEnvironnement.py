@@ -39,7 +39,7 @@ class ConfigurationPika:
     def __init__(self):
         self.hostname: Optional[str] = None
         self.port: Optional[int] = None
-        self.ca_pem_path: Optional[str] = None
+        self.ca_pem_path: str = '/var/opt/millegrilles/configuration/pki.millegrille.cert'
         self.cert_pem_path: Optional[str] = None
         self.key_pem_path: Optional[str] = None
 
@@ -74,7 +74,7 @@ class ConfigurationPika:
 
         self.hostname = dict_params.get(Constantes.ENV_MQ_HOSTNAME) or 'mq'
         self.port = int(dict_params.get(Constantes.ENV_MQ_PORT) or '5673')
-        self.ca_pem_path = dict_params[Constantes.ENV_CA_PEM]
+        self.ca_pem_path = dict_params.get(Constantes.ENV_CA_PEM) or self.ca_pem_path
         self.cert_pem_path = dict_params[Constantes.ENV_CERT_PEM]
         self.key_pem_path = dict_params[Constantes.ENV_KEY_PEM]
 

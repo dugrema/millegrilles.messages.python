@@ -48,10 +48,9 @@ async def run_tests(messages_thread, stop_event):
     await messages_thread.attendre_pret()
     logger.info("produire messages")
 
-    fingerprint = 'z2i3XjxFQTWsK71j7xk8KbNrVjZPvxZwKnETR6MC3MYtCeDQGdk'
+    fingerprint = 'z2i3XjxKWdNBTe1yCT5GVbZsA3p6caLtJjkt5BbMPQW8sYqtDQu'
     # fingerprint = 'z2i3XjxEqcTWSj5xiuEfCX4DMDB31U8ZvtPNqDrmRiteGDnjC1u'
 
-    reply_q = producer.get_reply_q()
     requete = {}
     reponse = await producer.executer_requete(requete, 'certificat', action=fingerprint,
                                               exchange=Constantes.SECURITE_PUBLIC)
