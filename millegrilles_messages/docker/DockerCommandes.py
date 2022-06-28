@@ -83,6 +83,7 @@ class CommandeMajService(CommandeDocker):
         service.update(**self.__config)
         self.callback(True)
 
+
 class CommandeDemarrerService(CommandeDocker):
 
     def __init__(self, nom_service: str, replicas=1, callback=None, aio=True):
