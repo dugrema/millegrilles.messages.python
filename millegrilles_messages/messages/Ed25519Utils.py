@@ -53,8 +53,8 @@ def dechiffrer_cle_ed25519(enveloppe, cle_secrete: Union[bytes, str]) -> str:
 
     if len(cle_secrete_bytes) == 32:
         # Le password est la cle derivee secrete du message (chiffree avec la cle de millegrille)
-        if isinstance(password, bytes):
-            password = password.decode('utf-8')
+        # if isinstance(password, bytes):
+        #     password = password.decode('utf-8')
         return password
 
     # Deriver le nonce a partir de la cle publique
