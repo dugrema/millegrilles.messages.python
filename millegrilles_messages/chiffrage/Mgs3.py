@@ -4,10 +4,12 @@ from typing import Optional, Union
 
 from Crypto.Cipher import ChaCha20_Poly1305
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
+from cryptography.hazmat.primitives import serialization
 
 from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
 from millegrilles_messages.messages.Hachage import hacher_to_digest
 from millegrilles_messages.chiffrage.ChiffrageUtils import generer_info_chiffrage
+from millegrilles_messages.messages.Hachage import Hacheur
 
 
 class CipherMgs3:
@@ -15,9 +17,12 @@ class CipherMgs3:
     def __init__(self, public_key: X25519PublicKey, header: Optional[bytes] = None):
         self.__cle_secrete: Optional[bytes] = None
         self.__tag: Optional[bytes] = None
-        self.__public_peer_x25519: Optional[bytes] = None
+        self.__public_peer_x25519: Optional[X25519PublicKey] = None
+        self.__hachage: Optional[str] = None
 
         self.__cipher = self.__generer_cipher(public_key)
+
+        self.__hacheur = Hacheur('blake2b-512', 'base58btc')
 
         if header is not None:
             self.__cipher.update(header)
@@ -46,18 +51,24 @@ class CipherMgs3:
         return self.__cipher.nonce
 
     def update(self, data: bytes) -> bytes:
-        return self.__cipher.encrypt(data)
+        data_out = self.__cipher.encrypt(data)
+        self.__hacheur.update(data_out)
+        return data_out
 
     def finalize(self) -> bytes:
         if self.__tag is not None:
             raise Exception('Already finalized')
 
         self.__tag = self.__cipher.digest()
+        self.__hachage = self.__hacheur.finalize()
 
         return self.__tag
 
-    def get_info_dechiffrage(self, enveloppes: list[EnveloppeCertificat]) -> dict:
-        return generer_info_chiffrage(enveloppes, self.__cle_secrete, self.nonce, self.__tag)
+    def get_info_dechiffrage(self, enveloppes: Optional[list[EnveloppeCertificat]] = None) -> dict:
+        key_x25519_public_bytes = self.__public_peer_x25519.public_bytes(
+            serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+        return generer_info_chiffrage(self.__cle_secrete, self.nonce, self.__tag, self.__hachage,
+                                      enveloppes, public_peer=key_x25519_public_bytes)
 
 
 class DecipherMgs3:
