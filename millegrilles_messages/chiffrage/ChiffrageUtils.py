@@ -53,8 +53,10 @@ def generer_info_chiffrage(cle_secrete: bytes, iv: bytes, tag: Optional[bytes],
 
     info = {
         'iv': iv_str,
-        'cles': cles,
     }
+
+    if len(cles) > 0:
+        info['cles'] = cles
 
     if tag_str is not None:
         info['tag'] = tag_str
