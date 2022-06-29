@@ -84,6 +84,17 @@ class DecipherMgs3:
         if header is not None:
             self.__decipher.update(header)
 
+    @staticmethod
+    def from_info(clecert, info_dechiffrage: dict):
+        iv = info_dechiffrage['iv']
+        tag = info_dechiffrage['tag']
+
+        # Dechiffrer cle
+        cle_chiffree = info_dechiffrage['cles'][clecert.enveloppe.fingerprint]
+        cle_secrete = clecert.dechiffrage_asymmetrique(cle_chiffree)
+
+        return DecipherMgs3(cle_secrete, iv, tag)
+
     def update(self, data: bytes) -> bytes:
         return self.__decipher.decrypt(data)
 

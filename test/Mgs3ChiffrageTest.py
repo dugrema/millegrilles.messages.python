@@ -21,15 +21,9 @@ async def test_chiffrage1():
 
     # Recuperer info dechiffrage
     info_dechiffrage = cipher.get_info_dechiffrage([clecert.enveloppe])
-    iv = info_dechiffrage['iv']
-    tag = info_dechiffrage['tag']
-
-    # Dechiffrer cle
-    cle_chiffree = info_dechiffrage['cles'][clecert.enveloppe.fingerprint]
-    cle_secrete = clecert.dechiffrage_asymmetrique(cle_chiffree)
 
     # Dechiffrer message
-    decipher = DecipherMgs3(cle_secrete, iv, tag)
+    decipher = DecipherMgs3.from_info(clecert, info_dechiffrage)
     data_dechiffre = decipher.update(data_chiffre)
     decipher.finalize()
 
