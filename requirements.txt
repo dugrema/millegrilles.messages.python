@@ -7,6 +7,7 @@ asyncio>=3.4.3,<4
 certifi>=2020.12.5
 certvalidator>=0.11.1
 cryptography>=37.0.2
+pycryptodome>=3.15.0<4
 base58>=2.0.1
 py-multihash>=2.0.1
 py-multibase>=1.0.3

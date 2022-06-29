@@ -1,5 +1,7 @@
 import multibase
 
+from typing import Union
+
 from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
 from cryptography.hazmat.primitives import serialization
@@ -32,10 +34,14 @@ def chiffrer_cle_ed25519(enveloppe, cle_secrete: bytes) -> str:
     return cle_str
 
 
-def dechiffrer_cle_ed25519(enveloppe, cle_secrete: str) -> str:
+def dechiffrer_cle_ed25519(enveloppe, cle_secrete: Union[bytes, str]) -> str:
     private_key: X25519PrivateKey = enveloppe.get_private_x25519()
 
-    cle_secrete_bytes = multibase.decode(cle_secrete.encode('utf-8'))
+    if isinstance(cle_secrete, str):
+        # cle_secrete_bytes = multibase.decode(cle_secrete.encode('utf-8'))
+        cle_secrete_bytes = multibase.decode(cle_secrete)
+    else:
+        cle_secrete_bytes = cle_secrete
 
     x25519_public_key = X25519PublicKey.from_public_bytes(cle_secrete_bytes[0:32])
     cle_chiffree_tag = cle_secrete_bytes[32:]

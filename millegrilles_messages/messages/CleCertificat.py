@@ -1,3 +1,5 @@
+import multibase
+
 from typing import Optional, Union
 
 from cryptography.hazmat.backends import default_backend
@@ -7,7 +9,7 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 from nacl.signing import SigningKey
 
 from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
-from millegrilles_messages.messages.Ed25519Utils import chiffrer_cle_ed25519
+from millegrilles_messages.messages.Ed25519Utils import chiffrer_cle_ed25519, dechiffrer_cle_ed25519
 
 
 class CleCertificat:
@@ -72,6 +74,11 @@ class CleCertificat:
         cle_asym = chiffrer_cle_ed25519(self, cle_secrete)
         fingerprint = self.fingerprint
         return cle_asym, fingerprint
+
+    def dechiffrage_asymmetrique(self, cle_chiffree: Union[bytes, str]):
+        if isinstance(cle_chiffree, str):
+            cle_chiffree = multibase.decode(cle_chiffree)
+        return dechiffrer_cle_ed25519(self, cle_chiffree)
 
     def signer(self, message_bytes: bytes):
         signature = self.__private_key.sign(message_bytes)
