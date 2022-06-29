@@ -3,7 +3,7 @@ from setuptools import setup
 
 setup(
     name='millegrilles_messages',
-    version='2022.3.2',
+    version='2022.4.0',
     packages=setuptools.find_packages(),
     url='https://github.com/dugrema/millegrilles.messages.python',
     license='AFFERO',
@@ -18,6 +18,7 @@ setup(
         'certifi>=2020.12.5',
         'certvalidator>=0.11.1',
         'cryptography>=37.0.2',
+        'pycryptodome>=3.15.0<4',
         'base58>=2.0.1',
         'py-multihash>=2.0.1',
         'py-multibase>=1.0.3',
