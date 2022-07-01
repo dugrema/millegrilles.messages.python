@@ -244,6 +244,7 @@ class RestaurateurTransactions:
                     self.__logger.exception("Erreur dechiffrage fichier %s" % nom_fichier)
 
         for domaine in domaines:
+            self.__logger.info("Regenerer domaine %s" % domaine)
             commande = {'domaine': domaine}
             await producer.executer_commande(commande,
                                              domaine=domaine, action='regenerer',
