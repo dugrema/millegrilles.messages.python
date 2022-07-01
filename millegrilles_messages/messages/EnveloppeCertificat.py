@@ -26,6 +26,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa, ed25519
 from nacl.signing import VerifyKey
 
 from millegrilles_messages.messages.Hachage import hacher, map_code_to_hashes
+from millegrilles_messages.messages.Ed25519Utils import chiffrer_cle_ed25519
 
 BEGIN_CERTIFICATE = '-----BEGIN CERTIFICATE-----'
 END_CERTIFICATE = '-----END CERTIFICATE-----'
@@ -333,6 +334,11 @@ class EnveloppeCertificat:
         x25519_public_key = X25519PublicKey.from_public_bytes(cle_nacl_verifykey.encode())
 
         return x25519_public_key
+
+    def chiffrage_asymmetrique(self, cle_secrete):
+        cle_asym = chiffrer_cle_ed25519(self, cle_secrete)
+        fingerprint = self.fingerprint
+        return cle_asym, fingerprint
 
     def is_rsa(self):
         public_key = self.__certificat.public_key()

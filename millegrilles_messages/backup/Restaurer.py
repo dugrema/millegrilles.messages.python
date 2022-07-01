@@ -61,8 +61,9 @@ class RestaurateurArchives:
         self.__validateur_certificats = ValidateurCertificatCache(self.__enveloppe_ca)
         self.__validateur_messages = ValidateurMessage(self.__validateur_certificats)
 
-    async def preparer_mq(self):
-        self.__restaurateur_transactions = RestaurateurTransactions(self.__config, self.__clecert_ca, self.__work_path)
+    async def preparer_mq(self, rechiffrer: bool):
+        self.__restaurateur_transactions = RestaurateurTransactions(self.__config, self.__clecert_ca, self.__work_path,
+                                                                    rechiffrer=rechiffrer)
         await self.__restaurateur_transactions.preparer()
 
     async def run(self):
@@ -126,14 +127,16 @@ class RestaurateurArchives:
 
 class RestaurateurTransactions:
 
-    def __init__(self, config: ConfigurationBackup, clecert_ca: CleCertificat, work_path: str):
+    def __init__(self, config: ConfigurationBackup, clecert_ca: CleCertificat, work_path: str, rechiffrer: bool):
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__config = config
         self.__clecert_ca = clecert_ca
         self.__work_path = work_path
+        self.__rechiffrer = rechiffrer
         self.__stop_event: Optional[asyncio.Event] = None
         self.__liste_complete_event: Optional[asyncio.Event] = None
         self.__messages_thread: Optional[MessagesThread] = None
+        self.__certificats_rechiffrage: Optional[list[EnveloppeCertificat]] = None
 
         self.__path_fichier_archives = path.join(work_path, 'liste.txt')
         self.__fp_fichiers_archive = None
@@ -198,6 +201,17 @@ class RestaurateurTransactions:
         self.__logger.info("Attendre MQ")
         await self.__messages_thread.attendre_pret()
         self.__logger.info("MQ pret")
+
+        if self.__rechiffrer is True:
+            self.__logger.info("Recuperer certificats maitre des cles")
+            producer = self.__messages_thread.get_producer()
+            cert = await asyncio.wait_for(producer.executer_requete(
+                dict(), domaine='MaitreDesCles', action='certMaitreDesCles', exchange=Constantes.SECURITE_PRIVE), 10)
+            cert_pem = ''.join(cert.parsed['certificat'])
+            certificat_rechiffrage = EnveloppeCertificat.from_pem(cert_pem)
+            if 'maitredescles' not in certificat_rechiffrage.get_roles:
+                raise ValueError('Mauvais certificat de rechiffrage recu - doit avoir role maitredescles')
+            self.__certificats_rechiffrage = [certificat_rechiffrage]
 
         await self.recuperer_liste_fichiers()
 
@@ -274,6 +288,40 @@ class RestaurateurTransactions:
                                              domaine=domaine, action='restaurerTransaction',
                                              exchange=Constantes.SECURITE_PROTEGE, nowait=True)
 
+            try:
+                action = transaction['en-tete']['action']
+            except KeyError:
+                pass  # OK, pas d'action
+            else:
+                if self.__certificats_rechiffrage is not None and domaine == 'MaitreDesCles' and action == 'cle':
+                    self.__logger.info("Rechiffrer cle")
+                    await self.rechiffrer_transaction_maitredescles(producer, transaction)
+
+    async def rechiffrer_transaction_maitredescles(self, producer, transaction: dict):
+        cle_originale = transaction['cle']
+        cle_dechiffree = self.__clecert_ca.dechiffrage_asymmetrique(cle_originale)
+        cles_rechiffrees = {
+            self.__clecert_ca.fingerprint: cle_originale  # Injecter cle CA
+        }
+        partition = None
+        for cert in self.__certificats_rechiffrage:
+            cle_rechiffree, fp = cert.chiffrage_asymmetrique(cle_dechiffree)
+            cles_rechiffrees[fp] = cle_rechiffree
+            partition = fp
+
+        champs = ['iv', 'format', 'tag', 'hachage_bytes', 'domaine', 'identificateurs_document']
+        commande_rechiffree = {
+            'cles': cles_rechiffrees,
+        }
+        for champ in champs:
+            try:
+                commande_rechiffree[champ] = transaction[champ]
+            except KeyError:
+                pass  # OK, champs optionnel
+
+        await producer.executer_commande(commande_rechiffree, domaine='MaitreDesCles', action='sauvegarderCle',
+                                         partition=partition, exchange=Constantes.SECURITE_PRIVE)
+
     def extraire_transactions(self, data: str, decipher: DecipherMgs3):
         data = multibase.decode(data)  # Base 64 decode
         data = decipher.update(data)   # Dechiffrer
@@ -329,7 +377,7 @@ def charger_cle_ca(path_cle_ca: str) -> CleCertificat:
     return clecert
 
 
-async def main(archive: str, work_path: str, path_cle_ca: str, transactions: bool):
+async def main(archive: str, work_path: str, path_cle_ca: str, transactions: bool, rechiffrer: bool):
     config = dict()
 
     try:
@@ -341,7 +389,7 @@ async def main(archive: str, work_path: str, path_cle_ca: str, transactions: boo
     extracteur = RestaurateurArchives(config, archive, transactions, work_path, clecert)
 
     extracteur.preparer_dechiffrage()
-    if transactions is True:
-        await extracteur.preparer_mq()
+    if transactions is True or rechiffrer is True:
+        await extracteur.preparer_mq(rechiffrer=rechiffrer)
 
     await extracteur.run()

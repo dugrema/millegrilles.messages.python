@@ -31,6 +31,8 @@ def parse() -> argparse.Namespace:
                                      help='Path/URL de travail pour l''extraction')
     subparser_restaurer.add_argument('--archive', required=False, help='Path/URL de fichier d''archive')
     subparser_restaurer.add_argument('--transactions', action='store_true', required=False, help='Restaurer les transactions avec MQ')
+    subparser_restaurer.add_argument('--rechiffrer', action='store_true', required=False,
+                                     help='Rechiffrer domaine MaitreDesCles')
 
     args = parser.parse_args()
     adjust_logging(args)
@@ -51,7 +53,8 @@ async def demarrer(args: argparse.Namespace):
     if command == 'backup':
         await backup_main(args.source, args.dest, args.ca)
     elif command == 'restaurer':
-        await restaurer_main(args.archive, args.workpath, args.cleca, args.transactions)
+        await restaurer_main(args.archive, args.workpath, args.cleca,
+                             transactions=args.transactions, rechiffrer=args.rechiffrer)
     else:
         raise ValueError('non supporte')
 
