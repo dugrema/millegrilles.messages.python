@@ -1,8 +1,9 @@
 import base64
+import docker
 import json
 import logging
 
-from typing import Union
+from typing import Optional, Union
 
 from docker import DockerClient
 from docker.errors import APIError, NotFound
@@ -553,6 +554,43 @@ class CommandeGetConfigurationsDatees(CommandeDocker):
                     dict_date[key_param] = {'name': v['name'], 'id': v['id']}
             except KeyError:
                 pass  # Pas un certificat
+
+    async def get_resultat(self) -> dict:
+        resultat = await self.attendre()
+        return resultat['args'][0]
+
+
+class CommandeRunContainer(CommandeDocker):
+    """
+    Run une image dans un nouveau container
+    """
+
+    def __init__(self, image: str, command: Optional[str] = None, environment: Optional[dict] = None, mounts: Optional[list[docker.types.Mount]] = None):
+        super().__init__(callback=None, aio=True)
+        self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
+        self.__image = image
+        self.__command = command
+        self.__environment = environment
+        self.__mounts = mounts
+
+        self.facteur_throttle = 1.0
+
+    def ajouter_mount(self, source: str, target: str, mount_type='volume', read_only=False):
+        if self.__mounts is None:
+            self.__mounts = list()
+        mount = docker.types.Mount(target, source, type=mount_type, read_only=read_only)
+        self.__mounts.append(mount)
+
+    def executer(self, docker_client: DockerClient, attendre=True):
+        params = {
+            'environment': self.__environment,
+            'mounts': self.__mounts,
+            'network': 'millegrille_net',
+            'auto_remove': True,
+        }
+        self.__logger.debug("Run %s %s" % (self.__image, self.__command))
+        resultat = docker_client.containers.run(self.__image, command=self.__command, stdout=True, stderr=True, **params)
+        self.callback(resultat)
 
     async def get_resultat(self) -> dict:
         resultat = await self.attendre()
