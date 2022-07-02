@@ -4,6 +4,7 @@ import logging
 
 from millegrilles_messages.backup.Backup import main as backup_main
 from millegrilles_messages.backup.Restaurer import main as restaurer_main
+from millegrilles_messages.backup.DemarrerBackup import main as demarrer_backup
 
 
 def parse() -> argparse.Namespace:
@@ -14,6 +15,11 @@ def parse() -> argparse.Namespace:
     )
 
     subparsers = parser.add_subparsers(dest='command', required=True, help="Commandes")
+
+    # Demarrer un backup de transactions
+    subparser_demarrer = subparsers.add_parser('demarrer', help='Declencher un backup de transactions')
+    subparser_demarrer.add_argument('--complet', action='store_true', required=False,
+                                    help='Repertoire source du backup')
 
     # Subparser backup
     subparser_backup = subparsers.add_parser('backup', help='Backup de fichiers')
@@ -50,7 +56,9 @@ def adjust_logging(args: argparse.Namespace):
 async def demarrer(args: argparse.Namespace):
     command = args.command
 
-    if command == 'backup':
+    if command == 'demarrer':
+        await demarrer_backup(args.complet)
+    elif command == 'backup':
         await backup_main(args.source, args.dest, args.ca)
     elif command == 'restaurer':
         await restaurer_main(args.archive, args.workpath, args.cleca,
