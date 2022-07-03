@@ -5,6 +5,7 @@ import logging
 from millegrilles_messages.backup.Backup import main as backup_main
 from millegrilles_messages.backup.Restaurer import main as restaurer_main
 from millegrilles_messages.backup.DemarrerBackup import main as demarrer_backup
+from millegrilles_messages.backup.Verifier import main as verifier_main
 
 
 def parse() -> argparse.Namespace:
@@ -44,6 +45,10 @@ def parse() -> argparse.Namespace:
     subparser_restaurer.add_argument('--rechiffrer', action='store_true', required=False,
                                      help='Rechiffrer domaine MaitreDesCles')
 
+    subparser_demarrer = subparsers.add_parser('verifier', help='Verifier fichiers')
+    subparser_demarrer.add_argument('--repertoire', type=str, required=False,
+                                    help='Repertoire avec les fichiers a verifier')
+
     args = parser.parse_args()
     adjust_logging(args)
 
@@ -67,6 +72,8 @@ async def demarrer(args: argparse.Namespace):
     elif command == 'restaurer':
         await restaurer_main(args.archive, args.workpath, args.cleca,
                              transactions=args.transactions, rechiffrer=args.rechiffrer)
+    elif command == 'verifier':
+        await verifier_main(args.repertoire)
     else:
         raise ValueError('non supporte')
 
