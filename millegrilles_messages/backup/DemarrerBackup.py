@@ -24,10 +24,12 @@ from millegrilles_messages.messages.MessagesModule import RessourcesConsommation
 
 class DemarreurBackup:
 
-    def __init__(self, config: dict, complet: bool):
+    def __init__(self, config: dict, backup: bool, complet: bool, regenerer: str):
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__config = ConfigurationBackup()
+        self.__backup = backup
         self.__complet = complet
+        self.__regenerer = regenerer
 
         self.__messages_thread: Optional[MessagesThread] = None
         self.__demarrage_confirme: Optional[asyncio.Event()] = None
@@ -79,22 +81,37 @@ class DemarreurBackup:
         self.__logger.info("Attente connexion MQ")
         await self.__messages_thread.attendre_pret(10)
 
-        action = 'demarrerBackupTransactions'
-        commande = {'complet': self.__complet}
-        producer = self.__messages_thread.get_producer()
-        self.__logger.info("Transmettre commande backup")
-        reponse = await producer.executer_commande(commande, 'fichiers', action=action,
-                                                   exchange=Constantes.SECURITE_PRIVE)
+        if self.__backup:
+            action = 'demarrerBackupTransactions'
+            commande = {'complet': self.__complet}
+            producer = self.__messages_thread.get_producer()
+            self.__logger.info("Transmettre commande backup")
+            reponse = await producer.executer_commande(commande, 'fichiers', action=action,
+                                                       exchange=Constantes.SECURITE_PRIVE)
 
-        if reponse.parsed.get('ok'):
-            self.__logger.info("BACKUP DEMARRE (OK) ")
-        else:
-            self.__logger.error("ERREUR : Reponse : %s" % reponse.parsed.get('err'))
+            if reponse.parsed.get('ok'):
+                self.__logger.info("BACKUP DEMARRE (OK) ")
+            else:
+                self.__logger.error("ERREUR : Reponse : %s" % reponse.parsed.get('err'))
+
+        if self.__regenerer:
+            action = 'regenerer'
+            domaine = self.__regenerer
+            commande = {}
+            producer = self.__messages_thread.get_producer()
+            self.__logger.info("Transmettre commande backup")
+            reponse = await producer.executer_commande(commande, domaine, action=action,
+                                                       exchange=Constantes.SECURITE_PROTEGE)
+
+            if reponse.parsed.get('ok'):
+                self.__logger.info("REGENERATION DEMARREE (OK) ")
+            else:
+                self.__logger.error("ERREUR : Reponse : %s" % reponse.parsed.get('err'))
 
 
-async def main(complet: bool):
+async def main(backup: bool, complet: bool, regenerer: str):
     config = dict()
 
-    demarreur = DemarreurBackup(config, complet)
+    demarreur = DemarreurBackup(config, backup, complet, regenerer)
     await demarreur.preparer()
     await demarreur.run()

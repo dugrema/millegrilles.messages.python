@@ -17,9 +17,13 @@ def parse() -> argparse.Namespace:
     subparsers = parser.add_subparsers(dest='command', required=True, help="Commandes")
 
     # Demarrer un backup de transactions
-    subparser_demarrer = subparsers.add_parser('demarrer', help='Declencher un backup de transactions')
+    subparser_demarrer = subparsers.add_parser('demarrer', help='Declencher un processus')
+    subparser_demarrer.add_argument('--backup', action='store_true', required=False,
+                                    help='Emet un trigger de backup')
     subparser_demarrer.add_argument('--complet', action='store_true', required=False,
-                                    help='Repertoire source du backup')
+                                    help='Force backup complet (avec rotation des archives)')
+    subparser_demarrer.add_argument('--regenerer', type=str, required=False,
+                                    help='Regenerer le domaine specifie (e.g. GrosFichiers)')
 
     # Subparser backup
     subparser_backup = subparsers.add_parser('backup', help='Backup de fichiers')
@@ -57,7 +61,7 @@ async def demarrer(args: argparse.Namespace):
     command = args.command
 
     if command == 'demarrer':
-        await demarrer_backup(args.complet)
+        await demarrer_backup(args.backup, args.complet, args.regenerer)
     elif command == 'backup':
         await backup_main(args.source, args.dest, args.ca)
     elif command == 'restaurer':

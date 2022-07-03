@@ -225,9 +225,11 @@ class RestaurateurTransactions:
             exchange=Constantes.SECURITE_PRIVE,
             nowait=True)
 
-        await asyncio.wait_for(self.__liste_complete_event.wait(), 5)
+        self.__logger.info("Attente de la liste de fichiers a restaurer")
+        await asyncio.wait_for(self.__liste_complete_event.wait(), 300)
         self.__fp_fichiers_archive.close()
         self.__fp_fichiers_archive = None
+        self.__logger.info("Liste de fichiers recue")
 
         await self.traiter_transactions()
 
