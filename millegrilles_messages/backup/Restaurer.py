@@ -165,7 +165,7 @@ class RestaurateurTransactions:
         self.__messages_thread = messages_thread
 
     async def traiter_reponse(self, message, module_messages: MessagesThread):
-        self.__logger.info("Message recu : %s" % json.dumps(message.parsed, indent=2))
+        self.__logger.debug("Message recu : %s" % json.dumps(message.parsed, indent=2))
 
         message_parsed = message.parsed
 
@@ -241,7 +241,7 @@ class RestaurateurTransactions:
     async def traiter_transactions(self):
         producer = self.__messages_thread.get_producer()
 
-        domaines = set()
+        domaines = dict()
         with open(self.__path_fichier_archives, 'r') as fichier:
             for ligne_fichier in fichier:
                 self.__logger.debug("Traiter %s" % ligne_fichier)
@@ -258,14 +258,23 @@ class RestaurateurTransactions:
                                                            action='getBackupTransaction', exchange='2.prive')
                 transaction_backup = resultat.parsed['backup']
                 try:
-                    domaines.add(transaction_backup['domaine'])
+                    domaine = transaction_backup['domaine']
                 except KeyError:
                     self.__logger.error("Transaction %s n'a pas de champ domaine - ** SKIP **" % nom_fichier)
                     continue
 
-                self.__logger.debug("Fichier transaction %s" % nom_fichier)
                 try:
-                    await self.traiter_transactions_fichier(transaction_backup)
+                    meta_domaine = domaines[domaine]
+                except KeyError:
+                    meta_domaine = {'transactions': 0, 'fichiers': list()}
+                    domaines[domaine] = meta_domaine
+
+                self.__logger.debug("Fichier transaction %s" % nom_fichier)
+                meta_domaine['fichiers'].append(nom_fichier)
+
+                try:
+                    meta_traitement = await self.traiter_transactions_fichier(transaction_backup)
+                    meta_domaine['transactions'] = meta_domaine['transactions'] + meta_traitement['nb_transactions_traitees']
                 except ValueError:
                     self.__logger.exception("Erreur dechiffrage fichier %s" % nom_fichier)
 
@@ -275,15 +284,21 @@ class RestaurateurTransactions:
                     except asyncio.TimeoutError:
                         pass
 
-        for domaine in domaines:
+        self.__logger.info(" ** INFO RESTAURATION DOMAINES ** ")
+        for nom_domaine, meta_domaine in domaines.items():
+            # Rapport restauration pour domaine
+            self.__logger.info("Domaine %s : %s transactions" % (nom_domaine, meta_domaine['transactions']))
+
             self.__logger.info("Regenerer domaine %s" % domaine)
-            commande = {'domaine': domaine}
+            commande = {'domaine': nom_domaine}
             await producer.executer_commande(commande,
-                                             domaine=domaine, action='regenerer',
+                                             domaine=nom_domaine, action='regenerer',
                                              exchange=Constantes.SECURITE_PROTEGE, nowait=True)
 
-    async def traiter_transactions_fichier(self, backup: dict):
+    async def traiter_transactions_fichier(self, backup: dict) -> dict:
         domaine = backup['domaine']
+        nombre_transactions_catalogue = backup['nombre_transactions']
+        info_meta = {'domaine': domaine, 'nb_transactions_catalogue': nombre_transactions_catalogue}
 
         # Dechiffrer cle
         cle_dechiffree = self.__clecert_ca.dechiffrage_asymmetrique(backup['cle'])
@@ -294,8 +309,12 @@ class RestaurateurTransactions:
         # Dechiffrer transactions
         data_transactions = await asyncio.to_thread(self.extraire_transactions, backup['data_transactions'], decipher)
 
+        self.__logger.info("%s restaurer %d transactions" % (domaine, nombre_transactions_catalogue))
+
         producer = self.__messages_thread.get_producer()
+        compteur_transactions = 0
         for transaction in data_transactions:
+            compteur_transactions = compteur_transactions + 1
             fingerprint = transaction['en-tete']['fingerprint_certificat']
             certificat = certificats[fingerprint]
             transaction['_certificat'] = certificat
@@ -314,6 +333,13 @@ class RestaurateurTransactions:
                 if self.__certificats_rechiffrage is not None and domaine == 'MaitreDesCles' and action == 'cle':
                     self.__logger.info("Rechiffrer cle")
                     await self.rechiffrer_transaction_maitredescles(producer, transaction)
+
+        info_meta['nb_transactions_traitees'] = compteur_transactions
+
+        if compteur_transactions != nombre_transactions_catalogue:
+            self.__logger.warning("%s nombre transactions restaurees (%d) mismatch catalogue (%d)" % (compteur_transactions, nombre_transactions_catalogue))
+
+        return info_meta
 
     async def rechiffrer_transaction_maitredescles(self, producer, transaction: dict):
         cle_originale = transaction['cle']

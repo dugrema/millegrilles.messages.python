@@ -371,6 +371,8 @@ class MessageProducer:
                 self.__logger.debug("Wake up producer")
 
                 self.__event_message.clear()  # Reset flag
+        except asyncio.CancelledError:
+            self.__logger.debug("Arret producer (cancelled)")
         except:
             self.__logger.exception("Erreur traitement, producer arrete")
 

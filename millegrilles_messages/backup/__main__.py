@@ -60,10 +60,16 @@ def parse() -> argparse.Namespace:
 
 
 def adjust_logging(args: argparse.Namespace):
+
+    logging_level = logging.INFO
+
     if args.verbose is True:
-        loggers = [__name__, 'millegrilles_messages']
-        for log in loggers:
-            logging.getLogger(log).setLevel(logging.DEBUG)
+        logging_level = logging.DEBUG
+        logging.getLogger('millegrilles_messages').setLevel(logging_level)
+
+    loggers = [__name__, 'millegrilles_messages.backup']
+    for log in loggers:
+        logging.getLogger(log).setLevel(logging_level)
 
 
 async def demarrer(args: argparse.Namespace):
