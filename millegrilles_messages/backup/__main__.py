@@ -44,6 +44,10 @@ def parse() -> argparse.Namespace:
     subparser_restaurer.add_argument('--transactions', action='store_true', required=False, help='Restaurer les transactions avec MQ')
     subparser_restaurer.add_argument('--rechiffrer', action='store_true', required=False,
                                      help='Rechiffrer domaine MaitreDesCles')
+    subparser_restaurer.add_argument('--domaine', type=str, required=False,
+                                     help='Restaurer le domaine specifie (e.g. GrosFichiers)')
+    subparser_restaurer.add_argument('--delai', type=int, required=False,
+                                     help='Delai en secondes entre archives (tweak)')
 
     subparser_demarrer = subparsers.add_parser('verifier', help='Verifier fichiers')
     subparser_demarrer.add_argument('--repertoire', type=str, required=False,
@@ -71,7 +75,8 @@ async def demarrer(args: argparse.Namespace):
         await backup_main(args.source, args.dest, args.ca)
     elif command == 'restaurer':
         await restaurer_main(args.archive, args.workpath, args.cleca,
-                             transactions=args.transactions, rechiffrer=args.rechiffrer)
+                             transactions=args.transactions, rechiffrer=args.rechiffrer,
+                             domaine=args.domaine, delai=args.delai)
     elif command == 'verifier':
         await verifier_main(args.repertoire)
     else:

@@ -28,13 +28,15 @@ TAILLE_BUFFER = 32 * 1204
 
 class RestaurateurArchives:
 
-    def __init__(self, config: dict, archive: str, transactions: bool, work_path: str, clecert_ca: CleCertificat):
+    def __init__(self, config: dict, archive: str, transactions: bool, work_path: str, clecert_ca: CleCertificat, domaine: Optional[str], delai: Optional[int]):
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__config = ConfigurationBackup()
         self.__archive = archive
         self.__transactions = transactions
         self.__work_path = work_path
         self.__clecert_ca = clecert_ca
+        self.__domaine = domaine
+        self.__delai = delai
 
         self.__enveloppe_ca: Optional[EnveloppeCertificat] = None
         self.__formatteur: Optional[FormatteurMessageMilleGrilles] = None
@@ -63,7 +65,8 @@ class RestaurateurArchives:
 
     async def preparer_mq(self, rechiffrer: bool):
         self.__restaurateur_transactions = RestaurateurTransactions(self.__config, self.__clecert_ca, self.__work_path,
-                                                                    rechiffrer=rechiffrer)
+                                                                    rechiffrer=rechiffrer, domaine=self.__domaine,
+                                                                    delai=self.__delai)
         await self.__restaurateur_transactions.preparer()
 
     async def run(self):
@@ -127,7 +130,7 @@ class RestaurateurArchives:
 
 class RestaurateurTransactions:
 
-    def __init__(self, config: ConfigurationBackup, clecert_ca: CleCertificat, work_path: str, rechiffrer: bool):
+    def __init__(self, config: ConfigurationBackup, clecert_ca: CleCertificat, work_path: str, rechiffrer: bool, domaine: Optional[str], delai: Optional[int]):
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__config = config
         self.__clecert_ca = clecert_ca
@@ -137,6 +140,8 @@ class RestaurateurTransactions:
         self.__liste_complete_event: Optional[asyncio.Event] = None
         self.__messages_thread: Optional[MessagesThread] = None
         self.__certificats_rechiffrage: Optional[list[EnveloppeCertificat]] = None
+        self.__domaine = domaine
+        self.__delai = delai
 
         self.__path_fichier_archives = path.join(work_path, 'liste.txt')
         self.__fp_fichiers_archive = None
@@ -242,6 +247,11 @@ class RestaurateurTransactions:
                 self.__logger.debug("Traiter %s" % ligne_fichier)
                 nom_fichier = ligne_fichier.strip()
 
+                if self.__domaine is not None:
+                    domaine_fichier = nom_fichier.split('/')[0]
+                    if self.__domaine != domaine_fichier:
+                        continue  # Skip, mauvais domaine
+
                 # Bounce la requete de fichier de backup
                 requete = {'fichierBackup': nom_fichier}
                 resultat = await producer.executer_requete(requete, domaine='fichiers',
@@ -258,6 +268,12 @@ class RestaurateurTransactions:
                     await self.traiter_transactions_fichier(transaction_backup)
                 except ValueError:
                     self.__logger.exception("Erreur dechiffrage fichier %s" % nom_fichier)
+
+                if self.__delai is not None:
+                    try:
+                        await asyncio.sleep(self.__delai)
+                    except asyncio.TimeoutError:
+                        pass
 
         for domaine in domaines:
             self.__logger.info("Regenerer domaine %s" % domaine)
@@ -379,7 +395,7 @@ def charger_cle_ca(path_cle_ca: str) -> CleCertificat:
     return clecert
 
 
-async def main(archive: str, work_path: str, path_cle_ca: str, transactions: bool, rechiffrer: bool):
+async def main(archive: str, work_path: str, path_cle_ca: str, transactions: bool, rechiffrer: bool, domaine: Optional[str], delai: Optional[int]):
     config = dict()
 
     try:
@@ -388,7 +404,7 @@ async def main(archive: str, work_path: str, path_cle_ca: str, transactions: boo
         print("Erreur de chargement de la cle de MilleGrille")
         return exit(1)
 
-    extracteur = RestaurateurArchives(config, archive, transactions, work_path, clecert)
+    extracteur = RestaurateurArchives(config, archive, transactions, work_path, clecert, domaine, delai)
 
     extracteur.preparer_dechiffrage()
     if transactions is True or rechiffrer is True:
