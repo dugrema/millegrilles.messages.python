@@ -339,12 +339,12 @@ class RestaurateurTransactions:
                 certificat = certificats[fingerprint]
                 transaction['_certificat'] = certificat
 
-                # enveloppe_transaction = {'transaction': transaction, 'ack': not sync_traitement}
-                enveloppe_transaction = {'transaction': transaction}
+                enveloppe_transaction = {'transaction': transaction, 'ack': sync_traitement}
+                # enveloppe_transaction = {'transaction': transaction}
 
                 await producer.executer_commande(enveloppe_transaction,
                                                  domaine=domaine, action='restaurerTransaction',
-                                                 exchange=Constantes.SECURITE_PROTEGE, nowait=True)
+                                                 exchange=Constantes.SECURITE_PROTEGE, nowait=not sync_traitement)
 
         info_meta['nb_transactions_traitees'] = compteur_transactions
 
