@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import getpass
 import logging
 import json
@@ -9,6 +10,8 @@ import tarfile
 
 from os import path, makedirs, unlink
 from typing import Optional
+
+import pytz
 
 from millegrilles_messages.backup.Configuration import ConfigurationBackup
 from millegrilles_messages.messages import Constantes
@@ -309,7 +312,9 @@ class RestaurateurTransactions:
         # Dechiffrer transactions
         data_transactions = await asyncio.to_thread(self.extraire_transactions, backup['data_transactions'], decipher)
 
-        self.__logger.info("%s restaurer %d transactions" % (domaine, nombre_transactions_catalogue))
+        if self.__logger.isEnabledFor(logging.INFO):
+            date_backup = datetime.datetime.fromtimestamp(backup['date_transactions_debut'], tz=pytz.UTC)
+            self.__logger.info("%s (%s) restaurer %d transactions" % (domaine, date_backup, nombre_transactions_catalogue))
 
         producer = self.__messages_thread.get_producer()
         compteur_transactions = 0
@@ -331,7 +336,7 @@ class RestaurateurTransactions:
                 pass  # OK, pas d'action
             else:
                 if self.__certificats_rechiffrage is not None and domaine == 'MaitreDesCles' and action == 'cle':
-                    self.__logger.info("Rechiffrer cle")
+                    # self.__logger.info("Rechiffrer cle")
                     await self.rechiffrer_transaction_maitredescles(producer, transaction)
 
         info_meta['nb_transactions_traitees'] = compteur_transactions
