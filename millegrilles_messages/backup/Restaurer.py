@@ -344,7 +344,8 @@ class RestaurateurTransactions:
 
                 await producer.executer_commande(enveloppe_transaction,
                                                  domaine=domaine, action='restaurerTransaction',
-                                                 exchange=Constantes.SECURITE_PROTEGE, nowait=not sync_traitement)
+                                                 exchange=Constantes.SECURITE_PROTEGE, nowait=not sync_traitement,
+                                                 timeout=120)
 
         info_meta['nb_transactions_traitees'] = compteur_transactions
 
@@ -376,7 +377,8 @@ class RestaurateurTransactions:
                 pass  # OK, champs optionnel
 
         await producer.executer_commande(commande_rechiffree, domaine='MaitreDesCles', action='sauvegarderCle',
-                                         partition=partition, exchange=Constantes.SECURITE_PRIVE, nowait=nowait)
+                                         partition=partition, exchange=Constantes.SECURITE_PRIVE, nowait=nowait,
+                                         timeout=120)
 
     def extraire_transactions(self, data: str, decipher: DecipherMgs3):
         data = multibase.decode(data)  # Base 64 decode

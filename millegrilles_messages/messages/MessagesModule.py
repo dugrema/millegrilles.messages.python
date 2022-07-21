@@ -431,7 +431,7 @@ class MessageProducerFormatteur(MessageProducer):
 
     async def executer_commande(self, commande: dict, domaine: str, action: str, exchange: str,
                                 partition: Optional[str] = None, version=1,
-                                reply_to=None, nowait=False, noformat=False) -> Optional[MessageWrapper]:
+                                reply_to=None, nowait=False, noformat=False, timeout=15) -> Optional[MessageWrapper]:
 
         if noformat is True:
             message = commande
@@ -453,7 +453,8 @@ class MessageProducerFormatteur(MessageProducer):
             await self.emettre(message_bytes, '.'.join(rk), exchanges=exchange, correlation_id=correlation_id)
         else:
             reponse = await self.emettre_attendre(message_bytes, '.'.join(rk),
-                                                  exchange=exchange, correlation_id=correlation_id, reply_to=reply_to)
+                                                  exchange=exchange, correlation_id=correlation_id, reply_to=reply_to,
+                                                  timeout=timeout)
             return reponse
 
     async def executer_requete(self, requete: dict, domaine: str, action: str, exchange: str,
