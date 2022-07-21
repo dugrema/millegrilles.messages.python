@@ -321,15 +321,10 @@ class RestaurateurTransactions:
         for transaction in data_transactions:
             compteur_transactions = compteur_transactions + 1
             fingerprint = transaction['en-tete']['fingerprint_certificat']
-            certificat = certificats[fingerprint]
-            transaction['_certificat'] = certificat
 
-            enveloppe_transaction = {'transaction': transaction}
+            sync_traitement = compteur_transactions % 200 == 0
 
-            await producer.executer_commande(enveloppe_transaction,
-                                             domaine=domaine, action='restaurerTransaction',
-                                             exchange=Constantes.SECURITE_PROTEGE, nowait=True)
-
+            bypass_transaction = False
             try:
                 action = transaction['en-tete']['action']
             except KeyError:
@@ -337,16 +332,28 @@ class RestaurateurTransactions:
             else:
                 if self.__certificats_rechiffrage is not None and domaine == 'MaitreDesCles' and action == 'cle':
                     # self.__logger.info("Rechiffrer cle")
-                    await self.rechiffrer_transaction_maitredescles(producer, transaction)
+                    bypass_transaction = True
+                    await self.rechiffrer_transaction_maitredescles(producer, transaction, not sync_traitement)
+
+            if bypass_transaction is False:
+                certificat = certificats[fingerprint]
+                transaction['_certificat'] = certificat
+
+                # enveloppe_transaction = {'transaction': transaction, 'ack': not sync_traitement}
+                enveloppe_transaction = {'transaction': transaction}
+
+                await producer.executer_commande(enveloppe_transaction,
+                                                 domaine=domaine, action='restaurerTransaction',
+                                                 exchange=Constantes.SECURITE_PROTEGE, nowait=True)
 
         info_meta['nb_transactions_traitees'] = compteur_transactions
 
         if compteur_transactions != nombre_transactions_catalogue:
-            self.__logger.warning("%s nombre transactions restaurees (%d) mismatch catalogue (%d)" % (compteur_transactions, nombre_transactions_catalogue))
+            self.__logger.warning("%s nombre transactions restaurees (%d) mismatch catalogue" % (compteur_transactions, nombre_transactions_catalogue))
 
         return info_meta
 
-    async def rechiffrer_transaction_maitredescles(self, producer, transaction: dict):
+    async def rechiffrer_transaction_maitredescles(self, producer, transaction: dict, nowait: False):
         cle_originale = transaction['cle']
         cle_dechiffree = self.__clecert_ca.dechiffrage_asymmetrique(cle_originale)
         cles_rechiffrees = {
@@ -369,7 +376,7 @@ class RestaurateurTransactions:
                 pass  # OK, champs optionnel
 
         await producer.executer_commande(commande_rechiffree, domaine='MaitreDesCles', action='sauvegarderCle',
-                                         partition=partition, exchange=Constantes.SECURITE_PRIVE)
+                                         partition=partition, exchange=Constantes.SECURITE_PRIVE, nowait=nowait)
 
     def extraire_transactions(self, data: str, decipher: DecipherMgs3):
         data = multibase.decode(data)  # Base 64 decode
