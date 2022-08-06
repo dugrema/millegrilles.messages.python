@@ -221,17 +221,23 @@ class CleCertificatGenere:
 
     @staticmethod
     def generer_certificat(builder: CertificateBuilder, type_genere=TypeGenere.ED25519, generer_password=False,
-                           keysize=2048):
+                           keysize=2048, not_valid_before=None, not_valid_after=None):
         """
         Generer un certificat self-signed
         :param builder:
         :param type_genere:
         :param generer_password:
         :param keysize:
+        :param not_valid_before:
+        :param not_valid_after:
         :return:
         """
-        builder = builder.not_valid_before(datetime.datetime.utcnow() - DELTA_INITIAL)
-        builder = builder.not_valid_after(datetime.datetime.utcnow() + DUREE_CERT_DEFAUT)
+        if not_valid_before is None:
+            not_valid_before = datetime.datetime.utcnow() - DELTA_INITIAL
+        if not_valid_after is None:
+            not_valid_after = datetime.datetime.utcnow() + DUREE_CERT_DEFAUT
+        builder = builder.not_valid_before(not_valid_before)
+        builder = builder.not_valid_after(not_valid_after)
         builder = builder.serial_number(x509.random_serial_number())
 
         if type_genere == TypeGenere.RSA:
