@@ -19,7 +19,8 @@ from millegrilles_messages.messages.ValidateurMessage import ValidateurMessage, 
 from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
 from millegrilles_messages.messages.CleCertificat import CleCertificat
 from millegrilles_messages.messages.FormatteurMessages import SignateurTransactionSimple, FormatteurMessageMilleGrilles
-from millegrilles_messages.chiffrage.Mgs3 import DecipherMgs3
+# from millegrilles_messages.chiffrage.Mgs3 import DecipherMgs3
+from millegrilles_messages.chiffrage.Mgs4 import DecipherMgs4
 
 from millegrilles_messages.messages.MessagesThread import MessagesThread
 from millegrilles_messages.messages.MessagesModule import RessourcesConsommation
@@ -107,7 +108,7 @@ class RestaurateurArchives:
         enveloppe = await self.__validateur_messages.verifier(catalogue, utiliser_date_message=True)
 
         cle_dechiffree = self.__clecert_ca.dechiffrage_asymmetrique(catalogue['cle'])
-        decipher = DecipherMgs3(cle_dechiffree, catalogue['iv'], catalogue['tag'])
+        decipher = DecipherMgs4(cle_dechiffree, catalogue['iv'], catalogue['tag'])
 
         path_archive_dechiffree = '.'.join(path_archive.split('.')[:-1])
         with open(path_archive_dechiffree, 'wb') as fichier_output:

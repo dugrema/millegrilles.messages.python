@@ -67,7 +67,7 @@ class CipherMgs3:
     def get_info_dechiffrage(self, enveloppes: Optional[list[EnveloppeCertificat]] = None) -> dict:
         key_x25519_public_bytes = self.__public_peer_x25519.public_bytes(
             serialization.Encoding.Raw, serialization.PublicFormat.Raw)
-        return generer_info_chiffrage(self.__cle_secrete, self.nonce, self.__tag, self.__hachage,
+        return generer_info_chiffrage(self.__cle_secrete, self.nonce, self.__tag, None, self.__hachage,
                                       enveloppes, public_peer=key_x25519_public_bytes)
 
 
