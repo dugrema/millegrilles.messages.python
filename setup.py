@@ -3,7 +3,7 @@ from setuptools import setup
 
 setup(
     name='millegrilles_messages',
-    version='2022.4.0',
+    version='2022.5.0',
     packages=setuptools.find_packages(),
     url='https://github.com/dugrema/millegrilles.messages.python',
     license='AFFERO',
