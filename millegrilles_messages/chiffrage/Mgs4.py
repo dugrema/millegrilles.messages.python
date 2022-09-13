@@ -75,7 +75,7 @@ class CipherMgs4:
         data_out = bytes()
 
         while len(data) > 0:
-            taille_max = CONST_TAILLE_DATA - len(data)
+            taille_max = CONST_TAILLE_DATA - len(self.__buffer)
             taille_chunk = min(taille_max, len(data))
 
             self.__buffer = self.__buffer + data[:taille_chunk]
@@ -139,13 +139,13 @@ class DecipherMgs4:
         data_out = bytes()
 
         while len(data) > 0:
-            taille_max = CONST_TAILLE_DATA - len(data)
+            taille_max = CONST_TAILLE_BUFFER - len(self.__buffer)
             taille_chunk = min(taille_max, len(data))
 
             self.__buffer = self.__buffer + data[:taille_chunk]
             data = data[taille_chunk:]
 
-            if len(self.__buffer) == CONST_TAILLE_DATA:
+            if len(self.__buffer) == CONST_TAILLE_BUFFER:
                 data_dechiffre, tag = crypto_secretstream_xchacha20poly1305_pull(self.__state, self.__buffer)
                 if tag != crypto_secretstream_xchacha20poly1305_TAG_MESSAGE:
                     raise Exception("Erreur dechiffrage fichier (tag != TAG_MESSAGE)")

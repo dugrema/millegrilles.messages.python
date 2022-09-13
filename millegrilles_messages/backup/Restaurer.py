@@ -108,7 +108,7 @@ class RestaurateurArchives:
         enveloppe = await self.__validateur_messages.verifier(catalogue, utiliser_date_message=True)
 
         cle_dechiffree = self.__clecert_ca.dechiffrage_asymmetrique(catalogue['cle'])
-        decipher = DecipherMgs4(cle_dechiffree, catalogue['iv'], catalogue['tag'])
+        decipher = DecipherMgs4(cle_dechiffree, catalogue['header'])
 
         path_archive_dechiffree = '.'.join(path_archive.split('.')[:-1])
         with open(path_archive_dechiffree, 'wb') as fichier_output:
@@ -306,7 +306,7 @@ class RestaurateurTransactions:
 
         # Dechiffrer cle
         cle_dechiffree = self.__clecert_ca.dechiffrage_asymmetrique(backup['cle'])
-        decipher = DecipherMgs3(cle_dechiffree, backup['iv'], backup['tag'])
+        decipher = DecipherMgs4(cle_dechiffree, backup['header'])
 
         certificats = self.preparer_certificats(backup['certificats'])
 
@@ -381,16 +381,18 @@ class RestaurateurTransactions:
                                          partition=partition, exchange=Constantes.SECURITE_PRIVE, nowait=nowait,
                                          timeout=120)
 
-    def extraire_transactions(self, data: str, decipher: DecipherMgs3):
-        data = multibase.decode(data)  # Base 64 decode
-        data = decipher.update(data)   # Dechiffrer
-        decipher.finalize()            # Valider contenu dechiffre
-        data: bytes = lzma.decompress(data)   # Decompresser en bytes (jsonl)
+    def extraire_transactions(self, data: str, decipher: DecipherMgs4):
+        data = multibase.decode(data)       # Base 64 decode
+        data = decipher.update(data)        # Dechiffrer
+        data = data + decipher.finalize()   # Valider contenu dechiffre
 
         liste_transactions = list()
-        for ligne in data.splitlines():
-            transaction = json.loads(ligne.decode('utf-8'))
-            liste_transactions.append(transaction)
+        if len(data) > 0:
+            data: bytes = lzma.decompress(data)   # Decompresser en bytes (jsonl)
+
+            for ligne in data.splitlines():
+                transaction = json.loads(ligne.decode('utf-8'))
+                liste_transactions.append(transaction)
 
         return liste_transactions
 
