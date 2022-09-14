@@ -1,22 +1,15 @@
 import multibase
 
-from typing import Optional, Union
+from typing import Optional
 
 from nacl.bindings.crypto_secretstream import (
     crypto_secretstream_xchacha20poly1305_ABYTES,
-    crypto_secretstream_xchacha20poly1305_HEADERBYTES,
-    crypto_secretstream_xchacha20poly1305_KEYBYTES,
-    crypto_secretstream_xchacha20poly1305_STATEBYTES,
     crypto_secretstream_xchacha20poly1305_TAG_FINAL,
     crypto_secretstream_xchacha20poly1305_TAG_MESSAGE,
-    crypto_secretstream_xchacha20poly1305_TAG_PUSH,
-    crypto_secretstream_xchacha20poly1305_TAG_REKEY,
     crypto_secretstream_xchacha20poly1305_init_pull,
     crypto_secretstream_xchacha20poly1305_init_push,
-    crypto_secretstream_xchacha20poly1305_keygen,
     crypto_secretstream_xchacha20poly1305_pull,
     crypto_secretstream_xchacha20poly1305_push,
-    crypto_secretstream_xchacha20poly1305_rekey,
     crypto_secretstream_xchacha20poly1305_state,
 )
 

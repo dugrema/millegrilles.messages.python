@@ -19,7 +19,6 @@ from millegrilles_messages.messages.ValidateurMessage import ValidateurMessage, 
 from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
 from millegrilles_messages.messages.CleCertificat import CleCertificat
 from millegrilles_messages.messages.FormatteurMessages import SignateurTransactionSimple, FormatteurMessageMilleGrilles
-# from millegrilles_messages.chiffrage.Mgs3 import DecipherMgs3
 from millegrilles_messages.chiffrage.Mgs4 import DecipherMgs4
 
 from millegrilles_messages.messages.MessagesThread import MessagesThread

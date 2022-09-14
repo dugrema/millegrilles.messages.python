@@ -10,7 +10,7 @@ from typing import Optional
 
 from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
 from millegrilles_messages.backup.Configuration import ConfigurationBackup
-from millegrilles_messages.chiffrage.Mgs3 import CipherMgs3
+from millegrilles_messages.chiffrage.Mgs4 import CipherMgs4
 from millegrilles_messages.messages.FormatteurMessages import SignateurTransactionSimple, FormatteurMessageMilleGrilles
 from millegrilles_messages.messages.CleCertificat import CleCertificat
 
@@ -85,7 +85,7 @@ class GenerateurBackup:
         makedirs(path_archives, mode=0o755, exist_ok=True)
 
         path_tar_file = path.join(path_archives, '%s.%s.tar' % (repertoire, date_courante))
-        nom_archive_chiffree = '%s.mgs3' % nom_archive
+        nom_archive_chiffree = '%s.mgs4' % nom_archive
         path_catalogue = path.join(self.__source, 'catalogue.json')
         fichier_dest = path.join(self.__source, nom_archive_chiffree)
 
@@ -116,7 +116,7 @@ class GenerateurBackup:
 
     def chiffrer_archive(self, nom_archive: str, fichier_dest: str):
         public_x25519 = self.__enveloppe_ca.get_public_x25519()
-        cipher = CipherMgs3(public_x25519)
+        cipher = CipherMgs4(public_x25519)
         fichier_src = path.join(self.__source, nom_archive)
 
         with open(fichier_dest, 'wb') as fp_dest:
