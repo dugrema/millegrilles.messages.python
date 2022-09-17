@@ -30,17 +30,17 @@ def builder_for_application(configuration: dict):
 
     try:
         builder = ajouter_exchanges(builder, configuration['exchanges'])
-    except KeyError:
+    except (TypeError, KeyError):
         pass
 
     try:
         builder = ajouter_roles(builder, configuration['roles'])
-    except KeyError:
+    except (TypeError, KeyError):
         pass
 
     try:
         builder = ajouter_domaines(builder, configuration['domaines'])
-    except KeyError:
+    except (TypeError, KeyError):
         pass
 
     try:
@@ -48,7 +48,7 @@ def builder_for_application(configuration: dict):
         hostnames = configuration_dns.get('hostnames') or None
         localhost = configuration_dns.get('localhost') or False
         builder = ajouter_dns(builder, hostnames, localhost)
-    except KeyError:
+    except (AttributeError, KeyError):
         pass
 
     return builder
