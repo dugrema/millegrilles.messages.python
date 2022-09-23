@@ -37,6 +37,7 @@ ROLE_CORE = 'core'
 DOMAINE_INSTANCE = 'instance'
 DOMAINE_CORE_CATALOGUES = 'CoreCatalogues'
 DOMAINE_CORE_PKI = 'CorePki'
+DOMAINE_CORE_MAITREDESCOMPTES = 'CoreMaitreDesComptes'
 
 
 # Champs messages
