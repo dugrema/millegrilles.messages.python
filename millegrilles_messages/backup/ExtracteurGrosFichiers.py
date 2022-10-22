@@ -1,4 +1,6 @@
 # Extracteur de GrosFichiers
+import os
+
 import aiohttp
 import asyncio
 import logging
@@ -16,6 +18,10 @@ from millegrilles_messages.messages.MessagesModule import RessourcesConsommation
 from millegrilles_messages.messages.CleCertificat import CleCertificat
 
 __logger = logging.getLogger(__name__)
+
+CONST_CHUNK_SIZE = 64 * 1024
+CONST_PATH_CHIFFRE = '/tmp/grosfichiers/chiffre'
+CONST_PATH_DECHIFFRE = '/tmp/grosfichiers/dechiffre'
 
 
 class ExtracteurGrosFichiers:
@@ -76,34 +82,43 @@ class ExtracteurGrosFichiers:
 
 async def recuperer_fichiers(url_consignation: str, ssl_context):
     __logger.info("recuperer_fichiers Debut")
-    fichiers = await get_liste_fichiers(url_consignation, ssl_context)
-    for fuuid in fichiers:
-        await download_fichier(fuuid)
+
+    os.makedirs(CONST_PATH_CHIFFRE, exist_ok=True)
+    os.makedirs(CONST_PATH_DECHIFFRE, exist_ok=True)
+
+    conn = aiohttp.TCPConnector(ssl_context=ssl_context)
+    async with aiohttp.ClientSession(connector=conn) as session:
+        await download_liste_fichiers(session, url_consignation)
+
     __logger.info("recuperer_fichiers Fin")
 
 
-async def get_liste_fichiers(url_consignation: str, ssl_context) -> list:
+async def download_liste_fichiers(session, url_consignation: str):
 
     path_get_fichiers = url_consignation + path.join('/fichiers_transfert', 'backup', 'liste')
     __logger.debug("get_liste_fichiers Path %s" % path_get_fichiers)
-    conn = aiohttp.TCPConnector(ssl_context=ssl_context)
 
     # Recuperer la liste de tous les fichiers en consignation
-    fichiers = []
-    async with aiohttp.ClientSession(connector=conn) as session:
-        async with session.get(path_get_fichiers) as resp:
-            __logger.debug("Reponse status %d" % resp.status)
+    async with session.get(path_get_fichiers) as resp:
+        __logger.debug("Reponse status %d" % resp.status)
 
-            async for line in resp.content:
-                fichier = line.strip().decode('utf-8')
-                __logger.debug("Fichier %s" % fichier)
-                fichiers.append(fichier)
+        async for line in resp.content:
+            fuuid = line.strip().decode('utf-8')
+            path_fuuid_local = path.join(CONST_PATH_CHIFFRE, fuuid)
 
-    return fichiers
+            # Verifier si le fichier existe deja
+            try:
+                os.stat(path_fuuid_local)
+                __logger.debug("Fichier existe deja : %s" % path_fuuid_local)
+            except FileNotFoundError:
+                path_fuuid = url_consignation + path.join('/fichiers_transfert', fuuid)
+                __logger.debug("download_fichier Download fichier %s" % path_fuuid)
 
-
-async def download_fichier(fuuid: str):
-    pass
+                async with session.get(path_fuuid) as resp:
+                    __logger.debug("Reponse status fichier %s = %d" % (fuuid, resp.status))
+                    with open(path_fuuid_local, 'wb') as fd:
+                        async for chunk in resp.content.iter_chunked(CONST_CHUNK_SIZE):
+                            fd.write(chunk)
 
 
 async def main(ca: Optional[str]):
