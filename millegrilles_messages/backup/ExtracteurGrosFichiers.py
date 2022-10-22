@@ -23,10 +23,10 @@ from millegrilles_messages.chiffrage.Mgs4 import DecipherMgs4
 __logger = logging.getLogger(__name__)
 
 CONST_CHUNK_SIZE = 64 * 1024
-CONST_PATH_CHIFFRE = '/tmp/grosfichiers/chiffre'
-CONST_PATH_DECHIFFRE = '/tmp/grosfichiers/dechiffre'
-CONST_PATH_CUUIDS = '/tmp/grosfichiers/cuuids'
-CONST_PATH_ROOT = '/tmp/grosfichiers/root'
+CONST_PATH_CHIFFRE = 'chiffre'
+CONST_PATH_DECHIFFRE = 'dechiffre'
+CONST_PATH_CUUIDS = 'cuuids'
+CONST_PATH_ROOT = 'root'
 
 executor = concurrent.futures.ThreadPoolExecutor(max_workers=5)
 
@@ -97,7 +97,7 @@ class ExtracteurGrosFichiers:
     async def traiter_fichiers(self, queue_fuuids):
         await self.__messages_thread.attendre_pret()
         producer = self.__messages_thread.get_producer()
-        await recuperer_fichiers(self.__config.url_consignation, self.__ssl_context, producer, queue_fuuids)
+        await recuperer_fichiers(self.__config.path_extraction, self.__config.url_consignation, self.__ssl_context, producer, queue_fuuids)
 
         # Indiquer que le download est termine
         self.__event_downloader.set()
@@ -106,7 +106,7 @@ class ExtracteurGrosFichiers:
         await self.__event_dechiffrer.wait()
 
         # Traiter les cuuids
-        await recuperer_cuuids(self.__clecert, producer)
+        await recuperer_cuuids(self.__config.path_extraction, self.__clecert, producer)
 
     async def traiter_reponse(self, message, module_messages: MessagesThread):
         self.__logger.info("Message recu : %s" % json.dumps(message.parsed, indent=2))
@@ -155,8 +155,8 @@ class ExtracteurGrosFichiers:
                         self.__logger.debug("Reponse cle : %s" % reponse_parsed)
                         loop = asyncio.get_running_loop()
                         try:
-                            await loop.run_in_executor(executor, dechiffrer_fichier, self.__clecert, fuuid, fichier, reponse_parsed)
-                            mapper_cuuids(fichier)
+                            await loop.run_in_executor(executor, dechiffrer_fichier, self.__config.path_extraction, self.__clecert, fuuid, fichier, reponse_parsed)
+                            mapper_cuuids(self.__config.path_extraction, fichier)
                         except Exception:
                             self.__logger.exception("Erreur traitement fichier %s" % fuuid)
 
@@ -164,20 +164,20 @@ class ExtracteurGrosFichiers:
                     self.__logger.debug("Ignorer fuuid %s (pas un GrosFichiers fuuid_v_courante" % fuuid)
 
 
-async def recuperer_fichiers(url_consignation: str, ssl_context, producer, queue_fuuids):
+async def recuperer_fichiers(path_extraction: str, url_consignation: str, ssl_context, producer, queue_fuuids):
     __logger.info("recuperer_fichiers Debut")
 
-    os.makedirs(CONST_PATH_CHIFFRE, exist_ok=True)
-    os.makedirs(CONST_PATH_DECHIFFRE, exist_ok=True)
+    os.makedirs(path.join(path_extraction, CONST_PATH_CHIFFRE), exist_ok=True)
+    os.makedirs(path.join(path_extraction, CONST_PATH_DECHIFFRE), exist_ok=True)
 
     conn = aiohttp.TCPConnector(ssl_context=ssl_context)
     async with aiohttp.ClientSession(connector=conn) as session:
-        await download_liste_fichiers(session, url_consignation, producer, queue_fuuids)
+        await download_liste_fichiers(session, path_extraction, url_consignation, producer, queue_fuuids)
 
     __logger.info("recuperer_fichiers Fin")
 
 
-async def download_liste_fichiers(session, url_consignation: str, producer, queue_fuuids):
+async def download_liste_fichiers(session, path_extraction, url_consignation: str, producer, queue_fuuids):
 
     path_get_fichiers = url_consignation + path.join('/fichiers_transfert', 'backup', 'liste')
     __logger.debug("get_liste_fichiers Path %s" % path_get_fichiers)
@@ -188,8 +188,8 @@ async def download_liste_fichiers(session, url_consignation: str, producer, queu
 
         async for line in resp.content:
             fuuid = line.strip().decode('utf-8')
-            path_fuuid_local = path.join(CONST_PATH_CHIFFRE, fuuid)
-            path_fuuid_dechiffre = path.join(CONST_PATH_DECHIFFRE, fuuid)
+            path_fuuid_local = path.join(path_extraction, CONST_PATH_CHIFFRE, fuuid)
+            path_fuuid_dechiffre = path.join(path_extraction, CONST_PATH_DECHIFFRE, fuuid)
 
             # Verifier si le fichier existe deja
             try:
@@ -212,13 +212,13 @@ async def download_liste_fichiers(session, url_consignation: str, producer, queu
                 await queue_fuuids.put(fuuid)
 
 
-def dechiffrer_fichier(clecert, fuuid, info_fichier, cle_fichier):
+def dechiffrer_fichier(path_extraction: str, clecert, fuuid, info_fichier, cle_fichier):
     cle_info = dechiffrer_doc(cle_fichier, clecert, fuuid, info_fichier)
 
     # Dechiffrer fichier
     decipher = DecipherMgs4.from_info(clecert, cle_info)
-    path_fuuid_chiffre = path.join(CONST_PATH_CHIFFRE, fuuid)
-    path_fuuid_dechiffre = path.join(CONST_PATH_DECHIFFRE, fuuid)
+    path_fuuid_chiffre = path.join(path_extraction, CONST_PATH_CHIFFRE, fuuid)
+    path_fuuid_dechiffre = path.join(path_extraction, CONST_PATH_DECHIFFRE, fuuid)
 
     with open(path_fuuid_chiffre, 'rb') as fichier_chiffre:
         try:
@@ -253,19 +253,19 @@ def dechiffrer_doc(cle_fichier, clecert, hachage_bytes, info_fichier):
     return cle_info
 
 
-def mapper_cuuids(fichier_info):
+def mapper_cuuids(path_extraction: str, fichier_info):
     fuuid = fichier_info['fuuid_v_courante']
     nom_fichier = fichier_info['nom']
-    path_fuuid_dechiffre = path.join(CONST_PATH_DECHIFFRE, fuuid)
+    path_fuuid_dechiffre = path.join(path_extraction, CONST_PATH_DECHIFFRE, fuuid)
 
     for cuuid in fichier_info['cuuids']:
-        cuuid_path = path.join(CONST_PATH_CUUIDS, cuuid)
+        cuuid_path = path.join(path_extraction, CONST_PATH_CUUIDS, cuuid)
         path_fichier = path.join(cuuid_path, nom_fichier)
         os.makedirs(cuuid_path, exist_ok=True)
         os.link(path_fuuid_dechiffre, path_fichier)
 
 
-async def recuperer_cuuids(clecert, producer):
+async def recuperer_cuuids(path_extraction, clecert, producer):
 
     limit = 10
     skip = 0
@@ -283,14 +283,14 @@ async def recuperer_cuuids(clecert, producer):
 
         for cuuid in liste_cuuids:
             try:
-                await mapper_cuuid(clecert, producer, cuuid)
+                await mapper_cuuid(path_extraction, clecert, producer, cuuid)
             except KeyError:
                 __logger.exception("Erreur dechiffrage cuuid %s" % cuuid)
 
         __logger.debug("recuperer_cuuids Reponse %s" % reponse_cuuids_parsed)
 
 
-async def mapper_cuuid(clecert, producer, cuuid_info):
+async def mapper_cuuid(path_extraction: str, clecert, producer, cuuid_info):
     tuuid = cuuid_info['tuuid']
     metadata_chiffre = cuuid_info['metadata']
     ref_hachage_bytes = metadata_chiffre['ref_hachage_bytes']
@@ -318,13 +318,13 @@ async def mapper_cuuid(clecert, producer, cuuid_info):
     cuuids = cuuid_info.get('cuuids') or list()
     __logger.debug("Cuuid info dechiffre %s (tuuid %s, cuuids : %s) : %s" % (nom_cuuid, tuuid, cuuids, cuuid_info))
 
-    path_cuuid = path.join(CONST_PATH_CUUIDS, tuuid)
+    path_cuuid = path.join(path_extraction, CONST_PATH_CUUIDS, tuuid)
     os.makedirs(path_cuuid, exist_ok=True)
 
     if cuuid_info.get('favoris') is True:
         # Creer le cuuid sous user_id
         user_id = cuuid_info['user_id']
-        path_userid = path.join(CONST_PATH_ROOT, user_id)
+        path_userid = path.join(path_extraction, CONST_PATH_ROOT, user_id)
         os.makedirs(path_userid, exist_ok=True)
 
         path_favoris = path.join(path_userid, nom_cuuid)
@@ -334,18 +334,26 @@ async def mapper_cuuid(clecert, producer, cuuid_info):
             pass
 
     for cuuid_link in cuuids:
-        path_cuuid_link = path.join(CONST_PATH_CUUIDS, cuuid_link, nom_cuuid)
+        path_cuuid_base = path.join(path_extraction, CONST_PATH_CUUIDS, cuuid_link)
+        os.makedirs(path_cuuid_base, exist_ok=True)
+        path_cuuid_link = path.join(path_cuuid_base, nom_cuuid)
         try:
             os.symlink(path_cuuid, path_cuuid_link, target_is_directory=True)
         except FileExistsError:
             pass
 
 
-async def main(ca: Optional[str]):
+async def main(ca: Optional[str], path_extraction: Optional[str], url_consignation: Optional[str]):
     config = dict()
 
     if ca is not None:
         config['CA_PEM'] = ca
+
+    if path_extraction is not None:
+        config[Constantes.ENV_PATH_EXTRACTION] = path_extraction
+
+    if url_consignation is not None:
+        config[Constantes.ENV_URL_CONSIGNATION] = url_consignation
 
     extracteur = ExtracteurGrosFichiers(config)
     await extracteur.preparer()

@@ -57,6 +57,8 @@ def parse() -> argparse.Namespace:
     subparser_grosfichiers = subparsers.add_parser('grosfichiers', help='Dechiffrer fichiers')
     subparser_grosfichiers.add_argument('--ca', default='/var/opt/millegrilles/configuration/pki.millegrille.cert',
                                         help='Certificat de MilleGrille')
+    subparser_grosfichiers.add_argument('--consignation', default='https://localhost:444', help='URL consignation')
+    subparser_grosfichiers.add_argument('--extraction', default='/tmp/grosfichiers', help='Path extraction')
 
     args = parser.parse_args()
     adjust_logging(args)
@@ -91,7 +93,7 @@ async def demarrer(args: argparse.Namespace):
     elif command == 'verifier':
         await verifier_main(args.repertoire)
     elif command == 'grosfichiers':
-        await grosfichiers_main(args.ca)
+        await grosfichiers_main(args.ca, args.extraction, args.consignation)
     else:
         raise ValueError('non supporte')
 

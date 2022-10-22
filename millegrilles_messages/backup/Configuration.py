@@ -58,7 +58,8 @@ class ConfigurationExtracteurGrosFichiers(ConfigurationBackup):
 
     def __init__(self):
         super().__init__()
-        self.url_consignation = 'https://localhost:444'
+        self.url_consignation = None
+        self.path_extraction = None
 
     def parse_config(self, configuration: Optional[dict] = None):
         """
@@ -69,5 +70,6 @@ class ConfigurationExtracteurGrosFichiers(ConfigurationBackup):
         dict_params = super().parse_config(configuration)
 
         self.url_consignation = dict_params.get(ConstantesMessages.ENV_URL_CONSIGNATION) or self.url_consignation
+        self.path_extraction = dict_params.get(ConstantesMessages.ENV_PATH_EXTRACTION) or self.path_extraction
 
         return dict_params
