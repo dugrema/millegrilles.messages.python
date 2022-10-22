@@ -16,6 +16,7 @@ from millegrilles_messages.messages import Constantes
 from millegrilles_messages.messages.MessagesThread import MessagesThread
 from millegrilles_messages.messages.MessagesModule import RessourcesConsommation
 from millegrilles_messages.messages.CleCertificat import CleCertificat
+from millegrilles_messages.chiffrage.Mgs4 import DecipherMgs4
 
 __logger = logging.getLogger(__name__)
 
@@ -39,6 +40,9 @@ class ExtracteurGrosFichiers:
         self.__clecert: Optional[CleCertificat] = None
         self.__ssl_context = None
 
+        self.__event_dechiffrer = asyncio.Event()
+        self.__event_downloader = asyncio.Event()
+
     async def preparer(self):
         reply_res = RessourcesConsommation(self.traiter_reponse)
         self.__stop_event = asyncio.Event()
@@ -55,9 +59,11 @@ class ExtracteurGrosFichiers:
 
         self.__messages_thread = messages_thread
 
+        self.preparer_dechiffrage()
+
     def preparer_dechiffrage(self):
-        clecert = CleCertificat.from_files(self.__config.key_pem_path, self.__config.cert_pem_path)
-        if not clecert.cle_correspondent():
+        self.__clecert = CleCertificat.from_files(self.__config.key_pem_path, self.__config.cert_pem_path)
+        if not self.__clecert.cle_correspondent():
             raise Exception("Fichiers Cle/Cert ne correspondent pas")
 
         self.__ssl_context = ssl.create_default_context(cafile=self.__config.ca_pem_path)
@@ -65,8 +71,33 @@ class ExtracteurGrosFichiers:
 
     async def run(self):
         self.__logger.info("ExtracteurGrosFichiers Run")
-        await recuperer_fichiers(self.__config.url_consignation, self.__ssl_context)
+
+        # Demarrer traitement messages
+        await self.__messages_thread.start_async()
+
+        queue_fuuids = asyncio.Queue(maxsize=1000)
+
+        tasks = [
+            asyncio.create_task(self.__messages_thread.run_async()),
+            asyncio.create_task(self.traiter_fichiers(queue_fuuids)),
+            asyncio.create_task(self.dechiffrer_fichiers(queue_fuuids)),
+        ]
+
+        # Execution de la loop avec toutes les tasks
+        await asyncio.tasks.wait(tasks, return_when=asyncio.tasks.FIRST_COMPLETED)
+
         self.__logger.info("ExtracteurGrosFichiers Done")
+
+    async def traiter_fichiers(self, queue_fuuids):
+        await self.__messages_thread.attendre_pret()
+        producer = self.__messages_thread.get_producer()
+        await recuperer_fichiers(self.__config.url_consignation, self.__ssl_context, producer, queue_fuuids)
+
+        # Indiquer que le download est termine
+        self.__event_downloader.set()
+
+        # Attendre que le dechiffrage soit termine
+        await self.__event_dechiffrer.wait()
 
     async def traiter_reponse(self, message, module_messages: MessagesThread):
         self.__logger.info("Message recu : %s" % json.dumps(message.parsed, indent=2))
@@ -79,8 +110,46 @@ class ExtracteurGrosFichiers:
         #
         # self.__demarrage_confirme.set()
 
+    async def dechiffrer_fichiers(self, queue_fuuids):
 
-async def recuperer_fichiers(url_consignation: str, ssl_context):
+        await self.__messages_thread.attendre_pret()
+        producer = self.__messages_thread.get_producer()
+
+        while True:
+            if queue_fuuids.empty():
+                # Indiquer que le dechiffrage est termine
+                self.__event_dechiffrer.set()
+            fuuid = await queue_fuuids.get()
+            self.__event_dechiffrer.clear()
+
+            # Verifier le type de GrosFichiers (ignorer attachments, messagerie, etc.)
+            requete_grosfichiers = {"fuuids_documents": [fuuid]}
+            reponse_grosfichiers = await producer.executer_requete(
+                requete_grosfichiers, "GrosFichiers", action='documentsParFuuid', exchange=Constantes.SECURITE_PRIVE)
+            reponse_grosfichiers_parsed = reponse_grosfichiers.parsed
+            self.__logger.debug("Reponse GrosFichiers parsed : %s" % reponse_grosfichiers_parsed)
+            try:
+                fichier = reponse_grosfichiers_parsed['fichiers'][0]
+                fuuid_v_courante = fichier['fuuid_v_courante']
+            except (IndexError, KeyError):
+                self.__logger.debug("Ignorer fuuid %s (fichier inconnu de GrosFichiers)" % fuuid)
+            else:
+                if fuuid_v_courante == fuuid:
+                    # Recuperer la cle pour dechiffrer le fichier
+                    requete = {"domaine": "GrosFichiers", "liste_hachage_bytes": [fuuid]}
+                    reponse = await producer.executer_requete(
+                        requete, "MaitreDesCles", action='dechiffrage', exchange=Constantes.SECURITE_PRIVE)
+                    reponse_parsed = reponse.parsed
+                    if reponse_parsed.get('ok') is False:
+                        self.__logger.debug("Cle %s inconnue" % fuuid)
+                    else:
+                        self.__logger.debug("Reponse cle : %s" % reponse_parsed)
+                        await dechiffrer_fichier(self.__clecert, fuuid, reponse_parsed)
+                else:
+                    self.__logger.debug("Ignorer fuuid %s (pas un GrosFichiers fuuid_v_courante" % fuuid)
+
+
+async def recuperer_fichiers(url_consignation: str, ssl_context, producer, queue_fuuids):
     __logger.info("recuperer_fichiers Debut")
 
     os.makedirs(CONST_PATH_CHIFFRE, exist_ok=True)
@@ -88,12 +157,12 @@ async def recuperer_fichiers(url_consignation: str, ssl_context):
 
     conn = aiohttp.TCPConnector(ssl_context=ssl_context)
     async with aiohttp.ClientSession(connector=conn) as session:
-        await download_liste_fichiers(session, url_consignation)
+        await download_liste_fichiers(session, url_consignation, producer, queue_fuuids)
 
     __logger.info("recuperer_fichiers Fin")
 
 
-async def download_liste_fichiers(session, url_consignation: str):
+async def download_liste_fichiers(session, url_consignation: str, producer, queue_fuuids):
 
     path_get_fichiers = url_consignation + path.join('/fichiers_transfert', 'backup', 'liste')
     __logger.debug("get_liste_fichiers Path %s" % path_get_fichiers)
@@ -120,6 +189,27 @@ async def download_liste_fichiers(session, url_consignation: str):
                         async for chunk in resp.content.iter_chunked(CONST_CHUNK_SIZE):
                             fd.write(chunk)
 
+            await queue_fuuids.put(fuuid)
+
+
+async def dechiffrer_fichier(clecert, fuuid, cle_fichier):
+    cle_info = cle_fichier['cles'][fuuid]
+    decipher = DecipherMgs4.from_info(clecert, cle_info)
+    path_fuuid_chiffre = path.join(CONST_PATH_CHIFFRE, fuuid)
+    path_fuuid_dechiffre = path.join(CONST_PATH_DECHIFFRE, fuuid)
+
+    with open(path_fuuid_chiffre, 'rb') as fichier_chiffre:
+        with open(path_fuuid_dechiffre, 'wb') as fichier_dechiffre:
+            data = fichier_chiffre.read(CONST_CHUNK_SIZE)
+
+            while len(data) > 0:
+                data = decipher.update(data)
+                fichier_dechiffre.write(data)
+                data = fichier_chiffre.read(CONST_CHUNK_SIZE)
+
+            data = decipher.finalize()
+            fichier_dechiffre.write(data)
+
 
 async def main(ca: Optional[str]):
     config = dict()
@@ -128,5 +218,5 @@ async def main(ca: Optional[str]):
         config['CA_PEM'] = ca
 
     extracteur = ExtracteurGrosFichiers(config)
-    extracteur.preparer_dechiffrage()
+    await extracteur.preparer()
     await extracteur.run()
