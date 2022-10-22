@@ -109,15 +109,7 @@ class ExtracteurGrosFichiers:
         await recuperer_cuuids(self.__config.path_extraction, self.__clecert, producer)
 
     async def traiter_reponse(self, message, module_messages: MessagesThread):
-        self.__logger.info("Message recu : %s" % json.dumps(message.parsed, indent=2))
-
-        message_parsed = message.parsed
-        # if message_parsed.get('ok') == True:
-        #     self.__logger.info("Backup demarre")
-        # else:
-        #     self.__logger.warning("Erreur demarrage du backup : %s" % message_parsed.get('err'))
-        #
-        # self.__demarrage_confirme.set()
+        self.__logger.info("Message dropped : %s" % json.dumps(message.parsed, indent=2))
 
     async def dechiffrer_fichiers(self, queue_fuuids):
 
@@ -234,6 +226,9 @@ def dechiffrer_fichier(path_extraction: str, clecert, fuuid, info_fichier, cle_f
                 fichier_dechiffre.write(data)
         except FileExistsError:
             __logger.debug("Fichier dechiffre existe : %s" % fuuid)
+
+    # Supprimer fichier chiffre
+    os.unlink(path_fuuid_chiffre)
 
 
 def dechiffrer_doc(cle_fichier, clecert, hachage_bytes, info_fichier):
