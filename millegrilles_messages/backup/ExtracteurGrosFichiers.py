@@ -26,6 +26,7 @@ CONST_CHUNK_SIZE = 64 * 1024
 CONST_PATH_CHIFFRE = '/tmp/grosfichiers/chiffre'
 CONST_PATH_DECHIFFRE = '/tmp/grosfichiers/dechiffre'
 CONST_PATH_CUUIDS = '/tmp/grosfichiers/cuuids'
+CONST_PATH_ROOT = '/tmp/grosfichiers/root'
 
 executor = concurrent.futures.ThreadPoolExecutor(max_workers=5)
 
@@ -103,6 +104,9 @@ class ExtracteurGrosFichiers:
 
         # Attendre que le dechiffrage soit termine
         await self.__event_dechiffrer.wait()
+
+        # Traiter les cuuids
+        await recuperer_cuuids(self.__clecert, producer)
 
     async def traiter_reponse(self, message, module_messages: MessagesThread):
         self.__logger.info("Message recu : %s" % json.dumps(message.parsed, indent=2))
@@ -185,37 +189,31 @@ async def download_liste_fichiers(session, url_consignation: str, producer, queu
         async for line in resp.content:
             fuuid = line.strip().decode('utf-8')
             path_fuuid_local = path.join(CONST_PATH_CHIFFRE, fuuid)
+            path_fuuid_dechiffre = path.join(CONST_PATH_DECHIFFRE, fuuid)
 
             # Verifier si le fichier existe deja
             try:
-                os.stat(path_fuuid_local)
-                __logger.debug("Fichier existe deja : %s" % path_fuuid_local)
+                os.stat(path_fuuid_dechiffre)
+                __logger.debug("Fichier local deja dechiffre : %s" % path_fuuid_dechiffre)
             except FileNotFoundError:
-                path_fuuid = url_consignation + path.join('/fichiers_transfert', fuuid)
-                __logger.debug("download_fichier Download fichier %s" % path_fuuid)
+                try:
+                    os.stat(path_fuuid_local)
+                    __logger.debug("Fichier existe deja : %s" % path_fuuid_local)
+                except FileNotFoundError:
+                    path_fuuid = url_consignation + path.join('/fichiers_transfert', fuuid)
+                    __logger.debug("download_fichier Download fichier %s" % path_fuuid)
 
-                async with session.get(path_fuuid) as resp:
-                    __logger.debug("Reponse status fichier %s = %d" % (fuuid, resp.status))
-                    with open(path_fuuid_local, 'wb') as fd:
-                        async for chunk in resp.content.iter_chunked(CONST_CHUNK_SIZE):
-                            fd.write(chunk)
+                    async with session.get(path_fuuid) as resp:
+                        __logger.debug("Reponse status fichier %s = %d" % (fuuid, resp.status))
+                        with open(path_fuuid_local, 'wb') as fd:
+                            async for chunk in resp.content.iter_chunked(CONST_CHUNK_SIZE):
+                                fd.write(chunk)
 
-            await queue_fuuids.put(fuuid)
+                await queue_fuuids.put(fuuid)
 
 
 def dechiffrer_fichier(clecert, fuuid, info_fichier, cle_fichier):
-    cle_info = cle_fichier['cles'][fuuid]
-
-    # Dechiffrer metadata
-    cle_metadata = cle_info.copy()
-    metadata_chiffre = info_fichier['version_courante']['metadata']
-    cle_metadata['header'] = metadata_chiffre['header']
-    metadata_bytes = multibase.decode(metadata_chiffre['data_chiffre'].encode('utf-8'))
-    decipher_metadata = DecipherMgs4.from_info(clecert, cle_metadata)
-    metadata_dechiffre_bytes = decipher_metadata.update(metadata_bytes)
-    metadata_dechiffre_bytes = metadata_dechiffre_bytes + decipher_metadata.finalize()
-    metadata_dict = json.loads(metadata_dechiffre_bytes.decode('utf-8'))
-    info_fichier.update(metadata_dict)
+    cle_info = dechiffrer_doc(cle_fichier, clecert, fuuid, info_fichier)
 
     # Dechiffrer fichier
     decipher = DecipherMgs4.from_info(clecert, cle_info)
@@ -238,6 +236,23 @@ def dechiffrer_fichier(clecert, fuuid, info_fichier, cle_fichier):
             __logger.debug("Fichier dechiffre existe : %s" % fuuid)
 
 
+def dechiffrer_doc(cle_fichier, clecert, hachage_bytes, info_fichier):
+    cle_info = cle_fichier['cles'][hachage_bytes]
+
+    # Dechiffrer metadata
+    cle_metadata = cle_info.copy()
+    metadata_chiffre = info_fichier['version_courante']['metadata']
+    cle_metadata['header'] = metadata_chiffre['header']
+    metadata_bytes = multibase.decode(metadata_chiffre['data_chiffre'].encode('utf-8'))
+    decipher_metadata = DecipherMgs4.from_info(clecert, cle_metadata)
+    metadata_dechiffre_bytes = decipher_metadata.update(metadata_bytes)
+    metadata_dechiffre_bytes = metadata_dechiffre_bytes + decipher_metadata.finalize()
+    metadata_dict = json.loads(metadata_dechiffre_bytes.decode('utf-8'))
+    info_fichier.update(metadata_dict)
+
+    return cle_info
+
+
 def mapper_cuuids(fichier_info):
     fuuid = fichier_info['fuuid_v_courante']
     nom_fichier = fichier_info['nom']
@@ -248,6 +263,82 @@ def mapper_cuuids(fichier_info):
         path_fichier = path.join(cuuid_path, nom_fichier)
         os.makedirs(cuuid_path, exist_ok=True)
         os.link(path_fuuid_dechiffre, path_fichier)
+
+
+async def recuperer_cuuids(clecert, producer):
+
+    limit = 10
+    skip = 0
+
+    while True:
+        requete = {"skip": skip, "limit": limit}
+        reponse_cuuids = await producer.executer_requete(
+            requete, "GrosFichiers", action='syncCuuids', exchange=Constantes.SECURITE_PRIVE)
+        reponse_cuuids_parsed = reponse_cuuids.parsed
+        liste_cuuids = reponse_cuuids_parsed['liste']
+        if len(liste_cuuids) == 0:
+            break  # Done
+
+        skip = skip + len(liste_cuuids)
+
+        for cuuid in liste_cuuids:
+            try:
+                await mapper_cuuid(clecert, producer, cuuid)
+            except KeyError:
+                __logger.exception("Erreur dechiffrage cuuid %s" % cuuid)
+
+        __logger.debug("recuperer_cuuids Reponse %s" % reponse_cuuids_parsed)
+
+
+async def mapper_cuuid(clecert, producer, cuuid_info):
+    tuuid = cuuid_info['tuuid']
+    metadata_chiffre = cuuid_info['metadata']
+    ref_hachage_bytes = metadata_chiffre['ref_hachage_bytes']
+
+    requete = {"domaine": "GrosFichiers", "liste_hachage_bytes": [ref_hachage_bytes]}
+    reponse = await producer.executer_requete(
+        requete, "MaitreDesCles", action='dechiffrage', exchange=Constantes.SECURITE_PRIVE)
+    reponse_parsed = reponse.parsed
+    if reponse_parsed.get('ok') is False:
+        __logger.debug("Cle %s inconnue tuuid" % tuuid)
+    else:
+        __logger.debug("Reponse cle : %s" % reponse_parsed)
+
+    # dechiffrer_doc(cle_fichier, clecert, ref_hachage_bytes, cuuid_info)
+    cle_fichier = reponse_parsed['cles'][ref_hachage_bytes]
+    cle_fichier['header'] = metadata_chiffre['header']
+    metadata_bytes = multibase.decode(metadata_chiffre['data_chiffre'].encode('utf-8'))
+    decipher_metadata = DecipherMgs4.from_info(clecert, cle_fichier)
+    metadata_dechiffre_bytes = decipher_metadata.update(metadata_bytes)
+    metadata_dechiffre_bytes = metadata_dechiffre_bytes + decipher_metadata.finalize()
+    metadata_dict = json.loads(metadata_dechiffre_bytes.decode('utf-8'))
+    cuuid_info.update(metadata_dict)
+
+    nom_cuuid = cuuid_info['nom']
+    cuuids = cuuid_info.get('cuuids') or list()
+    __logger.debug("Cuuid info dechiffre %s (tuuid %s, cuuids : %s) : %s" % (nom_cuuid, tuuid, cuuids, cuuid_info))
+
+    path_cuuid = path.join(CONST_PATH_CUUIDS, tuuid)
+    os.makedirs(path_cuuid, exist_ok=True)
+
+    if cuuid_info.get('favoris') is True:
+        # Creer le cuuid sous user_id
+        user_id = cuuid_info['user_id']
+        path_userid = path.join(CONST_PATH_ROOT, user_id)
+        os.makedirs(path_userid, exist_ok=True)
+
+        path_favoris = path.join(path_userid, nom_cuuid)
+        try:
+            os.symlink(path_cuuid, path_favoris, target_is_directory=True)
+        except FileExistsError:
+            pass
+
+    for cuuid_link in cuuids:
+        path_cuuid_link = path.join(CONST_PATH_CUUIDS, cuuid_link, nom_cuuid)
+        try:
+            os.symlink(path_cuuid, path_cuuid_link, target_is_directory=True)
+        except FileExistsError:
+            pass
 
 
 async def main(ca: Optional[str]):
