@@ -84,16 +84,21 @@ async def recuperer_fichiers(url_consignation: str, ssl_context):
 
 async def get_liste_fichiers(url_consignation: str, ssl_context) -> list:
 
-    path_get_fichiers = url_consignation + path.join('/fichiers', 'liste')
-
+    path_get_fichiers = url_consignation + path.join('/fichiers_transfert', 'backup', 'liste')
+    __logger.debug("get_liste_fichiers Path %s" % path_get_fichiers)
     conn = aiohttp.TCPConnector(ssl_context=ssl_context)
+
+    # Recuperer la liste de tous les fichiers en consignation
+    fichiers = []
     async with aiohttp.ClientSession(connector=conn) as session:
         async with session.get(path_get_fichiers) as resp:
-            text_response = await resp.text()
+            __logger.debug("Reponse status %d" % resp.status)
 
-    print("Reponse %s" % text_response)
+            async for line in resp.content:
+                fichier = line.strip().decode('utf-8')
+                __logger.debug("Fichier %s" % fichier)
+                fichiers.append(fichier)
 
-    fichiers = []
     return fichiers
 
 
