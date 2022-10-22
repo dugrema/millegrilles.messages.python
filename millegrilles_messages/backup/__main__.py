@@ -55,6 +55,8 @@ def parse() -> argparse.Namespace:
                                     help='Repertoire avec les fichiers a verifier')
 
     subparser_grosfichiers = subparsers.add_parser('grosfichiers', help='Dechiffrer fichiers')
+    subparser_grosfichiers.add_argument('--ca', default='/var/opt/millegrilles/configuration/pki.millegrille.cert',
+                                        help='Certificat de MilleGrille')
 
     args = parser.parse_args()
     adjust_logging(args)
@@ -89,7 +91,7 @@ async def demarrer(args: argparse.Namespace):
     elif command == 'verifier':
         await verifier_main(args.repertoire)
     elif command == 'grosfichiers':
-        await grosfichiers_main()
+        await grosfichiers_main(args.ca)
     else:
         raise ValueError('non supporte')
 
