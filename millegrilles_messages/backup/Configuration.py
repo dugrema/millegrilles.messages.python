@@ -50,3 +50,24 @@ class ConfigurationBackup:
         self.key_pem_path = dict_params.get(ConstantesMessages.ENV_KEY_PEM) or self.key_pem_path
         self.mq_host = dict_params.get(ConstantesMessages.ENV_MQ_HOSTNAME) or self.mq_host
         self.mq_port = dict_params.get(ConstantesMessages.ENV_MQ_PORT) or self.mq_port
+
+        return dict_params
+
+
+class ConfigurationExtracteurGrosFichiers(ConfigurationBackup):
+
+    def __init__(self):
+        super().__init__()
+        self.url_consignation = 'https://localhost:443'
+
+    def parse_config(self, configuration: Optional[dict] = None):
+        """
+        Conserver l'information de configuration
+        :param configuration:
+        :return:
+        """
+        dict_params = super().parse_config(configuration)
+
+        self.url_consignation = dict_params.get(ConstantesMessages.ENV_URL_CONSIGNATION) or self.url_consignation
+
+        return dict_params
