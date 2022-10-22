@@ -366,7 +366,7 @@ class RestaurateurTransactions:
             cles_rechiffrees[fp] = cle_rechiffree
             partition = fp
 
-        champs = ['iv', 'format', 'tag', 'hachage_bytes', 'domaine', 'identificateurs_document']
+        champs = ['header', 'iv', 'format', 'tag', 'hachage_bytes', 'domaine', 'identificateurs_document', 'signature_identite']
         commande_rechiffree = {
             'cles': cles_rechiffrees,
         }
