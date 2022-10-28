@@ -6,6 +6,7 @@ from millegrilles_messages.backup.Backup import main as backup_main
 from millegrilles_messages.backup.Restaurer import main as restaurer_main
 from millegrilles_messages.backup.DemarrerBackup import main as demarrer_backup
 from millegrilles_messages.backup.Verifier import main as verifier_main
+from millegrilles_messages.backup.ExtracteurGrosFichiers import main as grosfichiers_main
 
 
 def parse() -> argparse.Namespace:
@@ -53,6 +54,12 @@ def parse() -> argparse.Namespace:
     subparser_demarrer.add_argument('--repertoire', type=str, required=False,
                                     help='Repertoire avec les fichiers a verifier')
 
+    subparser_grosfichiers = subparsers.add_parser('grosfichiers', help='Dechiffrer fichiers')
+    subparser_grosfichiers.add_argument('--ca', default='/var/opt/millegrilles/configuration/pki.millegrille.cert',
+                                        help='Certificat de MilleGrille')
+    subparser_grosfichiers.add_argument('--consignation', default='https://localhost:444', help='URL consignation')
+    subparser_grosfichiers.add_argument('--extraction', default='/tmp/grosfichiers', help='Path extraction')
+
     args = parser.parse_args()
     adjust_logging(args)
 
@@ -85,6 +92,8 @@ async def demarrer(args: argparse.Namespace):
                              domaine=args.domaine, delai=args.delai)
     elif command == 'verifier':
         await verifier_main(args.repertoire)
+    elif command == 'grosfichiers':
+        await grosfichiers_main(args.ca, args.extraction, args.consignation)
     else:
         raise ValueError('non supporte')
 
