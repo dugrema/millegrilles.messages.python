@@ -10,6 +10,7 @@ from asyncio.exceptions import TimeoutError
 from typing import Optional, Union
 
 import redis.asyncio as redis
+from redis.exceptions import ConnectionError
 
 from millegrilles_messages.messages import Constantes
 from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
@@ -336,7 +337,10 @@ class ValidateurCertificatRedis(ValidateurCertificatCache):
 
     async def entretien(self):
         await super().entretien()
-        await self.__connecter()
+        try:
+            await self.__connecter()
+        except ConnectionError as ce:
+            self.__logger.info("Connexion redis desactivee (%s)" % ce)
 
     async def __get_certficat(self, fingerprint, nofetch=False) -> list:
         if self.__redis_client is not None:
