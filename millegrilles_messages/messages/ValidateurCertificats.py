@@ -332,12 +332,12 @@ class ValidateurCertificatRedis(ValidateurCertificatCache):
                                  ssl_certfile=self.__configuration_redis.cert_pem_path,
                                  ssl_ca_data=ca_pem)
 
-            await self.__redis_client.ping()
+            await client.ping()
             self.__redis_client = client
         else:
             try:
                 await self.__redis_client.ping()
-            except Exception:
+            except ConnectionError:
                 self.__logger.exception("Erreur client redis, on le ferme")
                 self.__redis_client = None
 
