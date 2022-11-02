@@ -151,7 +151,10 @@ class ConfigurationService:
             type_current = elem_config.get('current')
             config_name = elem_config['name']
             if type_current is not None:
-                config_current = self.__params['__docker_config_datee'][config_name]['current']
+                try:
+                    config_current = self.__params['__docker_config_datee'][config_name]['current']
+                except KeyError as ke:
+                    raise CertificatAbsent(str(ke))
                 id_c = config_current[type_current]['id']
                 config_name = config_current[type_current]['name']
             else:
@@ -369,3 +372,7 @@ class ConfigurationContainer:
 
     def __init__(self):
         pass
+
+
+class CertificatAbsent(Exception):
+    pass
