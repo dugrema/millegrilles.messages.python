@@ -297,7 +297,7 @@ class ConfigurationService:
             published_port = port['published_port']
             target_port = port['target_port']
             protocol = port.get('protocol') or 'tcp'
-            publish_mode = port.get('publish_mode')
+            publish_mode = port.get('publish_mode') or 'ingress'
 
             if protocol or publish_mode:
                 ports[published_port] = (target_port, protocol, publish_mode)
