@@ -77,6 +77,8 @@ class ConfigurationService:
             for param_key, param_value in self.__params.items():
                 if isinstance(param_value, str):
                     value = value.replace('${%s}' % param_key, param_value)
+                elif isinstance(param_value, int):
+                    value = value.replace('${%s}' % param_key, str(param_value))
         return value
 
     def _parse_resources(self):
