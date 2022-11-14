@@ -344,7 +344,8 @@ class RestaurateurTransactions:
 
                 await producer.executer_commande(enveloppe_transaction,
                                                  domaine=domaine, action='restaurerTransaction',
-                                                 exchange=Constantes.SECURITE_PROTEGE, nowait=not sync_traitement,
+                                                 exchange=Constantes.SECURITE_PROTEGE,
+                                                 nowait=not sync_traitement,
                                                  timeout=120)
 
         info_meta['nb_transactions_traitees'] = compteur_transactions
