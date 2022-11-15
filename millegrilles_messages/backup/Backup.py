@@ -127,7 +127,8 @@ class GenerateurBackup:
                     fp_dest.write(output_buffer)
                     bytes_buffer = fp_src.read(TAILLE_BUFFER)
 
-        cipher.finalize()
+            output_buffer = cipher.finalize()
+            fp_dest.write(output_buffer)
 
         # Retirer fichier src (dechiffre)
         unlink(fichier_src)

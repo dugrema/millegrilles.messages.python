@@ -118,7 +118,9 @@ class RestaurateurArchives:
                     fichier_output.write(data)
                     buffer_bytes = fichier.read(TAILLE_BUFFER)
 
-        decipher.finalize()
+            data = decipher.finalize()
+            fichier_output.write(data)
+
         print("Dechiffrage OK")
 
         unlink(path_archive)
