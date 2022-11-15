@@ -4,6 +4,7 @@ import getpass
 import logging
 import json
 import lzma
+import os
 
 import multibase
 import tarfile
@@ -104,7 +105,15 @@ class RestaurateurArchives:
         with open(catalogue_path, 'r') as fichier:
             catalogue = json.load(fichier)
 
-        enveloppe = await self.__validateur_messages.verifier(catalogue, utiliser_date_message=True)
+        verifier_enveloppe = True
+        try:
+            if os.environ.get('VALIDATION_SKIP') is not None:
+                verifier_enveloppe = False
+        except KeyError:
+            pass
+
+        if verifier_enveloppe is True:
+            enveloppe = await self.__validateur_messages.verifier(catalogue, utiliser_date_message=True)
 
         cle_dechiffree = self.__clecert_ca.dechiffrage_asymmetrique(catalogue['cle'])
         decipher = DecipherMgs4(cle_dechiffree, catalogue['header'])
