@@ -44,6 +44,11 @@ def builder_for_application(configuration: dict):
         pass
 
     try:
+        builder = ajouter_user_id(builder, configuration['user_id'])
+    except (TypeError, KeyError):
+        pass
+
+    try:
         configuration_dns = configuration['dns']
         hostnames = configuration_dns.get('hostnames') or None
         localhost = configuration_dns.get('localhost') or False
