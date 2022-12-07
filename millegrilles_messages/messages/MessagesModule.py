@@ -459,10 +459,14 @@ class MessageProducerFormatteur(MessageProducer):
 
     async def executer_requete(self, requete: dict, domaine: str, action: str, exchange: str,
                                partition: Optional[str] = None, version=1,
-                               reply_to=None, timeout=ATTENTE_MESSAGE_DUREE) -> MessageWrapper:
+                               reply_to=None, timeout=ATTENTE_MESSAGE_DUREE, noformat=False) -> MessageWrapper:
 
-        message, uuid_message = self.__formatteur_messages.signer_message(
-            requete, domaine, version, action=action, partition=partition)
+        if noformat is True:
+            message = requete
+            uuid_message = requete['en-tete']['uuid_transaction']
+        else:
+            message, uuid_message = self.__formatteur_messages.signer_message(
+                requete, domaine, version, action=action, partition=partition)
 
         correlation_id = str(uuid_message)
 
