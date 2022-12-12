@@ -62,6 +62,10 @@ class EnveloppeCsr:
     def get_pem(self) -> str:
         return self.csr.public_bytes(serialization.Encoding.PEM).decode('utf-8')
 
+    @property
+    def cle_publique(self) -> bytes:
+        return self.__csr_request.public_key().public_bytes(serialization.Encoding.Raw, format=serialization.PublicFormat.Raw)
+
     def signer(self, cle_signature: CleCertificat, role: str,
                builder: Optional[CertificateBuilder] = None, duree=DUREE_CERT_DEFAUT):
 
@@ -194,6 +198,10 @@ class CleCsrGenere:
     @property
     def cle_privee(self):
         return self.__cle_privee
+
+    @property
+    def cle_publique(self):
+        return self.__enveloppe_csr.cle_publique
 
     @property
     def password(self) -> Optional[str]:
