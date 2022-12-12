@@ -413,10 +413,14 @@ class MessageProducerFormatteur(MessageProducer):
 
     async def emettre_evenement(self, evenement: dict, domaine: str, action: str,
                                 partition: Optional[str] = None, exchanges: Union[str, list] = None, version=1,
-                                reply_to=None):
+                                reply_to=None, noformat=False):
 
-        message, uuid_message = self.__formatteur_messages.signer_message(
-            evenement, domaine, version, action=action, partition=partition)
+        if noformat is False:
+            message, uuid_message = self.__formatteur_messages.signer_message(
+                evenement, domaine, version, action=action, partition=partition)
+        else:
+            message = evenement
+            uuid_message = evenement['en-tete']['uuid_transaction']
 
         correlation_id = str(uuid_message)
 

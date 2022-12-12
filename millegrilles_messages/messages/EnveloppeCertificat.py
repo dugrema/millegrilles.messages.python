@@ -50,9 +50,11 @@ class EnveloppeCertificat:
         self.__idmg = trouver_idmg(self)
 
     @staticmethod
-    def from_pem(pem: Union[str, bytes]):
+    def from_pem(pem: Union[str, bytes, list]):
         if isinstance(pem, str):
             pem = pem.encode('utf-8')
+        elif isinstance(pem, list):
+            pem = '\n'.join(pem).encode('utf-8')
         certificat = load_pem_x509_certificate(pem, backend=default_backend())
         enveloppe = EnveloppeCertificat(certificat, pem)
         return enveloppe
