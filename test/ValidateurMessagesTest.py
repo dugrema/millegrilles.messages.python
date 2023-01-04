@@ -1,5 +1,6 @@
-import logging
 import asyncio
+import logging
+import json
 
 from cryptography.exceptions import InvalidSignature
 
@@ -11,11 +12,16 @@ from millegrilles_messages.messages.ValidateurCertificats import ValidateurCerti
 from millegrilles_messages.messages.ValidateurMessage import ValidateurMessage
 from millegrilles_messages.messages.Hachage import ErreurHachage
 
-PATH_CA = '/home/mathieu/mgdev/certs/pki.millegrille'
-PATH_CORE_CERT = '/home/mathieu/mgdev/certs/pki.core.cert'
-PATH_CORE_CLE = '/home/mathieu/mgdev/certs/pki.core.key'
+PATH_CA = '/var/opt/millegrilles/configuration/pki.millegrille.cert'
+PATH_CORE_CERT = '/var/opt/millegrilles/secrets/pki.core.cert'
+PATH_CORE_CLE = '/var/opt/millegrilles/secrets/pki.core.cle'
 
 logger = logging.getLogger(__name__)
+
+
+def load_messages():
+    with open('./test.json') as fichier:
+        return json.load(fichier)
 
 
 async def valider_message():
@@ -30,15 +36,17 @@ async def valider_message():
     signateur = SignateurTransactionSimple(clecert)
     formatteur = FormatteurMessageMilleGrilles(idmg, signateur)
 
-    message_1 = {'valeur': 1, 'texte': 'Du texte.'}
-    message_1_signe, uuid_transaction = formatteur.signer_message(message_1)
+    message_signe = load_messages()
+
+    #message_1 = {'valeur': 1, 'texte': 'Du texte.'}
+    #message_1_signe, uuid_transaction = formatteur.signer_message(message_1)
 
     # Valider
-    resultat_validation = await validateur_messages.verifier(message_1_signe)
+    resultat_validation = await validateur_messages.verifier(message_signe)
     logger.debug("Resultat validation : %s", resultat_validation)
 
     # Corrompre contenu
-    message_1_corrompu1 = message_1_signe.copy()
+    message_1_corrompu1 = message_signe.copy()
     message_1_corrompu1['mauvais'] = True
     try:
         await validateur_messages.verifier(message_1_corrompu1)
@@ -47,7 +55,7 @@ async def valider_message():
         logger.debug("Resultat validation ErreurHachage (OK!)")
 
     # Corrompre en-tete
-    message_1_corrompu2 = message_1_signe.copy()
+    message_1_corrompu2 = message_signe.copy()
     message_1_corrompu2['en-tete']['mauvais'] = True
     try:
         await validateur_messages.verifier(message_1_corrompu2)
