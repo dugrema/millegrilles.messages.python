@@ -1,9 +1,12 @@
 import multibase
 
 from typing import Optional, Union
+from cryptography.hazmat.primitives.asymmetric import ed25519
 
+from millegrilles_messages.messages.Hachage import hacher_to_digest
 from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
 from millegrilles_messages.messages.Ed25519Utils import chiffrer_cle_ed25519
+from millegrilles_messages.messages.FormatteurMessages import preparer_message_bytes
 
 
 class ParametresChiffrage:
@@ -108,3 +111,35 @@ def chiffrage_asymmetrique(enveloppe: EnveloppeCertificat, cle_secrete):
     cle_asym = chiffrer_cle_ed25519(enveloppe, cle_secrete)
     fingerprint = enveloppe.fingerprint
     return cle_asym, fingerprint
+
+
+def generer_signature_identite_cle(password: bytes, domaine: str, identificateurs_document: dict, hachage_bytes: str) -> str:
+    hachage_cle = hacher_to_digest(password, hashing_code='blake2s-256')
+    identite_cle = {
+        'domaine': domaine,
+        'identificateurs_documents': identificateurs_document,
+        'hachage_bytes': hachage_bytes
+    }
+    identite_bytes = preparer_message_bytes(identite_cle)
+
+    private_key = ed25519.Ed25519PrivateKey.from_private_bytes(hachage_cle)
+    signature = private_key.sign(identite_bytes)
+    signature = multibase.encode('base64', signature).decode('utf-8')
+
+    return signature
+
+# async function signerIdentiteCle(password, domaine, identificateurs_document, hachage_bytes) {
+#   // Creer l'identitie de cle (permet de determiner qui a le droit de recevoir un dechiffrage)
+#   // Signer l'itentite avec la cle secrete - prouve que l'emetteur de cette commande possede la cle secrete
+#   const identiteCle = { domaine, identificateurs_document, hachage_bytes }
+#   // if(userId) identiteCle.user_id = userId
+#
+#   const clePriveeEd25519 = await hacher(password, {encoding: 'bytes', hashingCode: 'blake2s-256'})
+#
+#   const cleEd25519 = ed25519.generateKeyPair({seed: clePriveeEd25519})
+#   const signateur = new SignateurMessageEd25519(cleEd25519.privateKey)
+#   await signateur.ready
+#   const signatureIdentiteCle = await signateur.signer(identiteCle)
+#
+#   return signatureIdentiteCle
+# }

@@ -13,7 +13,7 @@ from millegrilles_messages.messages import Constantes
 from millegrilles_messages.chiffrage.Mgs4 import generer_cle_secrete, CipherMgs4WithSecret
 from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
 from millegrilles_messages.messages.MessagesModule import MessageProducerFormatteur
-from millegrilles_messages.chiffrage.ChiffrageUtils import generer_info_chiffrage
+from millegrilles_messages.chiffrage.ChiffrageUtils import generer_signature_identite_cle
 
 
 class EmetteurNotifications:
@@ -60,6 +60,7 @@ class EmetteurNotifications:
             producer: MessageProducerFormatteur,
             contenu: str,
             subject: Optional[str],
+            niveau='info',
             destinataires: Optional[list] = None
     ):
         event_pret = producer.producer_pret()
@@ -71,7 +72,7 @@ class EmetteurNotifications:
         expiration = datetime.datetime.utcnow() + datetime.timedelta(days=7)
 
         commande = {
-            'niveau': 'info',
+            'niveau': niveau,
             'expiration': round(expiration.timestamp()),
 
             # Info dechiffrage
@@ -86,7 +87,13 @@ class EmetteurNotifications:
             commande['_cle'] = self.__commande_cle
 
         try:
-            await producer.executer_commande(commande, 'Messagerie', 'notifier', exchange=Constantes.SECURITE_PUBLIC, timeout=5)
+            reponse = await producer.executer_commande(
+                commande, 'Messagerie', 'notifier', exchange=Constantes.SECURITE_PUBLIC, timeout=5)
+
+            # Commande recue et traitee, on ne retransmet plus la cle
+            if reponse.parsed.get('ok') is True:
+                self.__cle_transmise = True
+
         except asyncio.TimeoutError:
             self.__logger.info("Timeout emission notification")
 
@@ -104,6 +111,7 @@ class EmetteurNotifications:
         # Chiffrer le contenu
         cipher = CipherMgs4WithSecret(self.__cle_secrete)
         format_chiffrage = 'mgs4'
+        domaine = 'Messagerie'
 
         message_compresse = lzma.compress(json.dumps(message).encode('utf-8'))
         message_chiffre = cipher.update(message_compresse)
@@ -114,7 +122,26 @@ class EmetteurNotifications:
             # Conserver commande cle comme reference future
             enveloppes = await self.get_certificats_maitredescles(producer)
             params_dechiffrage = cipher.params_dechiffrage(self.__enveloppe_ca.get_public_x25519(), enveloppes)
-            self.__commande_cle = params_dechiffrage
+
+            identificateurs_document = {'notification': True}
+            params_dechiffrage['identificateurs_documents'] = identificateurs_document
+            params_dechiffrage['domaine'] = domaine
+
+            signature = generer_signature_identite_cle(
+                self.__cle_secrete,
+                domaine,
+                identificateurs_document,
+                params_dechiffrage['hachage_bytes']
+            )
+            signature = multibase.encode('base64', signature).decode('utf-8')
+            params_dechiffrage['signature_identite'] = signature
+
+            partition = params_dechiffrage['partition']
+
+            # Signer la commande de cle
+            commande_signee = await producer.signer(params_dechiffrage, 'MaitreDesCles', 'sauvegarderCle', partition)
+            self.__commande_cle = commande_signee[0]
+
         else:
             # Generer params sans cles de dechiffrage (commande cle secrete deja generee)
             params_dechiffrage = cipher.params_dechiffrage(self.__enveloppe_ca.get_public_x25519(), list())

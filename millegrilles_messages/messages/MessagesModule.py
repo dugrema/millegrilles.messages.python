@@ -411,6 +411,9 @@ class MessageProducerFormatteur(MessageProducer):
         formatteur = FormatteurMessageMilleGrilles(idmg, signateur)
         return formatteur
 
+    async def signer(self, message: dict, domaine: str, action: str, partition: Optional[str] = None, version=1) -> dict:
+        return self.__formatteur_messages.signer_message(message, domaine, version, action=action, partition=partition)
+
     async def emettre_evenement(self, evenement: dict, domaine: str, action: str,
                                 partition: Optional[str] = None, exchanges: Union[str, list] = None, version=1,
                                 reply_to=None, noformat=False):
