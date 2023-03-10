@@ -25,44 +25,55 @@ CONST_TAILLE_BUFFER = 64 * 1024
 CONST_TAILLE_DATA = CONST_TAILLE_BUFFER - crypto_secretstream_xchacha20poly1305_ABYTES
 
 
-class CipherMgs4:
+def generer_cle_secrete(public_key: X25519PublicKey):
+    """
+    Generer la cle secrete a partir d'une cle publique
+    """
+    # Generer cle peer
+    key_x25519 = X25519PrivateKey.generate()
+    public_peer_x25519 = key_x25519.public_key()
 
-    def __init__(self, public_key: X25519PublicKey):
-        self.__cle_secrete: Optional[bytes] = None
+    # Extraire la cle secrete avec exchange
+    cle_handshake = key_x25519.exchange(public_key)
+
+    # Hacher avec blake2s-256
+    cle_secrete = hacher_to_digest(cle_handshake, 'blake2s-256')
+
+    return public_peer_x25519, cle_secrete
+
+
+class CipherMgs4WithSecret:
+
+    def __init__(self, cle_secrete: bytes):
+        self.__cle_secrete = cle_secrete
+
         self.__tag: Optional[bytes] = None
-        self.__public_peer_x25519: Optional[X25519PublicKey] = None
         self.__hachage: Optional[str] = None
-
-        self.__cle_secrete, self.__state, self.__header = self.__generer_cipher(public_key)
-
-        self.__hacheur = Hacheur('blake2b-512', 'base58btc')
-
         self.__buffer = bytes()
 
-    def __generer_cipher(self, public_key: X25519PublicKey):
+        # Generer cipher, hacheur
+        self.__state, self.__header = CipherMgs4WithSecret.__generer_cipher(self.__cle_secrete)
+        self.__hacheur = Hacheur('blake2b-512', 'base58btc')
+
+    @staticmethod
+    def __generer_cipher(cle_secrete: bytes):
         """
         Generer la cle secrete a partir d'une cle publique
         """
-        # Generer cle peer
-        key_x25519 = X25519PrivateKey.generate()
-        self.__public_peer_x25519 = key_x25519.public_key()
-
-        # Extraire la cle secrete avec exchange
-        cle_handshake = key_x25519.exchange(public_key)
-
-        # Hacher avec blake2s-256
-        cle_secrete = hacher_to_digest(cle_handshake, 'blake2s-256')
-
         state = crypto_secretstream_xchacha20poly1305_state()
 
         # Creer cipher (inclus nonce)
         header = crypto_secretstream_xchacha20poly1305_init_push(state, cle_secrete)
 
-        return cle_secrete, state, header
+        return state, header
 
     @property
     def header(self) -> bytes:
         return self.__header
+
+    @property
+    def hachage(self) -> Optional[str]:
+        return self.__hachage
 
     def update(self, data: bytes) -> Optional[bytes]:
         data_out = bytes()
@@ -90,15 +101,28 @@ class CipherMgs4:
         data_out = crypto_secretstream_xchacha20poly1305_push(
             self.__state, self.__buffer, tag=crypto_secretstream_xchacha20poly1305_TAG_FINAL)
 
+        if len(data_out) > 0:
+            self.__hacheur.update(data_out)
+
         self.__hachage = self.__hacheur.finalize()
 
         return data_out
 
-    def get_info_dechiffrage(self, enveloppes: Optional[list[EnveloppeCertificat]] = None) -> dict:
-        key_x25519_public_bytes = self.__public_peer_x25519.public_bytes(
+    def params_dechiffrage(self, public_peer_x25519: X25519PublicKey, enveloppes: Optional[list[EnveloppeCertificat]] = None) -> dict:
+        key_x25519_public_bytes = public_peer_x25519.public_bytes(
             serialization.Encoding.Raw, serialization.PublicFormat.Raw)
         return generer_info_chiffrage(self.__cle_secrete, None, None, self.__header, self.__hachage,
                                       enveloppes, public_peer=key_x25519_public_bytes)
+
+
+class CipherMgs4(CipherMgs4WithSecret):
+
+    def __init__(self, public_key: X25519PublicKey):
+        self.__public_peer_x25519, cle_secrete = generer_cle_secrete(public_key)
+        super().__init__(cle_secrete)
+
+    def get_info_dechiffrage(self, enveloppes: Optional[list[EnveloppeCertificat]] = None) -> dict:
+        return super().params_dechiffrage(self.__public_peer_x25519, enveloppes)
 
 
 class DecipherMgs4:

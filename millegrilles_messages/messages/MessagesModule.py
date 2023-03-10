@@ -441,8 +441,18 @@ class MessageProducerFormatteur(MessageProducer):
             message = commande
             uuid_message = commande['en-tete']['uuid_transaction']
         else:
+            # Conserver elements avec underscore (_)
+            elem_direct = {}
+            for k, v in commande.items():
+                if k.startswith('_'):
+                    elem_direct[k] = v
+
+            # Signer le message
             message, uuid_message = self.__formatteur_messages.signer_message(
                 commande, domaine, version, action=action, partition=partition)
+
+            # Remettre elements avec underscore (filtres par le processus de signature)
+            message.update(elem_direct)
 
         correlation_id = str(uuid_message)
 

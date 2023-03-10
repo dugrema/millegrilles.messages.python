@@ -6,6 +6,26 @@ from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertific
 from millegrilles_messages.messages.Ed25519Utils import chiffrer_cle_ed25519
 
 
+class ParametresChiffrage:
+
+    def __init__(self):
+        pass
+
+    def get_chiffreur(self):
+        pass
+
+    def generer(self, format_chiffrage: Optional[str]):
+        """
+        Genere des nouveaux parametres de chiffrage
+        @param format_chiffrage: Format de chiffrage, e.g. mgs4
+        :return:
+        """
+        if format_chiffrage is not None and format_chiffrage not in ['mgs4']:
+            raise ValueError('format de chiffrage non supporte')
+
+        pass
+
+
 def generer_info_chiffrage(cle_secrete: bytes, iv: Optional[bytes], tag: Optional[bytes], header: Optional[bytes],
                            hachage: Optional[Union[bytes, str]],
                            enveloppes: Optional[list[EnveloppeCertificat]] = None, public_peer: Optional[bytes] = None):
