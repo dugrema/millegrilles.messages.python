@@ -117,13 +117,19 @@ def generer_signature_identite_cle(password: bytes, domaine: str, identificateur
     hachage_cle = hacher_to_digest(password, hashing_code='blake2s-256')
     identite_cle = {
         'domaine': domaine,
-        'identificateurs_documents': identificateurs_document,
+        'identificateurs_document': identificateurs_document,
         'hachage_bytes': hachage_bytes
     }
     identite_bytes = preparer_message_bytes(identite_cle)
+    hachage_identite = hacher_to_digest(identite_bytes, hashing_code='blake2b-512')
+
+    VERSION_SIGNATURE = 0x2
 
     private_key = ed25519.Ed25519PrivateKey.from_private_bytes(hachage_cle)
-    signature = private_key.sign(identite_bytes)
+    signature = private_key.sign(hachage_identite)
+    signature = list(signature)
+    signature.insert(0, VERSION_SIGNATURE)
+    signature = bytes(signature)
     signature = multibase.encode('base64', signature).decode('utf-8')
 
     return signature

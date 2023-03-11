@@ -53,7 +53,7 @@ class EmetteurNotifications:
         roles = enveloppe.get_roles
         if 'maitredescles' not in roles:
             raise Exception('Mauvais certificat maitredescles recu (role incorrect)')
-        return [enveloppe]
+        return [self.__enveloppe_ca, enveloppe]
 
     async def emettre_notification(
             self,
@@ -72,15 +72,19 @@ class EmetteurNotifications:
         expiration = datetime.datetime.utcnow() + datetime.timedelta(days=7)
 
         commande = {
-            'niveau': niveau,
             'expiration': round(expiration.timestamp()),
-
             # Info dechiffrage
-            'ref_hachage_bytes': self.__commande_cle['hachage_bytes'],
-            'format': contenu_chiffre['format'],
-            'header': contenu_chiffre['header'],
-            'message_chiffre': contenu_chiffre['chiffre']
+            'message': {
+                'niveau': niveau,
+                'ref_hachage_bytes': self.__commande_cle['hachage_bytes'],
+                'format': contenu_chiffre['format'],
+                'header': contenu_chiffre['header'],
+                'message_chiffre': contenu_chiffre['chiffre']
+            }
         }
+
+        if destinataires is not None:
+            commande['destinataires'] = destinataires
 
         if self.__cle_transmise is False:
             # Transmettre la cle pour dechiffrer les notifications
@@ -123,9 +127,10 @@ class EmetteurNotifications:
             enveloppes = await self.get_certificats_maitredescles(producer)
             params_dechiffrage = cipher.params_dechiffrage(self.__enveloppe_ca.get_public_x25519(), enveloppes)
 
-            identificateurs_document = {'notification': True}
-            params_dechiffrage['identificateurs_documents'] = identificateurs_document
+            identificateurs_document = {'notification': 'true'}
+            params_dechiffrage['identificateurs_document'] = identificateurs_document
             params_dechiffrage['domaine'] = domaine
+            params_dechiffrage['format'] = 'mgs4'
 
             signature = generer_signature_identite_cle(
                 self.__cle_secrete,
@@ -133,7 +138,6 @@ class EmetteurNotifications:
                 identificateurs_document,
                 params_dechiffrage['hachage_bytes']
             )
-            signature = multibase.encode('base64', signature).decode('utf-8')
             params_dechiffrage['signature_identite'] = signature
 
             partition = params_dechiffrage['partition']
