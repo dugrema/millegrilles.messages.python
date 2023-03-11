@@ -150,10 +150,14 @@ class DecipherMgs4:
         header = info_dechiffrage['header']
 
         # Dechiffrer cle
-        try:
-            cle_chiffree = info_dechiffrage['cle']
-        except KeyError:
+        if clecert.enveloppe.is_root_ca:
+            try:
+                cle_chiffree = info_dechiffrage['cle']
+            except KeyError:
+                cle_chiffree = info_dechiffrage['cles'][clecert.enveloppe.fingerprint]
+        else:
             cle_chiffree = info_dechiffrage['cles'][clecert.enveloppe.fingerprint]
+
         cle_secrete = clecert.dechiffrage_asymmetrique(cle_chiffree)
 
         return DecipherMgs4(cle_secrete, header)
