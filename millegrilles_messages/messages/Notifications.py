@@ -1,8 +1,8 @@
 import asyncio
 import datetime
+import gzip
 import json
 import logging
-import lzma
 import multibase
 
 from typing import Optional
@@ -112,7 +112,10 @@ class EmetteurNotifications:
 
         self.__logger.debug("Contenu notification a preparer : %s" % message)
 
-        message_compresse = lzma.compress(json.dumps(message).encode('utf-8'))
+        message, uuid_transaction = await producer.signer(message)
+        del message['_certificat']
+
+        message_compresse = gzip.compress(json.dumps(message).encode('utf-8'))
 
         # Chiffrer le contenu
         # self.__logger.debug("Cle secrete : %s" % list(self.__cle_secrete))
@@ -126,12 +129,14 @@ class EmetteurNotifications:
         if self.__commande_cle is None:
             # Conserver commande cle comme reference future
             enveloppes = await self.get_certificats_maitredescles(producer)
-            params_dechiffrage = cipher.params_dechiffrage(self.__enveloppe_ca.get_public_x25519(), enveloppes)
+            params_dechiffrage = cipher.params_dechiffrage(self.__public_peer_x25519, enveloppes)
 
             identificateurs_document = {'notification': 'true'}
             params_dechiffrage['identificateurs_document'] = identificateurs_document
             params_dechiffrage['domaine'] = domaine
             params_dechiffrage['format'] = 'mgs4'
+
+            self.__logger.debug("Cle secrete : %s" % list(self.__cle_secrete))
 
             signature = generer_signature_identite_cle(
                 self.__cle_secrete,
@@ -149,7 +154,7 @@ class EmetteurNotifications:
 
         else:
             # Generer params sans cles de dechiffrage (commande cle secrete deja generee)
-            params_dechiffrage = cipher.params_dechiffrage(self.__enveloppe_ca.get_public_x25519(), list())
+            params_dechiffrage = cipher.params_dechiffrage(self.__public_peer_x25519, list())
 
         reponse = {
             'chiffre': message_chiffre,

@@ -75,6 +75,7 @@ def generer_info_chiffrage(cle_secrete: bytes, iv: Optional[bytes], tag: Optiona
             if enveloppe.is_root_ca is True:
                 if cle is None:
                     cle = cle_asym
+                cles[fingerprint] = cle  # Remplacer cle par version courte (public peer) au besoin
             else:
                 # Selectionner une partition au hasard (si plus d'une cle de maitre des cles)
                 partition = fingerprint
