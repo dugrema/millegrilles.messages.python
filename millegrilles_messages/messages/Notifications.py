@@ -112,12 +112,13 @@ class EmetteurNotifications:
 
         self.__logger.debug("Contenu notification a preparer : %s" % message)
 
+        message_compresse = lzma.compress(json.dumps(message).encode('utf-8'))
+
         # Chiffrer le contenu
+        # self.__logger.debug("Cle secrete : %s" % list(self.__cle_secrete))
         cipher = CipherMgs4WithSecret(self.__cle_secrete)
         format_chiffrage = 'mgs4'
         domaine = 'Messagerie'
-
-        message_compresse = lzma.compress(json.dumps(message).encode('utf-8'))
         message_chiffre = cipher.update(message_compresse)
         message_chiffre += cipher.finalize()
         message_chiffre = multibase.encode('base64', message_chiffre).decode('utf-8')

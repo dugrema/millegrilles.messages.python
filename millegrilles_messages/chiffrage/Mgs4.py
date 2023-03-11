@@ -86,7 +86,8 @@ class CipherMgs4WithSecret:
             data = data[taille_chunk:]
 
             if len(self.__buffer) == CONST_TAILLE_DATA:
-                data_chiffre = crypto_secretstream_xchacha20poly1305_push(self.__state, self.__buffer)
+                data_chiffre = crypto_secretstream_xchacha20poly1305_push(
+                    self.__state, self.__buffer, tag=crypto_secretstream_xchacha20poly1305_TAG_MESSAGE)
                 self.__hacheur.update(data_chiffre)
                 data_out = data_out + data_chiffre
 
@@ -98,11 +99,13 @@ class CipherMgs4WithSecret:
         if self.__hachage is not None:
             raise Exception('Already finalized')
 
-        data_out = crypto_secretstream_xchacha20poly1305_push(
-            self.__state, self.__buffer, tag=crypto_secretstream_xchacha20poly1305_TAG_FINAL)
+        data_out = bytes()
+        if len(self.__buffer) > 0:
+            data_out = crypto_secretstream_xchacha20poly1305_push(
+                self.__state, self.__buffer, tag=crypto_secretstream_xchacha20poly1305_TAG_FINAL)
 
-        if len(data_out) > 0:
-            self.__hacheur.update(data_out)
+            if len(data_out) > 0:
+                self.__hacheur.update(data_out)
 
         self.__hachage = self.__hacheur.finalize()
 
