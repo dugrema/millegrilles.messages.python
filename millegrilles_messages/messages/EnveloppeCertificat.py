@@ -2,6 +2,7 @@
 
 import base58
 import base64
+import binascii
 import datetime
 import logging
 import math
@@ -47,6 +48,7 @@ class EnveloppeCertificat:
         self.__millegrille_pem: Optional[str] = None  # PEM du certificat de la millegrille
 
         self.__fingerprint = calculer_fingerprint(certificat)
+        self.__pubkey_str = None
         self.__idmg = trouver_idmg(self)
 
     @staticmethod
@@ -76,7 +78,12 @@ class EnveloppeCertificat:
 
     @property
     def fingerprint(self) -> str:
-        return self.__fingerprint
+        if self.is_ed25519():
+            if self.__pubkey_str is None:
+                self.__pubkey_str = binascii.hexlify(self.get_public_key_bytes()).decode('utf-8')
+            return self.__pubkey_str
+        else:
+            return self.__fingerprint
 
     @property
     def idmg(self) -> str:
