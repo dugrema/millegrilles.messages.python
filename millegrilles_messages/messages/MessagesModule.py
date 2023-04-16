@@ -218,9 +218,20 @@ class MessageWrapper:
         self.delivery_tag = delivery_tag
 
         # Message traite et verifie
-        self.parsed: Optional[dict] = None
+        self.__parsed: Optional[dict] = None
         self.certificat: Optional[EnveloppeCertificat] = None
         self.est_valide = False
+
+    @property
+    def parsed(self):
+        return self.__parsed
+
+    @parsed.setter
+    def parsed(self, val: dict):
+        # Extraire le contenu et donner acces a l'original parsed (val) via __original
+        parsed_contenu = json.loads(val['contenu'])
+        parsed_contenu['__original'] = val
+        self.__parsed = parsed_contenu
 
     def __str__(self):
         return 'tag:%d' % self.delivery_tag

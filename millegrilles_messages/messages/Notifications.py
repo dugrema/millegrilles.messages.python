@@ -112,8 +112,8 @@ class EmetteurNotifications:
 
         self.__logger.debug("Contenu notification a preparer : %s" % message)
 
-        message, uuid_transaction = await producer.signer(message)
-        del message['_certificat']
+        message, uuid_transaction = await producer.signer(message, Constantes.KIND_DOCUMENT)
+        del message['certificat']
 
         message_compresse = gzip.compress(json.dumps(message).encode('utf-8'))
 
