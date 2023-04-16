@@ -1,9 +1,12 @@
+import binascii
 import datetime
 import json
 import logging
 import multibase
 import uuid
 import pytz
+
+from typing import Union
 
 from cryptography.hazmat.primitives import hashes
 
@@ -23,56 +26,82 @@ class SignateurTransactionSimple:
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__clecert = clecert
 
-    def signer(self, dict_message):
+    def signer(self, message: dict):
         """
-        Signe le message et retourne une nouvelle version. Ajout l'information pour le certificat.
+        Signe le message. Ajout l'information pour le certificat. Le id (hachage) doit deja etre present.
 
-        :param dict_message: Message a signer.
-        :return: Nouvelle version du message, signee.
+        :param hash_value: Valeur a signer.
+        :return: Message signe.
         """
 
-        # S'assurer que le certificat n'est pas expire
-        maintenant = datetime.datetime.now(tz=pytz.UTC)
-        expiration_certificat = self.__clecert.enveloppe.not_valid_after
-        if maintenant > expiration_certificat:
-            raise CertificatExpire()
+        if isinstance(message, dict) is False:
+            raise TypeError("Message doit etre un dict")
 
-        # Copier la base du message et l'en_tete puisqu'ils seront modifies
-        dict_message_effectif = dict_message.copy()
-        en_tete = dict_message[Constantes.MESSAGE_ENTETE].copy()
-        dict_message_effectif[Constantes.MESSAGE_ENTETE] = en_tete
+        hachage = binascii.unhexlify(message['id'])  # Echec si champ id absent (hachage doit etre deja calcule)
+
+        # # S'assurer que le certificat n'est pas expire
+        # maintenant = datetime.datetime.now(tz=pytz.UTC)
+        # expiration_certificat = self.__clecert.enveloppe.not_valid_after
+        # if maintenant > expiration_certificat:
+        #     raise CertificatExpire()
+
+        # # Copier la base du message et l'en_tete puisqu'ils seront modifies
+        # dict_message_effectif = dict_message.copy()
+        # en_tete = dict_message[Constantes.MESSAGE_ENTETE].copy()
+        # dict_message_effectif[Constantes.MESSAGE_ENTETE] = en_tete
 
         # Ajouter information du certification dans l'en_tete
-        fingerprint_cert = self.__clecert.fingerprint
-        en_tete[Constantes.MESSAGE_FINGERPRINT_CERTIFICAT] = fingerprint_cert
+        # fingerprint_cert = self.__clecert.fingerprint
+        # en_tete[Constantes.MESSAGE_FINGERPRINT_CERTIFICAT] = fingerprint_cert
 
-        signature = self._produire_signature(dict_message_effectif)
-        dict_message_effectif[Constantes.MESSAGE_SIGNATURE] = signature
+        # signature = self._produire_signature(dict_message_effectif)
 
-        return dict_message_effectif
+        signature = self.signer_hachage(hachage)
+        message[Constantes.MESSAGE_SIGNATURE] = binascii.hexlify(signature).decode('utf-8')
+        return message
 
-    def _produire_signature(self, dict_message):
-        # message_bytes = self.preparer_transaction_bytes(dict_message)
-        message_bytes = preparer_message_bytes(dict_message)
-        self.__logger.debug("Message en format json: %s" % message_bytes)
+    def signer_hachage(self, hash_value: Union[str, bytes]) -> bytes:
+        """
+        Signe le hachage.
 
-        # Hacher le message avec BLAKE2b pour supporter message de grande taille avec Ed25519
-        hash_fct = hashes.Hash(hashes.BLAKE2b(64))
-        hash_fct.update(message_bytes)
-        hash_value = hash_fct.finalize()
+        :param hash_value: Valeur a signer.
+        :return: Signature (bytes)
+        """
 
-        signature = self.__clecert.signer(hash_value)
+        if isinstance(hash_value, str):
+            # Decoder hachage (hex) en bytes
+            hash_value = binascii.unhexlify(hash_value)
+        elif isinstance(hash_value, bytes) is False:
+            raise TypeError('Hachage doit etre str ou bytes')
 
-        signature = bytes([VERSION_SIGNATURE]) + signature
+        return self.__clecert.signer(hash_value)
 
-        signature_encodee = multibase.encode('base64', signature).decode('utf-8')
-        self.__logger.debug("Signature: %s" % signature_encodee)
-
-        return signature_encodee
+    # def _produire_signature(self, dict_message):
+    #     # message_bytes = self.preparer_transaction_bytes(dict_message)
+    #     message_bytes = preparer_message_bytes(dict_message)
+    #     self.__logger.debug("Message en format json: %s" % message_bytes)
+    #
+    #     # Hacher le message avec BLAKE2b pour supporter message de grande taille avec Ed25519
+    #     hash_fct = hashes.Hash(hashes.BLAKE2s(64))
+    #     hash_fct.update(message_bytes)
+    #     hash_value = hash_fct.finalize()
+    #
+    #     signature = self.__clecert.signer(hash_value)
+    #
+    #     signature = bytes([VERSION_SIGNATURE]) + signature
+    #
+    #     signature_encodee = multibase.encode('base64', signature).decode('utf-8')
+    #     self.__logger.debug("Signature: %s" % signature_encodee)
+    #
+    #     return signature_encodee
 
     @property
     def chaine_certs(self) -> list:
         return self.__clecert.enveloppe.chaine_pem()
+
+    @property
+    def pubkey(self) -> bytes:
+        return self.__clecert.enveloppe.get_public_key_bytes()
 
 
 class FormatteurMessageMilleGrilles:
@@ -91,15 +120,16 @@ class FormatteurMessageMilleGrilles:
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
 
     def signer_message(self,
+                       kind: int,
                        message: dict,
                        domaine: str = None,
-                       version: int = Constantes.MESSAGE_VERSION_1,
                        ajouter_chaine_certs=True,
                        action: str = None,
                        partition: str = None) -> (dict, str):
         """
         Formatte un message en ajoutant l'entete et en le signant.
 
+        :param kind: Type de message
         :param message: Message a signer
         :param domaine: Domaine a ajouter dans l'entete
         :param version: Version du message (depend du domaine)
@@ -108,47 +138,73 @@ class FormatteurMessageMilleGrilles:
         :param partition:
         :return: Message signe
         """
+        if isinstance(kind, int) is False:
+            raise TypeError("Kind doit etre un int")
 
         # Ajouter identificateur unique et temps de la transaction
-        uuid_transaction = uuid.uuid1()
+        #uuid_transaction = uuid.uuid1()
 
-        meta = dict()
-        meta[Constantes.MESSAGE_IDMG] = self.__idmg
-        meta[Constantes.MESSAGE_UUID_TRANSACTION] = "%s" % uuid_transaction
+        # Calculer l'identificateur unique
+
         date_courante_utc = datetime.datetime.now(tz=pytz.UTC)
-        meta[Constantes.MESSAGE_ESTAMPILLE] = int(date_courante_utc.timestamp())
-        meta[Constantes.MESSAGE_VERSION] = version
-        if domaine is not None:
-            meta[Constantes.MESSAGE_DOMAINE] = domaine
-        if action is not None:
-            meta[Constantes.MESSAGE_ACTION] = action
-        if partition is not None:
-            meta[Constantes.MESSAGE_PARTITION] = partition
+        estampille = int(date_courante_utc.timestamp())
 
-        message_copy = message.copy()
-        try:
-            del message_copy[Constantes.MESSAGE_ENTETE]
-        except KeyError:
-            pass  # L'entete n'existait pas
+        message_contenu = json.dumps(
+            message,
+            ensure_ascii=False,  # S'assurer de supporter tous le range UTF-8
+            sort_keys=True,
+            separators=(',', ':')
+        )
 
-        # Nettoyer le message, serialiser pour eliminer tous les objets
-        message_bytes = preparer_message_bytes(message_copy)
+        pubkey = binascii.hexlify(self.__signateur_transactions.pubkey).decode('utf-8')
 
-        # Hacher le contenu avec SHA2-256 et signer le message avec le certificat du noeud
-        self.__logger.debug("Message a hacher : %s" % message_bytes.decode('utf-8'))
-        meta[Constantes.MESSAGE_HACHAGE] = hacher(message_bytes, hashing_code='blake2s-256', encoding='base64')
+        message_hachage = [
+            pubkey,
+            estampille,
+            kind,
+            message_contenu,
+        ]
+        enveloppe_message = {
+            'pubkey': pubkey,  # Cle publique du certificat
+            'estampille': estampille,
+            'kind': kind,
+            'contenu': message_contenu,
+        }
+        if kind in [1, 2, 3, 5]:
+            # Ajouter information de routage
+            routage = dict()
+            if action is not None:
+                routage['action'] = action
+            if domaine is not None:
+                routage['domaine'] = domaine
+            if partition is not None:
+                routage['partition'] = partition
+            enveloppe_message['routage'] = routage
+            message_hachage.append(routage)
 
-        # Recuperer le dict de message (deserialiser), ajouter l'entete pour signer le message
-        message_copy = json.loads(message_bytes)
-        message_copy[Constantes.MESSAGE_ENTETE] = meta
+        # Preparer le contenu a hacher
+        message_hachage_json = json.dumps(
+            message_hachage,
+            ensure_ascii=False,  # S'assurer de supporter tous le range UTF-8
+            sort_keys=True,
+            separators=(',', ':')
+        )
+        message_bytes = bytes(message_hachage_json, 'utf-8')
 
-        message_signe = self.__signateur_transactions.signer(message_copy)
+        # Hacher le contenu
+        self.__logger.debug("Hacher %s" % message_bytes)
+        hash_fct = hashes.Hash(hashes.BLAKE2s(32))
+        hash_fct.update(message_bytes)
+        message_id = binascii.hexlify(hash_fct.finalize()).decode('utf-8')
+        enveloppe_message['id'] = message_id
+
+        message_signe = self.__signateur_transactions.signer(enveloppe_message)
 
         if ajouter_chaine_certs:
             # Ajouter un element _certificats = [cert, inter, millegrilles]
             message_signe[Constantes.MESSAGE_CERTIFICAT_INCLUS] = self.__signateur_transactions.chaine_certs
 
-        return message_signe, uuid_transaction
+        return message_signe, message_id
 
     @property
     def chaine_certificat(self):
@@ -161,24 +217,24 @@ def preparer_message_bytes(message: dict):
             :return: Transaction nettoyee en bytes.
             """
 
-    transaction_temp = dict()
-    for key, value in message.items():
-        if not key.startswith('_'):
-            transaction_temp[key] = value
-
-    # self._logger.debug("Message nettoye: %s" % str(transaction_temp))
-
-    # Premiere passe, converti les dates. Les nombre floats sont incorrects.
+    # transaction_temp = dict()
+    # for key, value in message.items():
+    #     if not key.startswith('_'):
+    #         transaction_temp[key] = value
+    #
+    # # self._logger.debug("Message nettoye: %s" % str(transaction_temp))
+    #
+    # # Premiere passe, converti les dates. Les nombre floats sont incorrects.
+    # message_json = json.dumps(
+    #     transaction_temp,
+    #     ensure_ascii=False,  # S'assurer de supporter tous le range UTF-8
+    #     cls=DateFormatEncoder
+    # )
+    #
+    # # HACK - Fix pour le decodage des float qui ne doivent pas finir par .0 (e.g. 100.0 doit etre 100)
+    # message_json = json.loads(message_json, parse_float=parse_float)
     message_json = json.dumps(
-        transaction_temp,
-        ensure_ascii=False,  # S'assurer de supporter tous le range UTF-8
-        cls=DateFormatEncoder
-    )
-
-    # HACK - Fix pour le decodage des float qui ne doivent pas finir par .0 (e.g. 100.0 doit etre 100)
-    message_json = json.loads(message_json, parse_float=parse_float)
-    message_json = json.dumps(
-        message_json,
+        message,
         ensure_ascii=False,  # S'assurer de supporter tous le range UTF-8
         sort_keys=True,
         separators=(',', ':')

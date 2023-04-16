@@ -112,7 +112,7 @@ class VerificateurHachage:
         return True
 
 
-def hacher_to_digest(valeur: Union[bytes, str], hashing_code: Union[int, str] = 'sha2-512') -> bytes:
+def hacher_to_digest(valeur: Union[bytes, str], hashing_code: Union[int, str] = 'blake2b-512') -> bytes:
     """
     Calcule un hachage en format multibase
     :param valeur: Valeur a hacher

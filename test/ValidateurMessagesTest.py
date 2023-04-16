@@ -36,10 +36,10 @@ async def valider_message():
     signateur = SignateurTransactionSimple(clecert)
     formatteur = FormatteurMessageMilleGrilles(idmg, signateur)
 
-    message_signe = load_messages()
+    #message_signe = load_messages()
 
-    #message_1 = {'valeur': 1, 'texte': 'Du texte.'}
-    #message_1_signe, uuid_transaction = formatteur.signer_message(message_1)
+    message = {'valeur': 1, 'texte': 'Du texte.'}
+    message_signe, uuid_transaction = formatteur.signer_message(Constantes.KIND_REQUETE, message)
 
     # Valider
     resultat_validation = await validateur_messages.verifier(message_signe)

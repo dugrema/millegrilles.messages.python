@@ -2,6 +2,15 @@
 # Logging
 LOGGING_FORMAT = '%(asctime)s %(threadName)s %(levelname)s: %(message)s'
 
+# Kinds de messages
+KIND_DOCUMENT = 0
+KIND_REQUETE = 1
+KIND_COMMANDE = 2
+KIND_TRANSACTION = 3
+KIND_REPONSE = 4
+KIND_EVENEMENT = 5
+KIND_REPONSE_CHIFFREE = 6
+
 # Env params
 ENV_MQ_HOSTNAME = 'MQ_HOSTNAME'
 ENV_MQ_PORT = 'MQ_PORT'
@@ -48,7 +57,7 @@ DOMAINE_CORE_MAITREDESCOMPTES = 'CoreMaitreDesComptes'
 # Champs messages
 MESSAGE_ENTETE='en-tete'
 MESSAGE_FINGERPRINT_CERTIFICAT = 'fingerprint_certificat'
-MESSAGE_SIGNATURE = '_signature'
+MESSAGE_SIGNATURE = 'sig'
 MESSAGE_VERSION_1 = 1
 MESSAGE_IDMG = 'idmg'
 MESSAGE_UUID_TRANSACTION = 'uuid_transaction'
@@ -59,4 +68,4 @@ MESSAGE_ACTION = 'action'
 MESSAGE_PARTITION = 'partition'
 MESSAGE_CERTIFICAT = 'certificat'
 MESSAGE_HACHAGE = 'hachage_contenu'
-MESSAGE_CERTIFICAT_INCLUS = '_certificat'
+MESSAGE_CERTIFICAT_INCLUS = 'certificat'

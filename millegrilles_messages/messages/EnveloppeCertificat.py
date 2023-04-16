@@ -108,6 +108,10 @@ class EnveloppeCertificat:
     def get_public_key(self):
         return self.certificat.public_key()
 
+    def get_public_key_bytes(self):
+        return self.certificat.public_key().public_bytes(
+            encoding=serialization.Encoding.Raw, format=serialization.PublicFormat.Raw)
+
     def public_key_str(self):
         public_key = self.certificat.public_key().public_bytes(
             encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo)
