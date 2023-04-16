@@ -57,7 +57,9 @@ DOMAINE_CORE_MAITREDESCOMPTES = 'CoreMaitreDesComptes'
 # Champs messages
 MESSAGE_ENTETE='en-tete'
 MESSAGE_FINGERPRINT_CERTIFICAT = 'fingerprint_certificat'
+MESSAGE_ID = 'id'
 MESSAGE_SIGNATURE = 'sig'
+MESSAGE_PUBKEY = 'pubkey'
 MESSAGE_VERSION_1 = 1
 MESSAGE_IDMG = 'idmg'
 MESSAGE_UUID_TRANSACTION = 'uuid_transaction'
@@ -67,5 +69,5 @@ MESSAGE_DOMAINE = 'domaine'
 MESSAGE_ACTION = 'action'
 MESSAGE_PARTITION = 'partition'
 MESSAGE_CERTIFICAT = 'certificat'
-MESSAGE_HACHAGE = 'hachage_contenu'
+MESSAGE_HACHAGE = MESSAGE_ID
 MESSAGE_CERTIFICAT_INCLUS = 'certificat'

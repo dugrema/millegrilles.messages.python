@@ -1,5 +1,6 @@
 # Validateurs de messages (transactions, documents, commandes, etc.)
 import asyncio
+import binascii
 import datetime
 import json
 import logging
@@ -7,12 +8,13 @@ import pytz
 import multibase
 
 from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from typing import Union
 
 from millegrilles_messages.messages import Constantes
 from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
 from millegrilles_messages.messages.FormatteurMessages import DateFormatEncoder, parse_float
-from millegrilles_messages.messages.Hachage import verifier_hachage
+from millegrilles_messages.messages.Hachage import ErreurHachage
 from millegrilles_messages.messages.ValidateurCertificats import ValidateurCertificatCache, CertificatInconnu
 
 
@@ -25,8 +27,7 @@ class ValidateurMessage:
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__validateur_certificats = validateur_certificats
 
-    async def verifier(self, message: Union[bytes, str, dict], utiliser_date_message=False,
-                       utiliser_idmg_message=False) -> EnveloppeCertificat:
+    async def verifier(self, message: Union[bytes, str, dict], utiliser_date_message=False, utiliser_idmg_message=False) -> EnveloppeCertificat:
         """
         :raise certvalidator.errors.PathValidationError: Certificat est invalide.
         :raise cryptography.exceptions.InvalidSignature: Signature du message est invalide.
@@ -40,23 +41,15 @@ class ValidateurMessage:
         else:
             raise TypeError("La transaction doit etre en format bytes, str ou dict")
 
-        # Preparer le message pour verification du hachage et de la signature
-        message_nettoye = preparer_message(dict_message)
+        # Verifier la signature
+        await verifier_signature(dict_message)
 
         # Verifier le hachage du contenu - si invalide, pas de raison de verifier la signature
-        fut_hachage = self.verifier_hachage(message_nettoye)
+        await self.verifier_hachage(dict_message)
 
         # Valider presence de la signature en premier, certificat apres
-        signature = dict_message[Constantes.MESSAGE_SIGNATURE]
-        fut_enveloppe_certificat = self.__valider_certificat_message(message, utiliser_date_message,
-                                                                     utiliser_idmg_message)
-
-        # Attendre hachage et enveloppe certificat
-        resultat = await asyncio.gather(fut_hachage, fut_enveloppe_certificat)
-        enveloppe_certificat = resultat[1]
-
-        # Certificat est valide. On verifie la signature.
-        await verifier_signature(message_nettoye, signature, enveloppe_certificat)
+        enveloppe_certificat = await self.__valider_certificat_message(
+            message, utiliser_date_message, utiliser_idmg_message)
 
         return enveloppe_certificat
 
@@ -66,53 +59,40 @@ class ValidateurMessage:
         :return: Hachage du message
         :raises ErreurHachage: Si le digest calcule ne correspond pas au hachage fourni
         """
-        entete = message[Constantes.MESSAGE_ENTETE]
-        hachage = entete[Constantes.MESSAGE_HACHAGE]
+        message_id = message[Constantes.MESSAGE_ID]
+        message_bytes = preparer_message(message)
 
-        message_sans_entete = message.copy()
-        try:
-            del message_sans_entete[Constantes.MESSAGE_ENTETE]
-        except KeyError:
-            pass  # Ce n'est pas un message avec entete
+        self.__logger.debug("Hacher %s" % message)
+        hash_fct = hashes.Hash(hashes.BLAKE2s(32))
+        hash_fct.update(message_bytes)
+        hachage_calcule = binascii.hexlify(hash_fct.finalize()).decode('utf-8')
 
-        # message_bytes = json.dumps(message_sans_entete).encode('utf-8')
-        message_bytes = json.dumps(
-            message_sans_entete,
-            ensure_ascii=False,  # S'assurer de supporter tous le range UTF-8
-            sort_keys=True,
-            separators=(',', ':')
-        ).encode('utf-8')
+        if message_id != hachage_calcule:
+            raise ErreurHachage('Erreur validation hachage')
 
-        # Fonction de verification de hachage - lance une exception en cas de mismatch
-        verifier_hachage(hachage, message_bytes)
-
-        return hachage
+        return message_id
 
     async def __valider_certificat_message(self, message, utiliser_date_message: bool, utiliser_idmg_message: bool):
-        entete = message[Constantes.MESSAGE_ENTETE]
         if utiliser_idmg_message:
-            idmg_message = entete[Constantes.MESSAGE_IDMG]
+            idmg_message = message[Constantes.MESSAGE_IDMG]
         else:
             idmg_message = None
 
         if utiliser_date_message:
-            estampille = entete[Constantes.MESSAGE_ESTAMPILLE]
+            estampille = message[Constantes.MESSAGE_ESTAMPILLE]
             date_reference = datetime.datetime.fromtimestamp(estampille, tz=pytz.UTC)
         else:
             date_reference = None
 
         # Tenter d'extraire un certificat inclus dans le message - il sera utilise pour la validation
-        certificats_inline = \
-            message.get('_certificats') or \
-            message.get('_certificat')
+        certificats_inline = message.get('certificat')
 
-        entete = message[Constantes.MESSAGE_ENTETE]
-        fingerprint_message = entete[Constantes.MESSAGE_FINGERPRINT_CERTIFICAT]
+        pubkey = message[Constantes.MESSAGE_PUBKEY]
 
         try:
             # Tenter de charger une version du certificat dans le cache
             enveloppe_certificat = await self.__validateur_certificats.valider_fingerprint(
-                fingerprint_message, date_reference=date_reference, idmg=idmg_message, nofetch=True)
+                pubkey, date_reference=date_reference, idmg=idmg_message, nofetch=True)
             return enveloppe_certificat
         except CertificatInconnu:
             pass
@@ -127,70 +107,53 @@ class ValidateurMessage:
                 certificats_inline, date_reference=date_reference, idmg=idmg_message)
 
             # S'assurer que le certificat correspond au fingerprint
-            fingerprint_charge = enveloppe_certificat.fingerprint
-            if fingerprint_charge != fingerprint_message:
+            fingerprint_charge = binascii.hexlify(enveloppe_certificat.get_public_key_bytes()).decode('utf-8')
+            if fingerprint_charge != pubkey:
                 self.__logger.warning(
                     "Message recu avec certificat inline (%s) qui ne correspond pas au fingerprint du message %s" % (
-                        fingerprint_charge, entete[Constantes.MESSAGE_UUID_TRANSACTION]
+                        fingerprint_charge, message[Constantes.MESSAGE_ID]
                     )
                 )
 
                 # Ignorer ce certificat, il n'est pas utilisable pour verifier ce message.
-                raise CertificatInconnu(fingerprint_message)
+                raise CertificatInconnu(pubkey)
             else:
                 return enveloppe_certificat
         else:
-            raise CertificatInconnu(fingerprint_message)
+            raise CertificatInconnu(pubkey)
 
     @property
     def validateur_pki(self) -> ValidateurCertificatCache:
         return self.__validateur_certificats
 
 
-def preparer_message(message: dict) -> dict:
-    message_nettoye = dict()
-    for key, value in message.items():
-        if not key.startswith('_'):
-            message_nettoye[key] = value
+def preparer_message(message: dict) -> bytes:
+    message_hachage = list()
+    champs = ['pubkey', 'estampille', 'kind', 'contenu', 'routage']
+    for champ in champs:
+        if message.get(champ) is not None:
+            message_hachage.append(message[champ])
 
     # Premiere passe, converti les dates. Les nombre floats sont incorrects.
     message_str = json.dumps(
-        message_nettoye,
-        ensure_ascii=False,   # S'assurer de supporter tous le range UTF-8
-        cls=DateFormatEncoder
-    )
-
-    # HACK - Fix pour le decodage des float qui ne doivent pas finir par .0 (e.g. 100.0 doit etre 100)
-    message_nettoye = json.loads(message_str, parse_float=parse_float)
-
-    return message_nettoye
-
-
-async def verifier_signature(message: dict, signature: str, enveloppe: EnveloppeCertificat):
-    # Le certificat est valide. Valider la signature du message.
-    signature_enveloppe = multibase.decode(signature.encode('utf-8'))
-    version_signature = signature_enveloppe[0]
-    signature_bytes = signature_enveloppe[1:]
-
-    if isinstance(signature_bytes, str):
-        signature_bytes = signature_bytes.encode('utf-8')
-
-    message_bytes = json.dumps(
-        message,
+        message_hachage,
         ensure_ascii=False,   # S'assurer de supporter tous le range UTF-8
         sort_keys=True,
         separators=(',', ':')
-    ).encode('utf-8')
+    )
 
-    certificat = enveloppe.certificat
-    cle_publique = certificat.public_key()
+    return message_str.encode('utf-8')
 
-    if version_signature == 2:
-        hash = hashes.Hash(hashes.BLAKE2b(64))
-        hash.update(message_bytes)
-        hash_value = hash.finalize()
-        cle_publique.verify(signature_bytes, hash_value)
-    else:
-        raise ValueError("Version de signature non supportee : %s" % version_signature)
+
+async def verifier_signature(message: dict):
+    # Le certificat est valide. Valider la signature du message.
+    signature_bytes = binascii.unhexlify(message[Constantes.MESSAGE_SIGNATURE])
+    hachage_message = binascii.unhexlify(message[Constantes.MESSAGE_ID])
+
+    # Convertire bytes de cle publique en cle openssl
+    pubkey_bytes = binascii.unhexlify(message[Constantes.MESSAGE_PUBKEY])
+    pubkey = Ed25519PublicKey.from_public_bytes(pubkey_bytes)
+
+    pubkey.verify(signature_bytes, hachage_message)
 
     # Signature OK, aucune exception n'a ete lancee

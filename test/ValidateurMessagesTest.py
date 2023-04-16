@@ -39,7 +39,9 @@ async def valider_message():
     #message_signe = load_messages()
 
     message = {'valeur': 1, 'texte': 'Du texte.'}
-    message_signe, uuid_transaction = formatteur.signer_message(Constantes.KIND_REQUETE, message)
+    message_signe, uuid_transaction = formatteur.signer_message(Constantes.KIND_REQUETE, message, domaine='Test', action='tester')
+
+    logger.debug("Message signe\n%s", message_signe)
 
     # Valider
     resultat_validation = await validateur_messages.verifier(message_signe)
@@ -47,16 +49,16 @@ async def valider_message():
 
     # Corrompre contenu
     message_1_corrompu1 = message_signe.copy()
-    message_1_corrompu1['mauvais'] = True
+    message_1_corrompu1['contenu'] = 'DADADA'
     try:
         await validateur_messages.verifier(message_1_corrompu1)
         raise Exception('fail')
     except ErreurHachage:
         logger.debug("Resultat validation ErreurHachage (OK!)")
 
-    # Corrompre en-tete
+    # Corrompre cle publique
     message_1_corrompu2 = message_signe.copy()
-    message_1_corrompu2['en-tete']['mauvais'] = True
+    message_1_corrompu2['pubkey'] = '28bafef05f683cba5b78a7a9938d75806eaef4a03fe28931a60d4d7ef2af60cf'
     try:
         await validateur_messages.verifier(message_1_corrompu2)
         raise Exception('fail')
@@ -70,6 +72,7 @@ def main():
     logging.basicConfig(format=Constantes.LOGGING_FORMAT, level=logging.WARN)
     logging.getLogger(__name__).setLevel(logging.DEBUG)
     logging.getLogger('millegrilles').setLevel(logging.DEBUG)
+    logging.getLogger('millegrilles_messages').setLevel(logging.DEBUG)
 
     asyncio.run(valider_message())
 
