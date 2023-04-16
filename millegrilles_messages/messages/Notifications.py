@@ -149,7 +149,8 @@ class EmetteurNotifications:
             partition = params_dechiffrage['partition']
 
             # Signer la commande de cle
-            commande_signee = await producer.signer(params_dechiffrage, 'MaitreDesCles', 'sauvegarderCle', partition)
+            commande_signee = await producer.signer(
+                params_dechiffrage, Constantes.KIND_COMMANDE, 'MaitreDesCles', 'sauvegarderCle', partition)
             self.__commande_cle = commande_signee[0]
 
         else:

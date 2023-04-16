@@ -8,6 +8,7 @@ import json
 from os import listdir, path, unlink, makedirs
 from typing import Optional
 
+from millegrilles_messages.messages import Constantes
 from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
 from millegrilles_messages.backup.Configuration import ConfigurationBackup
 from millegrilles_messages.chiffrage.Mgs4 import CipherMgs4
@@ -107,7 +108,7 @@ class GenerateurBackup:
             unlink(path_catalogue)
 
     def sauvegarder_tar(self, fichier_dest, info_chiffrage, nom_archive_chiffree, path_catalogue, path_tar_file):
-        info_chiffrage_signe, uuid_transaction = self.__formatteur.signer_message(info_chiffrage)
+        info_chiffrage_signe, uuid_transaction = self.__formatteur.signer_message(Constantes.KIND_DOCUMENT, info_chiffrage)
         with open(path_catalogue, 'w') as fichier_cat:
             json.dump(info_chiffrage_signe, fichier_cat)
         with tarfile.open(path_tar_file, 'w') as tar_out:

@@ -13,6 +13,7 @@ from uuid import uuid4
 from asyncio import Event
 from asyncio.exceptions import TimeoutError
 
+from millegrilles_messages.messages import Constantes
 from millegrilles_messages.messages.CleCertificat import CleCertificat
 from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
 from millegrilles_messages.messages.FormatteurMessages import FormatteurMessageMilleGrilles, SignateurTransactionSimple
@@ -411,8 +412,8 @@ class MessageProducerFormatteur(MessageProducer):
         formatteur = FormatteurMessageMilleGrilles(idmg, signateur)
         return formatteur
 
-    async def signer(self, message: dict, domaine: Optional[str] = None, action: Optional[str] = None, partition: Optional[str] = None, version=1) -> dict:
-        return self.__formatteur_messages.signer_message(message, domaine, version, action=action, partition=partition)
+    async def signer(self, message: dict, kind: Constantes.KIND_DOCUMENT, domaine: Optional[str] = None, action: Optional[str] = None, partition: Optional[str] = None, version=1) -> dict:
+        return self.__formatteur_messages.signer_message(kind, message, domaine, action=action, partition=partition)
 
     async def emettre_evenement(self, evenement: dict, domaine: str, action: str,
                                 partition: Optional[str] = None, exchanges: Union[str, list] = None, version=1,
@@ -420,7 +421,7 @@ class MessageProducerFormatteur(MessageProducer):
 
         if noformat is False:
             message, uuid_message = self.__formatteur_messages.signer_message(
-                evenement, domaine, version, action=action, partition=partition)
+                Constantes.KIND_EVENEMENT, evenement, domaine, action=action, partition=partition)
         else:
             message = evenement
             uuid_message = evenement['en-tete']['uuid_transaction']
@@ -452,7 +453,7 @@ class MessageProducerFormatteur(MessageProducer):
 
             # Signer le message
             message, uuid_message = self.__formatteur_messages.signer_message(
-                commande, domaine, version, action=action, partition=partition)
+                Constantes.KIND_COMMANDE, commande, domaine, action=action, partition=partition)
 
             # Remettre elements avec underscore (filtres par le processus de signature)
             message.update(elem_direct)
@@ -483,7 +484,7 @@ class MessageProducerFormatteur(MessageProducer):
             uuid_message = requete['en-tete']['uuid_transaction']
         else:
             message, uuid_message = self.__formatteur_messages.signer_message(
-                requete, domaine, version, action=action, partition=partition)
+                Constantes.KIND_REQUETE, requete, domaine, action=action, partition=partition)
 
         correlation_id = str(uuid_message)
 
@@ -504,7 +505,7 @@ class MessageProducerFormatteur(MessageProducer):
                                     reply_to=None, nowait=False):
 
         message, uuid_message = self.__formatteur_messages.signer_message(
-            transaction, domaine, version, action=action, partition=partition)
+            Constantes.KIND_TRANSACTION, transaction, domaine, version, action=action, partition=partition)
 
         correlation_id = str(uuid_message)
 
@@ -521,7 +522,7 @@ class MessageProducerFormatteur(MessageProducer):
             return reponse
 
     async def repondre(self, reponse: dict, reply_to, correlation_id, version=1):
-        message, uuid_message = self.__formatteur_messages.signer_message(reponse, version=version)
+        message, uuid_message = self.__formatteur_messages.signer_message(Constantes.KIND_REPONSE, reponse)
         message_bytes = json.dumps(message)
         routing_key = reply_to
         await self.emettre(message_bytes, routing_key, correlation_id=correlation_id, reply_to=reply_to)
