@@ -27,7 +27,7 @@ from millegrilles_messages.messages.MessagesModule import RessourcesConsommation
 
 
 PATH_RESTAURATION = '_RESTAURATION'
-TAILLE_BUFFER = 32 * 1204
+TAILLE_BUFFER = 128 * 1024
 
 
 class RestaurateurArchives:
@@ -271,8 +271,9 @@ class RestaurateurTransactions:
                 resultat = await producer.executer_requete(requete, domaine='fichiers',
                                                            action='getBackupTransaction', exchange='2.prive')
                 transaction_backup = resultat.parsed['backup']
+                contenu_transaction = json.loads(transaction_backup['contenu'])
                 try:
-                    domaine = transaction_backup['domaine']
+                    domaine = contenu_transaction['domaine']
                 except KeyError:
                     self.__logger.error("Transaction %s n'a pas de champ domaine - ** SKIP **" % nom_fichier)
                     continue
@@ -287,7 +288,7 @@ class RestaurateurTransactions:
                 meta_domaine['fichiers'].append(nom_fichier)
 
                 try:
-                    meta_traitement = await self.traiter_transactions_fichier(transaction_backup)
+                    meta_traitement = await self.traiter_transactions_fichier(contenu_transaction)
                     meta_domaine['transactions'] = meta_domaine['transactions'] + meta_traitement['nb_transactions_traitees']
                 except ValueError:
                     self.__logger.exception("Erreur dechiffrage fichier %s" % nom_fichier)
@@ -331,13 +332,15 @@ class RestaurateurTransactions:
         compteur_transactions = 0
         for transaction in data_transactions:
             compteur_transactions = compteur_transactions + 1
-            fingerprint = transaction['en-tete']['fingerprint_certificat']
+            # fingerprint = transaction['en-tete']['fingerprint_certificat']
+            fingerprint = transaction['pubkey']
 
             sync_traitement = compteur_transactions % 200 == 0
 
             bypass_transaction = False
             try:
-                action = transaction['en-tete']['action']
+                # action = transaction['en-tete']['action']
+                action = transaction['routage']['action']
             except KeyError:
                 pass  # OK, pas d'action
             else:
@@ -348,7 +351,7 @@ class RestaurateurTransactions:
 
             if bypass_transaction is False:
                 certificat = certificats[fingerprint]
-                transaction['_certificat'] = certificat
+                transaction['certificat'] = certificat
 
                 enveloppe_transaction = {'transaction': transaction, 'ack': sync_traitement}
                 # enveloppe_transaction = {'transaction': transaction}
