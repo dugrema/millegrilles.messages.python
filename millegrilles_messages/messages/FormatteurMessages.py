@@ -125,7 +125,8 @@ class FormatteurMessageMilleGrilles:
                        domaine: str = None,
                        ajouter_chaine_certs=True,
                        action: str = None,
-                       partition: str = None) -> (dict, str):
+                       partition: str = None,
+                       pre_migration: dict = None) -> (dict, str):
         """
         Formatte un message en ajoutant l'entete et en le signant.
 
@@ -170,7 +171,7 @@ class FormatteurMessageMilleGrilles:
             'kind': kind,
             'contenu': message_contenu,
         }
-        if kind in [1, 2, 3, 5]:
+        if kind in [1, 2, 3, 5, 7]:
             # Ajouter information de routage
             routage = dict()
             if action is not None:
@@ -181,6 +182,9 @@ class FormatteurMessageMilleGrilles:
                 routage['partition'] = partition
             enveloppe_message['routage'] = routage
             message_hachage.append(routage)
+        if kind in [7]:
+            enveloppe_message['pre-migration'] = pre_migration
+            message_hachage.append(pre_migration)
 
         # Preparer le contenu a hacher
         message_hachage_json = json.dumps(

@@ -4,6 +4,7 @@ import logging
 
 from millegrilles_messages.backup.Backup import main as backup_main
 from millegrilles_messages.backup.Restaurer import main as restaurer_main
+from millegrilles_messages.backup.Migrer import main as migrer_main
 from millegrilles_messages.backup.DemarrerBackup import main as demarrer_backup
 from millegrilles_messages.backup.Verifier import main as verifier_main
 from millegrilles_messages.backup.ExtracteurGrosFichiers import main as grosfichiers_main
@@ -50,6 +51,16 @@ def parse() -> argparse.Namespace:
     subparser_restaurer.add_argument('--delai', type=int, required=False,
                                      help='Delai en secondes entre archives (tweak)')
 
+    # Subparser migrer
+    subparser_restaurer = subparsers.add_parser('migrer', help='Migrer archive')
+    subparser_restaurer.add_argument('--cleca', required=True, help='Path/URL du JSON de cle de millegrille')
+    subparser_restaurer.add_argument('--source', required=True, help='Path/URL de source pour les archives a migrer')
+    subparser_restaurer.add_argument('--destination', default='/tmp/millegrilles_migrer',
+                                     help='Path/URL de destination pour les archives migrees')
+    subparser_restaurer.add_argument('--archive', required=False, help='Path/URL de fichier d''archive')
+    subparser_restaurer.add_argument('--domaine', type=str, required=False,
+                                     help='Migrer le domaine specifie (e.g. GrosFichiers)')
+
     subparser_demarrer = subparsers.add_parser('verifier', help='Verifier fichiers')
     subparser_demarrer.add_argument('--repertoire', type=str, required=False,
                                     help='Repertoire avec les fichiers a verifier')
@@ -90,6 +101,8 @@ async def demarrer(args: argparse.Namespace):
         await restaurer_main(args.archive, args.workpath, args.cleca,
                              transactions=args.transactions, rechiffrer=args.rechiffrer,
                              domaine=args.domaine, delai=args.delai)
+    elif command == 'migrer':
+        await migrer_main(args.archive, args.source, args.destination, args.cleca, domaine=args.domaine)
     elif command == 'verifier':
         await verifier_main(args.repertoire)
     elif command == 'grosfichiers':
@@ -104,7 +117,9 @@ def main():
     :return:
     """
     logging.basicConfig()
-    logging.getLogger(__name__).setLevel(logging.INFO)
+    logging.getLogger(__name__).setLevel(logging.DEBUG)
+    logging.getLogger('millegrilles').setLevel(logging.DEBUG)
+    logging.getLogger('millegrilles_messages').setLevel(logging.DEBUG)
 
     args = parse()
     asyncio.run(demarrer(args))
