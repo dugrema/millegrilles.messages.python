@@ -21,14 +21,14 @@ from millegrilles_messages.messages.ValidateurMessage import ValidateurMessage, 
 from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
 from millegrilles_messages.messages.CleCertificat import CleCertificat
 from millegrilles_messages.messages.FormatteurMessages import SignateurTransactionSimple, FormatteurMessageMilleGrilles
-from millegrilles_messages.chiffrage.Mgs4 import DecipherMgs4
+from millegrilles_messages.chiffrage.Mgs4 import CipherMgs4, DecipherMgs4
 
 from millegrilles_messages.messages.MessagesThread import MessagesThread
 from millegrilles_messages.messages.MessagesModule import RessourcesConsommation
 
 
 PATH_MIGRER = '_MIGRER'
-TAILLE_BUFFER = 128 * 1024
+TAILLE_BUFFER = 64 * 1024
 
 
 class MigrateurArchives:
@@ -153,6 +153,7 @@ class MigrateurTransactions:
         self.__stop_event: Optional[asyncio.Event] = None
         self.__liste_complete_event: Optional[asyncio.Event] = None
         self.__messages_thread: Optional[MessagesThread] = None
+        self.__fiche: Optional[dict] = None
         self.__certificats_rechiffrage: Optional[list[EnveloppeCertificat]] = None
         self.__domaine = domaine
 
@@ -162,6 +163,8 @@ class MigrateurTransactions:
 
         self.__path_fichier_archives = path.join(work_path, 'liste.txt')
         self.__fp_fichiers_archive = None
+
+        self.__ca_destination = EnveloppeCertificat.from_file(self.__config.ca_pem_path)
 
     async def preparer(self):
         makedirs(self.__work_path, mode=0o755, exist_ok=True)
@@ -226,9 +229,11 @@ class MigrateurTransactions:
 
         self.__logger.info("Recuperer certificats maitre des cles")
         producer = self.__messages_thread.get_producer()
-        cert = await asyncio.wait_for(producer.executer_requete(
-            dict(), domaine='MaitreDesCles', action='certMaitreDesCles', exchange=Constantes.SECURITE_PRIVE), 10)
-        cert_pem = ''.join(cert.parsed['certificat'])
+        idmg_local = self.__ca_destination.idmg
+        reponse = await asyncio.wait_for(producer.executer_requete(
+            {'idmg': idmg_local}, domaine='CoreTopologie', action='ficheMillegrille', exchange=Constantes.SECURITE_PRIVE), 10)
+        self.__fiche = reponse.parsed
+        cert_pem = ''.join(self.__fiche['chiffrage'].pop())
         certificat_rechiffrage = EnveloppeCertificat.from_pem(cert_pem)
         if 'maitredescles' not in certificat_rechiffrage.get_roles:
             raise ValueError('Mauvais certificat de rechiffrage recu - doit avoir role maitredescles')
@@ -266,7 +271,6 @@ class MigrateurTransactions:
                     nom_fichier = path.join(root, file)
                     await self.traiter_fichier(nom_fichier)
 
-
     async def traiter_fichier(self, nom_fichier: str):
         self.__logger.debug("Traiter %s" % nom_fichier)
 
@@ -292,7 +296,7 @@ class MigrateurTransactions:
         except ValueError:
             self.__logger.exception("Erreur dechiffrage fichier %s" % nom_fichier)
 
-    async def traiter_transactions_fichier(self, backup: dict) -> dict:
+    async def traiter_transactions_fichier(self, backup: dict) -> list:
         domaine = backup['domaine']
         nombre_transactions_catalogue = backup['nombre_transactions']
         info_meta = {'domaine': domaine, 'nb_transactions_catalogue': nombre_transactions_catalogue}
@@ -318,6 +322,7 @@ class MigrateurTransactions:
 
         del backup['_signature']
         del backup['_certificat']
+        del backup['en-tete']
 
         certificats = self.preparer_certificats(backup['certificats'])
 
@@ -328,11 +333,10 @@ class MigrateurTransactions:
             date_backup = datetime.datetime.fromtimestamp(backup['date_transactions_debut'], tz=pytz.UTC)
             self.__logger.info("%s (%s) restaurer %d transactions" % (domaine, date_backup, nombre_transactions_catalogue))
 
-        compteur_transactions = 0
+        transactions_migrees = list()
         for transaction in data_transactions:
-            compteur_transactions = compteur_transactions + 1
-
-            await self.migrer_transaction(transaction, ancien_nouveau_mapping)
+            transaction_migree = await self.migrer_transaction(transaction, ancien_nouveau_mapping)
+            transactions_migrees.append(transaction_migree)
             # bypass_transaction = False
             # try:
             #     # action = transaction['en-tete']['action']
@@ -358,12 +362,33 @@ class MigrateurTransactions:
             #                                      nowait=not sync_traitement,
             #                                      timeout=120)
 
+        compteur_transactions = len(transactions_migrees)
         info_meta['nb_transactions_traitees'] = compteur_transactions
 
         if compteur_transactions != nombre_transactions_catalogue:
             self.__logger.warning("%s nombre transactions restaurees (%d) mismatch catalogue" % (compteur_transactions, nombre_transactions_catalogue))
 
-        return info_meta
+        # Rechiffrer les transactions
+        cle_publique = self.__ca_destination.get_public_x25519()
+        cipher = CipherMgs4(cle_publique)
+        transactions_migrees = lzma.compress(json.dumps(transactions_migrees).encode('utf-8'))
+        transactions_migrees = cipher.update(transactions_migrees)
+        transactions_migrees += cipher.finalize()
+        info_dechiffrage = cipher.get_info_dechiffrage(self.__certificats_rechiffrage)
+
+        backup['cle'] = info_dechiffrage['cle']
+        backup['data_hachage_bytes'] = info_dechiffrage['hachage_bytes']
+        backup['header'] = info_dechiffrage['header']
+        transactions_migrees = multibase.encode('base64', transactions_migrees).decode('utf-8')
+        backup['data_transactions'] = transactions_migrees
+
+        # Signer le catalogue
+        catalogue_signe, uuid_transaction = self.__formatteur.signer_message(2, backup, ajouter_chaine_certs=True, domaine='Backup', action='backupTransactions')
+        with lzma.open('/tmp/catalogue_migre.json.xz', 'wb') as fichier:
+            catalogue_signe = json.dumps(catalogue_signe).encode('utf-8')
+            fichier.write(catalogue_signe)
+
+        return backup
 
     def remapper_certificats(self, certificats: dict):
         """
@@ -386,13 +411,13 @@ class MigrateurTransactions:
 
         # Detecter format transaction
         if transaction.get('en-tete'):
-            # Ancien format (pre 2023.5)
-            await self.migrer_pre20235(transaction, ancien_nouveau_mapping_fingerprints)
+            # Ancien format avec en-tete/_signature (pre 2023.5)
+            return await self.migrer_pre_2023_5(transaction, ancien_nouveau_mapping_fingerprints)
         else:
             # Plus recent format
-            await self.migrer_courant(transaction, ancien_nouveau_mapping_fingerprints)
+            return await self.migrer_courant(transaction, ancien_nouveau_mapping_fingerprints)
 
-    async def migrer_pre20235(self, transaction: dict, ancien_nouveau_mapping_fingerprints: dict):
+    async def migrer_pre_2023_5(self, transaction: dict, ancien_nouveau_mapping_fingerprints: dict):
         entete = transaction['en-tete']
 
         contenu_dict = dict()
@@ -415,6 +440,7 @@ class MigrateurTransactions:
         )
 
         self.__logger.debug("Transaction migree %s", transaction_migree)
+        return transaction_migree
 
     async def migrer_courant(self, transaction: dict, ancien_nouveau_mapping_fingerprints: dict):
         raise NotImplementedError('todo')
