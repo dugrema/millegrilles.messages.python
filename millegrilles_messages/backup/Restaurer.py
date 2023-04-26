@@ -315,23 +315,20 @@ class RestaurateurTransactions:
         nombre_transactions_catalogue = backup['nombre_transactions']
         info_meta = {'domaine': domaine, 'nb_transactions_catalogue': nombre_transactions_catalogue}
 
-        # Dechiffrer cle
-        cle_dechiffree = self.__clecert_ca.dechiffrage_asymmetrique(backup['cle'])
-        decipher = DecipherMgs4(cle_dechiffree, backup['header'])
-
         certificats = self.preparer_certificats(backup['certificats'])
 
         producer = self.__messages_thread.get_producer()
 
         # Emettre les certificats vers CorePki
-        for certificat in certificats.values():
-            commande_certificat = {'chaine_pem': certificat}
+        for commande_certificat in certificats.values():
             await producer.executer_commande(commande_certificat,
                                              domaine='CorePki', action='certificat',
                                              exchange=Constantes.SECURITE_PROTEGE,
                                              timeout=15)
 
         # Dechiffrer transactions
+        cle_dechiffree = self.__clecert_ca.dechiffrage_asymmetrique(backup['cle'])
+        decipher = DecipherMgs4(cle_dechiffree, backup['header'])
         data_transactions = await asyncio.to_thread(self.extraire_transactions, backup['data_transactions'], decipher)
 
         if self.__logger.isEnabledFor(logging.INFO):
@@ -427,9 +424,15 @@ class RestaurateurTransactions:
         for cert_ref in certificats_ref:
             fingerprint = cert_ref[0]
             chaine = list()
+            cert_ca = None
             for cert_fp in cert_ref:
-                chaine.append(pems[cert_fp])
-            certificats[fingerprint] = chaine
+                if cert_fp.startswith('CA:'):
+                    cert_ca = pems[cert_fp]
+                    certificats[cert_fp] = {'chaine_pem': [cert_ca]}
+                else:
+                    chaine.append(pems[cert_fp])
+            cert_info = {'chaine_pem': chaine, 'ca': cert_ca}
+            certificats[fingerprint] = cert_info
 
         return certificats
 

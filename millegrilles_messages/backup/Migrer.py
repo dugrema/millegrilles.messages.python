@@ -398,12 +398,23 @@ class MigrateurTransactions:
         # Ajouter le certificat de migration
         nouveau_mapping[self.__clecert_migration.fingerprint] = self.__clecert_migration.enveloppe.certificat_pem
 
+        # Detecter changement de IDMG
+        if self.__clecert_ca.enveloppe.idmg != self.__ca_destination.idmg:
+            # Ajouter certificat CA de l'ancienne MilleGrille
+            ca_fingerprint = 'CA:%s:%s' % (self.__clecert_ca.enveloppe.idmg, self.__clecert_ca.fingerprint)
+            nouveau_mapping[ca_fingerprint] = self.__clecert_ca.enveloppe.certificat_pem
+        else:
+            ca_fingerprint = None
+
         remappe_certs = [
             [self.__clecert_migration.fingerprint]  # Certificat de migration, chaine a un seul cert
         ]
         for cert in backup_certificats['certificats']:
             cert_remappe = [ancien_nouveau_mapping[f] for f in cert]
+            if ca_fingerprint is not None:
+                cert_remappe.append(ca_fingerprint)
             remappe_certs.append(cert_remappe)
+
 
         return nouveau_mapping, ancien_nouveau_mapping, remappe_certs
 
