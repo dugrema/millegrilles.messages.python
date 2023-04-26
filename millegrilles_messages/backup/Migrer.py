@@ -455,9 +455,14 @@ class MigrateurTransactions:
 
     async def rechiffrer_transaction_maitredescles(self, transaction: dict):
         cle_originale = transaction['cle']
-        cle_dechiffree = self.__clecert_ca.dechiffrage_asymmetrique(cle_originale)
-        cle_rechiffree, fingerprint = self.__clecert_ca_destination.chiffrage_asymmetrique(cle_dechiffree)
-        return cle_rechiffree
+        if self.__clecert_ca.enveloppe.idmg != self.__clecert_ca_destination.enveloppe.idmg:
+            # Changement de MilleGrille, on rechiffre la cle
+            cle_dechiffree = self.__clecert_ca.dechiffrage_asymmetrique(cle_originale)
+            cle_rechiffree, fingerprint = self.__clecert_ca_destination.chiffrage_asymmetrique(cle_dechiffree)
+            return cle_rechiffree
+        else:
+            # Aucun rechiffrage necessaire (meme MilleGrille)
+            return cle_originale
 
     def extraire_transactions(self, data: str, decipher: DecipherMgs4):
         data = multibase.decode(data)       # Base 64 decode
