@@ -71,7 +71,7 @@ class CleCertificat:
         return False
 
     def chiffrage_asymmetrique(self, cle_secrete):
-        cle_asym = chiffrer_cle_ed25519(self, cle_secrete)
+        cle_asym = chiffrer_cle_ed25519(self.__enveloppe, cle_secrete)
         fingerprint = self.fingerprint
         return cle_asym, fingerprint
 

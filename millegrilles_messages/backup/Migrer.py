@@ -327,29 +327,6 @@ class MigrateurTransactions:
             transaction_migree = await self.migrer_transaction(transaction, ancien_nouveau_mapping)
             compteur_transactions += 1
             transactions_migrees += json.dumps(transaction_migree) + '\n'
-            # try:
-            #     # action = transaction['en-tete']['action']
-            #     action = transaction['routage']['action']
-            # except KeyError:
-            #     pass  # OK, pas d'action
-            # else:
-            #     if self.__certificats_rechiffrage is not None and domaine == 'MaitreDesCles' and action == 'cle':
-            #         # self.__logger.info("Rechiffrer cle")
-            #         bypass_transaction = True
-            #         await self.rechiffrer_transaction_maitredescles(producer, transaction, not sync_traitement)
-            #
-            # if bypass_transaction is False:
-            #     certificat = certificats[fingerprint]
-            #     transaction['certificat'] = certificat
-            #
-            #     enveloppe_transaction = {'transaction': transaction, 'ack': sync_traitement}
-            #     # enveloppe_transaction = {'transaction': transaction}
-            #
-            #     await producer.executer_commande(enveloppe_transaction,
-            #                                      domaine=domaine, action='restaurerTransaction',
-            #                                      exchange=Constantes.SECURITE_PROTEGE,
-            #                                      nowait=not sync_traitement,
-            #                                      timeout=120)
 
         compteur_transactions = compteur_transactions
         info_meta['nb_transactions_traitees'] = compteur_transactions
@@ -437,6 +414,16 @@ class MigrateurTransactions:
             if key != 'en-tete' and key.startswith('_') is False:
                 contenu_dict[key] = value
 
+        try:
+            action = entete['action']
+            domaine = entete['domaine']
+        except KeyError:
+            pass  # OK, pas d'action
+        else:
+            if self.__certificats_rechiffrage is not None and domaine == 'MaitreDesCles' and action == 'cle':
+                cle = await self.rechiffrer_transaction_maitredescles(transaction)
+                contenu_dict['cle'] = cle
+
         nouvelle_pubkey = ancien_nouveau_mapping_fingerprints[entete['fingerprint_certificat']]
 
         pre_migration = {
@@ -466,31 +453,11 @@ class MigrateurTransactions:
     async def migrer_courant(self, transaction: dict, ancien_nouveau_mapping_fingerprints: dict):
         raise NotImplementedError('todo')
 
-    async def rechiffrer_transaction_maitredescles(self, producer, transaction: dict, nowait: False):
+    async def rechiffrer_transaction_maitredescles(self, transaction: dict):
         cle_originale = transaction['cle']
         cle_dechiffree = self.__clecert_ca.dechiffrage_asymmetrique(cle_originale)
-        cles_rechiffrees = {
-            self.__clecert_ca.fingerprint: cle_originale  # Injecter cle CA
-        }
-        partition = None
-        for cert in self.__certificats_rechiffrage:
-            cle_rechiffree, fp = cert.chiffrage_asymmetrique(cle_dechiffree)
-            cles_rechiffrees[fp] = cle_rechiffree
-            partition = fp
-
-        champs = ['header', 'iv', 'format', 'tag', 'hachage_bytes', 'domaine', 'identificateurs_document', 'signature_identite']
-        commande_rechiffree = {
-            'cles': cles_rechiffrees,
-        }
-        for champ in champs:
-            try:
-                commande_rechiffree[champ] = transaction[champ]
-            except KeyError:
-                pass  # OK, champs optionnel
-
-        await producer.executer_commande(commande_rechiffree, domaine='MaitreDesCles', action='sauvegarderCle',
-                                         partition=partition, exchange=Constantes.SECURITE_PRIVE, nowait=nowait,
-                                         timeout=120)
+        cle_rechiffree, fingerprint = self.__clecert_ca_destination.chiffrage_asymmetrique(cle_dechiffree)
+        return cle_rechiffree
 
     def extraire_transactions(self, data: str, decipher: DecipherMgs4):
         data = multibase.decode(data)       # Base 64 decode

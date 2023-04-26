@@ -376,7 +376,8 @@ class RestaurateurTransactions:
         return info_meta
 
     async def rechiffrer_transaction_maitredescles(self, producer, transaction: dict, nowait: False):
-        cle_originale = transaction['cle']
+        contenu_transaction = json.loads(transaction['contenu'])
+        cle_originale = contenu_transaction['cle']
         cle_dechiffree = self.__clecert_ca.dechiffrage_asymmetrique(cle_originale)
         cles_rechiffrees = {
             self.__clecert_ca.fingerprint: cle_originale  # Injecter cle CA
@@ -393,7 +394,7 @@ class RestaurateurTransactions:
         }
         for champ in champs:
             try:
-                commande_rechiffree[champ] = transaction[champ]
+                commande_rechiffree[champ] = contenu_transaction[champ]
             except KeyError:
                 pass  # OK, champs optionnel
 
