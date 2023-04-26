@@ -320,10 +320,13 @@ class MigrateurTransactions:
             date_backup = datetime.datetime.fromtimestamp(backup['date_transactions_debut'], tz=pytz.UTC)
             self.__logger.info("%s (%s) restaurer %d transactions" % (domaine, date_backup, nombre_transactions_catalogue))
 
-        transactions_migrees = list()
+        # transactions_migrees = list()
+        compteur_transactions = 0
+        transactions_migrees = ''
         for transaction in data_transactions:
-            transaction_migree = await self.migrer_transaction(transaction, ancien_nouveau_mapping)
-            transactions_migrees.append(transaction_migree)
+            transaction_migree, uuid_transaction = await self.migrer_transaction(transaction, ancien_nouveau_mapping)
+            compteur_transactions += 1
+            transactions_migrees += json.dumps(transaction_migree) + '\n'
             # try:
             #     # action = transaction['en-tete']['action']
             #     action = transaction['routage']['action']
@@ -348,7 +351,7 @@ class MigrateurTransactions:
             #                                      nowait=not sync_traitement,
             #                                      timeout=120)
 
-        compteur_transactions = len(transactions_migrees)
+        compteur_transactions = compteur_transactions
         info_meta['nb_transactions_traitees'] = compteur_transactions
 
         if compteur_transactions != nombre_transactions_catalogue:
@@ -357,7 +360,7 @@ class MigrateurTransactions:
         # Rechiffrer les transactions
         cle_publique = self.__ca_destination.get_public_x25519()
         cipher = CipherMgs4(cle_publique)
-        transactions_migrees = lzma.compress(json.dumps(transactions_migrees).encode('utf-8'))
+        transactions_migrees = lzma.compress(transactions_migrees.encode('utf-8'))
         transactions_migrees = cipher.update(transactions_migrees)
         transactions_migrees += cipher.finalize()
         info_dechiffrage = cipher.get_info_dechiffrage(self.__certificats_rechiffrage)
