@@ -321,6 +321,16 @@ class RestaurateurTransactions:
 
         certificats = self.preparer_certificats(backup['certificats'])
 
+        producer = self.__messages_thread.get_producer()
+
+        # Emettre les certificats vers CorePki
+        for certificat in certificats.values():
+            commande_certificat = {'chaine_pem': certificat}
+            await producer.executer_commande(commande_certificat,
+                                             domaine='CorePki', action='certificat',
+                                             exchange=Constantes.SECURITE_PROTEGE,
+                                             timeout=15)
+
         # Dechiffrer transactions
         data_transactions = await asyncio.to_thread(self.extraire_transactions, backup['data_transactions'], decipher)
 
@@ -328,12 +338,11 @@ class RestaurateurTransactions:
             date_backup = datetime.datetime.fromtimestamp(backup['date_transactions_debut'], tz=pytz.UTC)
             self.__logger.info("%s (%s) restaurer %d transactions" % (domaine, date_backup, nombre_transactions_catalogue))
 
-        producer = self.__messages_thread.get_producer()
         compteur_transactions = 0
         for transaction in data_transactions:
             compteur_transactions = compteur_transactions + 1
             # fingerprint = transaction['en-tete']['fingerprint_certificat']
-            fingerprint = transaction['pubkey']
+            #fingerprint = transaction['pubkey']
 
             sync_traitement = compteur_transactions % 200 == 0
 
@@ -350,8 +359,8 @@ class RestaurateurTransactions:
                     await self.rechiffrer_transaction_maitredescles(producer, transaction, not sync_traitement)
 
             if bypass_transaction is False:
-                certificat = certificats[fingerprint]
-                transaction['certificat'] = certificat
+                #certificat = certificats[fingerprint]
+                #transaction['certificat'] = certificat
 
                 enveloppe_transaction = {'transaction': transaction, 'ack': sync_traitement}
                 # enveloppe_transaction = {'transaction': transaction}
