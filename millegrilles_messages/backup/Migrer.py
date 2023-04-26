@@ -41,9 +41,9 @@ class MigrateurArchives:
         self.__source_path = source_path
         self.__destination_path = destination_path
         self.__clecert_ca = clecert_ca
-        self.__clecert_ca_destination = clecert_ca_destination or clecert_ca
+        self.__clecert_ca_destination = clecert_ca_destination
         self.__domaine = domaine
-        self.__clecert_migration = None
+        self.__clecert_migration: Optional[CleCertificat] = None
 
         self.__enveloppe_ca: Optional[EnveloppeCertificat] = None
         self.__formatteur: Optional[FormatteurMessageMilleGrilles] = None
@@ -74,7 +74,9 @@ class MigrateurArchives:
 
     async def preparer_mq(self):
         self.__migrateur_transactions = MigrateurTransactions(
-            self.__formatteur, self.__config, self.__clecert_ca, self.__source_path, self.__destination_path, domaine=self.__domaine)
+            self.__formatteur, self.__config, self.__clecert_migration, self.__clecert_ca, self.__source_path,
+            self.__destination_path,
+            domaine=self.__domaine, clecert_ca_destination=self.__clecert_ca_destination)
         await self.__migrateur_transactions.preparer()
 
     async def run(self):
@@ -148,11 +150,16 @@ class MigrateurArchives:
 
 class MigrateurTransactions:
 
-    def __init__(self, formatteur: FormatteurMessageMilleGrilles, config: ConfigurationBackup, clecert_ca: CleCertificat, source_path: str, work_path: str, domaine: Optional[str]):
+    def __init__(self, formatteur: FormatteurMessageMilleGrilles, config: ConfigurationBackup,
+                 clecert_migration: CleCertificat, clecert_ca: CleCertificat,
+                 source_path: str, work_path: str, domaine: Optional[str],
+                 clecert_ca_destination: Optional[CleCertificat]):
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__formatteur = formatteur
         self.__config = config
+        self.__clecert_migration = clecert_migration
         self.__clecert_ca = clecert_ca
+        self.__clecert_ca_destination = clecert_ca_destination
         self.__source_path = source_path
         self.__work_path = work_path
         self.__stop_event: Optional[asyncio.Event] = None
@@ -161,10 +168,6 @@ class MigrateurTransactions:
         self.__fiche: Optional[dict] = None
         self.__certificats_rechiffrage: Optional[list[EnveloppeCertificat]] = None
         self.__domaine = domaine
-
-        self.__certificat_signature = {
-            'pubkey': '** TODO **',
-        }
 
         self.__path_fichier_archives = path.join(work_path, 'liste.txt')
         self.__fp_fichiers_archive = None
@@ -295,13 +298,7 @@ class MigrateurTransactions:
         decipher = DecipherMgs4(cle_dechiffree, backup['header'])
 
         # Remapper les certificats (ajoute certificat migration)
-        mapping_certificats, ancien_nouveau_mapping = self.remapper_certificats(backup['certificats'])
-
-        certs_list = backup['certificats']['certificats']
-        remappe_certs = list()
-        for cert in certs_list:
-            cert_remappe = [ancien_nouveau_mapping[f] for f in cert]
-            remappe_certs.append(cert_remappe)
+        mapping_certificats, ancien_nouveau_mapping, remappe_certs = self.remapper_certificats(backup['certificats'])
 
         certificats = {
             'pems': mapping_certificats,
@@ -380,22 +377,32 @@ class MigrateurTransactions:
 
         return backup
 
-    def remapper_certificats(self, certificats: dict):
+    def remapper_certificats(self, backup_certificats: dict):
         """
         Converti le hachage des certificats vers le format courant
         :param certificats:
         :return:
         """
         nouveau_mapping = dict()
-        ancien_nouveau = dict()
+        ancien_nouveau_mapping = dict()
 
-        for ancien_fingerprint, cert_pem in certificats['pems'].items():
+        for ancien_fingerprint, cert_pem in backup_certificats['pems'].items():
             cert = EnveloppeCertificat.from_pem(cert_pem)
             nouveau_fingerprint = cert.fingerprint
             nouveau_mapping[nouveau_fingerprint] = cert_pem
-            ancien_nouveau[ancien_fingerprint] = nouveau_fingerprint
+            ancien_nouveau_mapping[ancien_fingerprint] = nouveau_fingerprint
 
-        return nouveau_mapping, ancien_nouveau
+        # Ajouter le certificat de migration
+        nouveau_mapping[self.__clecert_migration.fingerprint] = self.__clecert_migration.enveloppe.certificat_pem
+
+        remappe_certs = [
+            [self.__clecert_migration.fingerprint]  # Certificat de migration, chaine a un seul cert
+        ]
+        for cert in backup_certificats['certificats']:
+            cert_remappe = [ancien_nouveau_mapping[f] for f in cert]
+            remappe_certs.append(cert_remappe)
+
+        return nouveau_mapping, ancien_nouveau_mapping, remappe_certs
 
     async def migrer_transaction(self, transaction: dict, ancien_nouveau_mapping_fingerprints: dict):
 
@@ -495,7 +502,7 @@ class MigrateurTransactions:
         return certificats
 
 
-def charger_cle_ca(path_cle_ca: str) -> CleCertificat:
+def charger_cle_ca(path_cle_ca: str, prompt="Mot de passe CA: ") -> CleCertificat:
     if path.isfile(path_cle_ca) is False:
         raise FileNotFoundError('cle CA introuvable')
 
@@ -508,7 +515,7 @@ def charger_cle_ca(path_cle_ca: str) -> CleCertificat:
     print('Charger cle de MilleGrille %s pour dechiffrage' % info_fichier['idmg'])
 
     # Demander mot de passe (console)
-    mot_de_passe = getpass.getpass(prompt="Mot de passe CA: ", stream=None)
+    mot_de_passe = getpass.getpass(prompt=prompt, stream=None)
 
     # Charger cle racine (dechiffree)
     try:
@@ -522,16 +529,26 @@ def charger_cle_ca(path_cle_ca: str) -> CleCertificat:
     return clecert
 
 
-async def main(archive: str, source_path: str, destination_path: str, path_cle_ca: str, domaine: Optional[str]):
+async def main(archive: str, source_path: str, destination_path: str, path_cle_ca: str, domaine: Optional[str] = None,
+               path_cle_ca_dest: Optional[str] = None):
     config = dict()
 
     try:
         clecert = charger_cle_ca(path_cle_ca)
     except ValueError:
-        print("Erreur de chargement de la cle de MilleGrille")
+        print("Erreur de chargement de la cle de MilleGrille (1)")
         return exit(1)
 
-    extracteur = MigrateurArchives(config, archive, source_path, destination_path, clecert, domaine)
+    if path_cle_ca_dest is not None:
+        try:
+            clecert_dest = charger_cle_ca(path_cle_ca_dest, prompt="Mot de passe CA destination : ")
+        except ValueError:
+            print("Erreur de chargement de la cle de MilleGrille destination (2)")
+            return exit(2)
+    else:
+        clecert_dest = None
+
+    extracteur = MigrateurArchives(config, archive, source_path, destination_path, clecert, domaine, clecert_dest)
 
     extracteur.preparer_dechiffrage()
     await extracteur.preparer_mq()

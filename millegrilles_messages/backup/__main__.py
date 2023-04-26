@@ -53,7 +53,8 @@ def parse() -> argparse.Namespace:
 
     # Subparser migrer
     subparser_restaurer = subparsers.add_parser('migrer', help='Migrer archive')
-    subparser_restaurer.add_argument('--cleca', required=True, help='Path/URL du JSON de cle de millegrille')
+    subparser_restaurer.add_argument('--cleca', required=True, help='Path/URL du JSON de cle de millegrille source')
+    subparser_restaurer.add_argument('--cledestca', required=False, help='Path/URL du JSON de cle de millegrille de destination')
     subparser_restaurer.add_argument('--source', required=True, help='Path/URL de source pour les archives a migrer')
     subparser_restaurer.add_argument('--destination', default='/tmp/millegrilles_migrer',
                                      help='Path/URL de destination pour les archives migrees')
@@ -102,7 +103,7 @@ async def demarrer(args: argparse.Namespace):
                              transactions=args.transactions, rechiffrer=args.rechiffrer,
                              domaine=args.domaine, delai=args.delai)
     elif command == 'migrer':
-        await migrer_main(args.archive, args.source, args.destination, args.cleca, domaine=args.domaine)
+        await migrer_main(args.archive, args.source, args.destination, args.cleca, domaine=args.domaine, path_cle_ca_dest=args.cledestca)
     elif command == 'verifier':
         await verifier_main(args.repertoire)
     elif command == 'grosfichiers':
