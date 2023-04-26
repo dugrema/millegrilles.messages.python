@@ -324,7 +324,7 @@ class MigrateurTransactions:
         compteur_transactions = 0
         transactions_migrees = ''
         for transaction in data_transactions:
-            transaction_migree, uuid_transaction = await self.migrer_transaction(transaction, ancien_nouveau_mapping)
+            transaction_migree = await self.migrer_transaction(transaction, ancien_nouveau_mapping)
             compteur_transactions += 1
             transactions_migrees += json.dumps(transaction_migree) + '\n'
             # try:
@@ -430,6 +430,7 @@ class MigrateurTransactions:
 
     async def migrer_pre_2023_5(self, transaction: dict, ancien_nouveau_mapping_fingerprints: dict):
         entete = transaction['en-tete']
+        evenements = transaction['_evenements']
 
         contenu_dict = dict()
         for key, value in transaction.items():
@@ -449,10 +450,15 @@ class MigrateurTransactions:
             pre_migration['idmg'] = entete['idmg']
 
         # Signer avec certificat de migration
-        transaction_migree = self.__formatteur.signer_message(
+        transaction_migree, uuid_transaction = self.__formatteur.signer_message(
             7, contenu_dict, ajouter_chaine_certs=False, pre_migration=pre_migration,
             domaine=entete.get('domaine'), action=entete.get('action'), partition=entete.get('partition')
         )
+
+        # Conserver evenements de persistence de transactions (attachements non signes)
+        transaction_migree['attachements'] = {
+            'evenements': evenements,
+        }
 
         self.__logger.debug("Transaction migree %s", transaction_migree)
         return transaction_migree
