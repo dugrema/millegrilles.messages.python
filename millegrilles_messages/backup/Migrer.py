@@ -5,7 +5,6 @@ import logging
 import json
 import lzma
 import os
-import math
 
 import multibase
 import tarfile
@@ -25,6 +24,7 @@ from millegrilles_messages.chiffrage.Mgs4 import CipherMgs4, DecipherMgs4
 
 from millegrilles_messages.messages.MessagesThread import MessagesThread
 from millegrilles_messages.messages.MessagesModule import RessourcesConsommation
+from millegrilles_messages.certificats.CertificatsInstance import signer_instance_migration
 
 
 PATH_MIGRER = '_MIGRER'
@@ -33,14 +33,17 @@ TAILLE_BUFFER = 64 * 1024
 
 class MigrateurArchives:
 
-    def __init__(self, config: dict, archive: str, source_path: str, destination_path: str, clecert_ca: CleCertificat, domaine: Optional[str]):
+    def __init__(self, config: dict, archive: str, source_path: str, destination_path: str, clecert_ca: CleCertificat,
+                 domaine: Optional[str] = None, clecert_ca_destination: Optional[CleCertificat] = None):
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__config = ConfigurationBackup()
         self.__archive = archive
         self.__source_path = source_path
         self.__destination_path = destination_path
         self.__clecert_ca = clecert_ca
+        self.__clecert_ca_destination = clecert_ca_destination or clecert_ca
         self.__domaine = domaine
+        self.__clecert_migration = None
 
         self.__enveloppe_ca: Optional[EnveloppeCertificat] = None
         self.__formatteur: Optional[FormatteurMessageMilleGrilles] = None
@@ -60,10 +63,12 @@ class MigrateurArchives:
             self.__logger.warning("Chiffrage annule, CA introuvable (path %s)", path_ca)
             return
 
-        clecert = CleCertificat.from_files(self.__config.key_pem_path, self.__config.cert_pem_path)
+        # clecert = CleCertificat.from_files(self.__config.key_pem_path, self.__config.cert_pem_path)
 
-        signateur = SignateurTransactionSimple(clecert)
-        self.__formatteur = FormatteurMessageMilleGrilles(self.__enveloppe_ca.idmg, signateur)
+        self.__clecert_migration = signer_instance_migration(self.__clecert_ca_destination)
+
+        signateur = SignateurTransactionSimple(self.__clecert_migration)
+        self.__formatteur = FormatteurMessageMilleGrilles(self.__clecert_migration.enveloppe.idmg, signateur)
         self.__validateur_certificats = ValidateurCertificatCache(self.__enveloppe_ca)
         self.__validateur_messages = ValidateurMessage(self.__validateur_certificats)
 
@@ -239,36 +244,16 @@ class MigrateurTransactions:
             raise ValueError('Mauvais certificat de rechiffrage recu - doit avoir role maitredescles')
         self.__certificats_rechiffrage = [certificat_rechiffrage]
 
-        await self.recuperer_liste_fichiers()
+        await self.traiter_fichiers()
 
-    async def recuperer_liste_fichiers(self):
-        # producer = self.__messages_thread.get_producer()
-        # self.__fp_fichiers_archive = open(self.__path_fichier_archives, 'w')
-        #
-        # await producer.executer_commande(
-        #     dict(), domaine='fichiers', action='getClesBackupTransactions',
-        #     exchange=Constantes.SECURITE_PRIVE,
-        #     nowait=True)
-        #
-        # self.__logger.info("Attente de la liste de fichiers a restaurer")
-        # await asyncio.wait_for(self.__liste_complete_event.wait(), 300)
-        # self.__fp_fichiers_archive.close()
-        # self.__fp_fichiers_archive = None
-        # self.__logger.info("Liste de fichiers recue")
-
-        await self.traiter_transactions()
-
-    async def traiter_transactions(self):
-        producer = self.__messages_thread.get_producer()
-
-        domaines = dict()
-        #with open(self.__path_fichier_archives, 'r') as fichier:
-
+    async def traiter_fichiers(self):
         # Faire la liste des fichiers, traiter un par un
         for root, dirs, files in walk(self.__source_path):
             for file in files:
                 if file.endswith('.json.xz'):
                     nom_fichier = path.join(root, file)
+                    self.__logger.debug("Traiter fichier %s", nom_fichier)
+                    #print("Traiter fichier %s", nom_fichier)
                     await self.traiter_fichier(nom_fichier)
 
     async def traiter_fichier(self, nom_fichier: str):
@@ -292,12 +277,16 @@ class MigrateurTransactions:
             return
 
         try:
-            await self.traiter_transactions_fichier(contenu_catalogue)
+            await self.traiter_transactions_fichier(nom_fichier, contenu_catalogue)
         except ValueError:
             self.__logger.exception("Erreur dechiffrage fichier %s" % nom_fichier)
 
-    async def traiter_transactions_fichier(self, backup: dict) -> list:
+    async def traiter_transactions_fichier(self, nom_fichier: str, backup: dict) -> dict:
         domaine = backup['domaine']
+        nom_fichier_base = path.basename(nom_fichier)
+        path_destination_domaine = path.join(self.__work_path, domaine)
+        path_destination_catalogue = path.join(path_destination_domaine, nom_fichier_base)
+
         nombre_transactions_catalogue = backup['nombre_transactions']
         info_meta = {'domaine': domaine, 'nb_transactions_catalogue': nombre_transactions_catalogue}
 
@@ -320,11 +309,12 @@ class MigrateurTransactions:
         }
         backup['certificats'] = certificats
 
+        # Cleanup anciens elements
         del backup['_signature']
         del backup['_certificat']
         del backup['en-tete']
 
-        certificats = self.preparer_certificats(backup['certificats'])
+        # certificats = self.preparer_certificats(backup['certificats'])
 
         # Dechiffrer transactions
         data_transactions = await asyncio.to_thread(self.extraire_transactions, backup['data_transactions'], decipher)
@@ -337,7 +327,6 @@ class MigrateurTransactions:
         for transaction in data_transactions:
             transaction_migree = await self.migrer_transaction(transaction, ancien_nouveau_mapping)
             transactions_migrees.append(transaction_migree)
-            # bypass_transaction = False
             # try:
             #     # action = transaction['en-tete']['action']
             #     action = transaction['routage']['action']
@@ -384,7 +373,8 @@ class MigrateurTransactions:
 
         # Signer le catalogue
         catalogue_signe, uuid_transaction = self.__formatteur.signer_message(2, backup, ajouter_chaine_certs=True, domaine='Backup', action='backupTransactions')
-        with lzma.open('/tmp/catalogue_migre.json.xz', 'wb') as fichier:
+        makedirs(path_destination_domaine, 0o755, exist_ok=True)
+        with lzma.open(path_destination_catalogue, 'wb') as fichier:
             catalogue_signe = json.dumps(catalogue_signe).encode('utf-8')
             fichier.write(catalogue_signe)
 
@@ -432,6 +422,10 @@ class MigrateurTransactions:
             'pubkey': nouvelle_pubkey,
             'estampille': entete['estampille'],
         }
+
+        # Verifier si on fait une migration vers une MilleGrille differente
+        if entete['idmg'] != self.__ca_destination.idmg:
+            pre_migration['idmg'] = entete['idmg']
 
         # Signer avec certificat de migration
         transaction_migree = self.__formatteur.signer_message(

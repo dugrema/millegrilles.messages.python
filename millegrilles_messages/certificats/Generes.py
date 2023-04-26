@@ -207,10 +207,10 @@ class CleCsrGenere:
     def password(self) -> Optional[str]:
         return self.__password
 
-    def signer(self, cle_signature: CleCertificat, idmg: str, role: str,
+    def signer(self, cle_signature: CleCertificat, role: str,
                builder: Optional[CertificateBuilder] = None, duree=DUREE_CERT_DEFAUT):
 
-        enveloppe = self.__enveloppe_csr.signer(cle_signature, idmg, role, builder, duree)
+        enveloppe = self.__enveloppe_csr.signer(cle_signature, role, builder, duree)
         clecertificat = CleCertificat(self.__cle_privee, enveloppe)
         clecertificat_genere = CleCertificatGenere(clecertificat, self.__password)
 
