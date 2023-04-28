@@ -55,7 +55,7 @@ DOMAINE_CORE_MAITREDESCOMPTES = 'CoreMaitreDesComptes'
 
 
 # Champs messages
-MESSAGE_ENTETE='en-tete'
+# MESSAGE_ENTETE='en-tete'
 MESSAGE_FINGERPRINT_CERTIFICAT = 'fingerprint_certificat'
 MESSAGE_ID = 'id'
 MESSAGE_SIGNATURE = 'sig'

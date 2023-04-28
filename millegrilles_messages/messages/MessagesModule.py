@@ -465,7 +465,7 @@ class MessageProducerFormatteur(MessageProducer):
                 Constantes.KIND_EVENEMENT, evenement, domaine, action=action, partition=partition)
         else:
             message = evenement
-            uuid_message = evenement['en-tete']['uuid_transaction']
+            uuid_message = evenement['id']
 
         correlation_id = str(uuid_message)
 
@@ -484,7 +484,7 @@ class MessageProducerFormatteur(MessageProducer):
 
         if noformat is True:
             message = commande
-            uuid_message = commande['en-tete']['uuid_transaction']
+            uuid_message = commande['id']
         else:
             # Conserver elements avec underscore (_)
             elem_direct = {}
