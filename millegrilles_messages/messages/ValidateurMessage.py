@@ -24,7 +24,9 @@ class ValidateurMessage:
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__validateur_certificats = validateur_certificats
 
-    async def verifier(self, message: Union[bytes, str, dict], utiliser_date_message=False, utiliser_idmg_message=False) -> EnveloppeCertificat:
+    async def verifier(self, message: Union[bytes, str, dict],
+                       utiliser_date_message=False, utiliser_idmg_message=False,
+                       verifier_certificat=True) -> Union[bool, EnveloppeCertificat]:
         """
         :raise certvalidator.errors.PathValidationError: Certificat est invalide.
         :raise cryptography.exceptions.InvalidSignature: Signature du message est invalide.
@@ -44,11 +46,14 @@ class ValidateurMessage:
         # Verifier le hachage du contenu - si invalide, pas de raison de verifier la signature
         await self.verifier_hachage(dict_message)
 
-        # Valider presence de la signature en premier, certificat apres
-        enveloppe_certificat = await self.__valider_certificat_message(
-            message, utiliser_date_message, utiliser_idmg_message)
+        if verifier_certificat is True:
+            # Valider presence de la signature en premier, certificat apres
+            enveloppe_certificat = await self.__valider_certificat_message(
+                message, utiliser_date_message, utiliser_idmg_message)
 
-        return enveloppe_certificat
+            return enveloppe_certificat
+        else:
+            return True
 
     async def verifier_hachage(self, message: dict) -> str:
         """
