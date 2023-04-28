@@ -223,6 +223,7 @@ class MessageWrapper:
         self.__routage: Optional[dict] = None
         self.__parsed: Optional[dict] = None
         self.__certificat_pem: Optional[list] = None
+        self.__pubkey: Optional[str] = None
         self.certificat: Optional[EnveloppeCertificat] = None
         self.est_valide = False
 
@@ -232,6 +233,7 @@ class MessageWrapper:
 
     @parsed.setter
     def parsed(self, val: dict):
+        self.__pubkey = val['pubkey']
         self.__kind = val['kind']
         self.__estampille = val['estampille']
         self.__routage = val.get('routage')
@@ -240,6 +242,10 @@ class MessageWrapper:
         parsed_contenu = json.loads(val['contenu'])
         parsed_contenu['__original'] = val
         self.__parsed = parsed_contenu
+
+    @property
+    def pubkey(self) -> str:
+        return self.__pubkey
 
     @property
     def kind(self) -> int:
