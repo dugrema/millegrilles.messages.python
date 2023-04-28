@@ -218,7 +218,11 @@ class MessageWrapper:
         self.delivery_tag = delivery_tag
 
         # Message traite et verifie
+        self.__kind: Optional[int] = None
+        self.__estampille: Optional[int] = None
+        self.__routage: Optional[dict] = None
         self.__parsed: Optional[dict] = None
+        self.__certificat_pem: Optional[list] = None
         self.certificat: Optional[EnveloppeCertificat] = None
         self.est_valide = False
 
@@ -228,10 +232,30 @@ class MessageWrapper:
 
     @parsed.setter
     def parsed(self, val: dict):
+        self.__kind = val['kind']
+        self.__estampille = val['estampille']
+        self.__routage = val.get('routage')
+        self.__certificat_pem = val.get('certificat')
         # Extraire le contenu et donner acces a l'original parsed (val) via __original
         parsed_contenu = json.loads(val['contenu'])
         parsed_contenu['__original'] = val
         self.__parsed = parsed_contenu
+
+    @property
+    def kind(self) -> int:
+        return self.__kind
+
+    @property
+    def estampille(self) -> int:
+        return self.__estampille
+
+    @property
+    def routage(self) -> Optional[dict]:
+        return self.__routage
+
+    @property
+    def certificat_pem(self) -> Optional[list]:
+        return self.__certificat_pem
 
     def __str__(self):
         return 'tag:%d' % self.delivery_tag
