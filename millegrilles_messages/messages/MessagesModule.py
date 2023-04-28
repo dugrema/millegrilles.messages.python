@@ -516,7 +516,7 @@ class MessageProducerFormatteur(MessageProducer):
 
         if noformat is True:
             message = requete
-            uuid_message = requete['en-tete']['uuid_transaction']
+            uuid_message = requete['id']
         else:
             message, uuid_message = self.__formatteur_messages.signer_message(
                 Constantes.KIND_REQUETE, requete, domaine, action=action, partition=partition)
