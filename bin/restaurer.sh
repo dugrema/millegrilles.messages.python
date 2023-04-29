@@ -1,7 +1,6 @@
 #!/bin/bash
 
 # Note : add groups millegrilles, mgsecrets
-# cledestca est optionnel (requis pour changement de millegrille)
 
 . /var/opt/millegrilles/venv/bin/activate
 
@@ -12,8 +11,7 @@ export CA_PEM=/var/opt/millegrilles/configuration/pki.millegrille.cert
 export MQ_HOSTNAME=localhost
 
 python3 -m millegrilles_messages.backup \
-  migrer \
+  restaurer \
   --cleca ~/migration/cles/cle.json \
-  --cledestca ~/migration/cles/cle.json \
-  --source ~/migration/transactions \
+  --transactions \
   --domaine $1
