@@ -65,7 +65,10 @@ class MigrateurArchives:
 
         # clecert = CleCertificat.from_files(self.__config.key_pem_path, self.__config.cert_pem_path)
 
-        self.__clecert_migration = signer_instance_migration(self.__clecert_ca_destination)
+        if self.__clecert_ca_destination is not None:
+            self.__clecert_migration = signer_instance_migration(self.__clecert_ca_destination)
+        else:
+            self.__clecert_migration = signer_instance_migration(self.__clecert_ca)
 
         signateur = SignateurTransactionSimple(self.__clecert_migration)
         self.__formatteur = FormatteurMessageMilleGrilles(self.__clecert_migration.enveloppe.idmg, signateur)
