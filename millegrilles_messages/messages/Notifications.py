@@ -4,6 +4,7 @@ import gzip
 import json
 import logging
 import multibase
+import base64
 
 from typing import Optional
 
@@ -71,28 +72,29 @@ class EmetteurNotifications:
 
         expiration = datetime.datetime.utcnow() + datetime.timedelta(days=7)
 
-        commande = {
-            'expiration': round(expiration.timestamp()),
-            # Info dechiffrage
-            'message': {
-                'niveau': niveau,
-                'ref_hachage_bytes': self.__commande_cle['hachage_bytes'],
-                'format': contenu_chiffre['format'],
-                'header': contenu_chiffre['header'],
-                'message_chiffre': contenu_chiffre['chiffre']
-            }
-        }
-
         if destinataires is not None:
-            commande['destinataires'] = destinataires
+            raise NotImplementedError('todo')
+            # commande['destinataires'] = destinataires
+
+        parametres = {
+            'expiration': round(expiration.timestamp()),
+            'niveau': niveau,
+        }
+        parametres, uuid_transaction = await producer.signer(parametres, Constantes.KIND_DOCUMENT)
+        del parametres['certificat']
+
+        attachements = {
+            'parametres': parametres
+        }
 
         if self.__cle_transmise is False:
             # Transmettre la cle pour dechiffrer les notifications
-            commande['_cle'] = self.__commande_cle
+            attachements['cle'] = self.__commande_cle
 
         try:
             reponse = await producer.executer_commande(
-                commande, 'Messagerie', 'notifier', exchange=Constantes.SECURITE_PUBLIC, timeout=5)
+                contenu_chiffre, 'Messagerie', 'notifier', exchange=Constantes.SECURITE_PUBLIC, timeout=5,
+                attachements=attachements, kind=Constantes.KIND_COMMANDE_INTER_MILLEGRILLE)
 
             # Commande recue et traitee, on ne retransmet plus la cle
             if reponse.parsed.get('ok') is True:
@@ -124,7 +126,8 @@ class EmetteurNotifications:
         domaine = 'Messagerie'
         message_chiffre = cipher.update(message_compresse)
         message_chiffre += cipher.finalize()
-        message_chiffre = multibase.encode('base64', message_chiffre).decode('utf-8')
+        # message_chiffre = multibase.encode('base64', message_chiffre).decode('utf-8')
+        message_chiffre = base64.b64encode(message_chiffre).decode('utf-8')
 
         if self.__commande_cle is None:
             # Conserver commande cle comme reference future
@@ -149,19 +152,27 @@ class EmetteurNotifications:
             partition = params_dechiffrage['partition']
 
             # Signer la commande de cle
-            commande_signee = await producer.signer(
+            commande_signee, message_id = await producer.signer(
                 params_dechiffrage, Constantes.KIND_COMMANDE, 'MaitreDesCles', 'sauvegarderCle', partition)
-            self.__commande_cle = commande_signee[0]
+            commande_signee['attachements'] = {'partition': partition}
+            self.__commande_cle = commande_signee
 
         else:
             # Generer params sans cles de dechiffrage (commande cle secrete deja generee)
             params_dechiffrage = cipher.params_dechiffrage(self.__public_peer_x25519, list())
 
-        reponse = {
-            'chiffre': message_chiffre,
-            'ref_hachage_bytes': self.__commande_cle['hachage_bytes'],
+        contenu_commande_cle = json.loads(self.__commande_cle['contenu'])
+
+        dechiffrage = {
+            'cle_id': contenu_commande_cle['hachage_bytes'],
             'header': params_dechiffrage['header'],
             'format': format_chiffrage,
+        }
+
+        reponse = {
+            'contenu': message_chiffre,
+            'dechiffrage': dechiffrage,
+            'origine': self.__enveloppe_ca.idmg
         }
 
         return reponse

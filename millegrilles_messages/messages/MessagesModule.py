@@ -480,24 +480,19 @@ class MessageProducerFormatteur(MessageProducer):
 
     async def executer_commande(self, commande: dict, domaine: str, action: str, exchange: str,
                                 partition: Optional[str] = None, version=1,
-                                reply_to=None, nowait=False, noformat=False, timeout=15) -> Optional[MessageWrapper]:
+                                reply_to=None, nowait=False, noformat=False, timeout=15,
+                                attachements: Optional[dict] = None, kind=Constantes.KIND_COMMANDE) -> Optional[MessageWrapper]:
 
         if noformat is True:
             message = commande
             uuid_message = commande['id']
         else:
-            # Conserver elements avec underscore (_)
-            elem_direct = {}
-            for k, v in commande.items():
-                if k.startswith('_'):
-                    elem_direct[k] = v
-
             # Signer le message
             message, uuid_message = self.__formatteur_messages.signer_message(
-                Constantes.KIND_COMMANDE, commande, domaine, action=action, partition=partition)
+                kind, commande, domaine, action=action, partition=partition)
 
-            # Remettre elements avec underscore (filtres par le processus de signature)
-            message.update(elem_direct)
+        if attachements is not None:
+            message['attachements'] = attachements
 
         correlation_id = str(uuid_message)
 
@@ -518,7 +513,8 @@ class MessageProducerFormatteur(MessageProducer):
 
     async def executer_requete(self, requete: dict, domaine: str, action: str, exchange: str,
                                partition: Optional[str] = None, version=1,
-                               reply_to=None, timeout=ATTENTE_MESSAGE_DUREE, noformat=False) -> MessageWrapper:
+                               reply_to=None, timeout=ATTENTE_MESSAGE_DUREE, noformat=False,
+                               attachements: Optional[dict] = None) -> MessageWrapper:
 
         if noformat is True:
             message = requete
@@ -526,6 +522,9 @@ class MessageProducerFormatteur(MessageProducer):
         else:
             message, uuid_message = self.__formatteur_messages.signer_message(
                 Constantes.KIND_REQUETE, requete, domaine, action=action, partition=partition)
+
+        if attachements is not None:
+            message['attachements'] = attachements
 
         correlation_id = str(uuid_message)
 
@@ -543,10 +542,14 @@ class MessageProducerFormatteur(MessageProducer):
 
     async def soumettre_transaction(self, transaction: dict, domaine: str, action: str, exchange: str,
                                     partition: Optional[str] = None, version=1,
-                                    reply_to=None, nowait=False):
+                                    reply_to=None, nowait=False,
+                                    attachements: Optional[dict] = None):
 
         message, uuid_message = self.__formatteur_messages.signer_message(
             Constantes.KIND_TRANSACTION, transaction, domaine, version, action=action, partition=partition)
+
+        if attachements is not None:
+            message['attachements'] = attachements
 
         correlation_id = str(uuid_message)
 
@@ -562,8 +565,10 @@ class MessageProducerFormatteur(MessageProducer):
                                                   exchange=exchange, correlation_id=correlation_id, reply_to=reply_to)
             return reponse
 
-    async def repondre(self, reponse: dict, reply_to, correlation_id, version=1):
+    async def repondre(self, reponse: dict, reply_to, correlation_id, version=1, attachements: Optional[dict] = None):
         message, uuid_message = self.__formatteur_messages.signer_message(Constantes.KIND_REPONSE, reponse)
+        if attachements is not None:
+            message['attachements'] = attachements
         message_bytes = json.dumps(message)
         routing_key = reply_to
         await self.emettre(message_bytes, routing_key, correlation_id=correlation_id, reply_to=reply_to)

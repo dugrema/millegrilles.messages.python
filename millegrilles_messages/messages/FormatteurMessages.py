@@ -150,12 +150,20 @@ class FormatteurMessageMilleGrilles:
         date_courante_utc = datetime.datetime.now(tz=pytz.UTC)
         estampille = int(date_courante_utc.timestamp())
 
-        message_contenu = json.dumps(
-            message,
-            ensure_ascii=False,  # S'assurer de supporter tous le range UTF-8
-            sort_keys=True,
-            separators=(',', ':')
-        )
+        dechiffrage = None
+        origine = None
+
+        if kind != Constantes.KIND_COMMANDE_INTER_MILLEGRILLE:
+            message_contenu = json.dumps(
+                message,
+                ensure_ascii=False,  # S'assurer de supporter tous le range UTF-8
+                sort_keys=True,
+                separators=(',', ':')
+            )
+        elif kind == Constantes.KIND_COMMANDE_INTER_MILLEGRILLE:
+            message_contenu = message['contenu']  # Copier directement contenu chiffre
+            dechiffrage = message['dechiffrage']
+            origine = message['origine']
 
         pubkey = binascii.hexlify(self.__signateur_transactions.pubkey).decode('utf-8')
 
@@ -171,7 +179,7 @@ class FormatteurMessageMilleGrilles:
             'kind': kind,
             'contenu': message_contenu,
         }
-        if kind in [1, 2, 3, 5, 7]:
+        if kind in [1, 2, 3, 5, 7, 8]:
             # Ajouter information de routage
             routage = dict()
             if action is not None:
@@ -185,6 +193,11 @@ class FormatteurMessageMilleGrilles:
         if kind in [7]:
             enveloppe_message['pre-migration'] = pre_migration
             message_hachage.append(pre_migration)
+        if kind in [8]:
+            enveloppe_message['origine'] = origine
+            message_hachage.append(origine)
+            enveloppe_message['dechiffrage'] = dechiffrage
+            message_hachage.append(dechiffrage)
 
         # Preparer le contenu a hacher
         message_hachage_json = json.dumps(
