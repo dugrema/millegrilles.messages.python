@@ -458,7 +458,7 @@ class MigrateurTransactions:
 
     async def rechiffrer_transaction_maitredescles(self, transaction: dict):
         cle_originale = transaction['cle']
-        if self.__clecert_ca.enveloppe.idmg != self.__clecert_ca_destination.enveloppe.idmg:
+        if self.__clecert_ca_destination is not None and self.__clecert_ca.enveloppe.idmg != self.__clecert_ca_destination.enveloppe.idmg:
             # Changement de MilleGrille, on rechiffre la cle
             cle_dechiffree = self.__clecert_ca.dechiffrage_asymmetrique(cle_originale)
             cle_rechiffree, fingerprint = self.__clecert_ca_destination.chiffrage_asymmetrique(cle_dechiffree)
