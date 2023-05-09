@@ -68,33 +68,28 @@ class EmetteurNotifications:
         if event_pret.is_set() is False:
             await asyncio.wait_for(event_pret.wait(), 3)
 
-        contenu_chiffre = await self.preparer_contenu(producer, contenu, subject)
+        message_chiffre = await self.preparer_contenu(producer, contenu, subject)
 
         expiration = datetime.datetime.utcnow() + datetime.timedelta(days=7)
 
-        if destinataires is not None:
-            raise NotImplementedError('todo')
-            # commande['destinataires'] = destinataires
-
-        parametres = {
+        commande = {
             'expiration': round(expiration.timestamp()),
             'niveau': niveau,
-        }
-        parametres, uuid_transaction = await producer.signer(parametres, Constantes.KIND_DOCUMENT)
-        del parametres['certificat']
-
-        attachements = {
-            'parametres': parametres
+            'message': message_chiffre,
         }
 
+        if destinataires is not None:
+            commande['destinataires'] = destinataires
+
+        attachements = None
         if self.__cle_transmise is False:
             # Transmettre la cle pour dechiffrer les notifications
-            attachements['cle'] = self.__commande_cle
+            attachements = {'cle': self.__commande_cle}
 
         try:
             reponse = await producer.executer_commande(
-                contenu_chiffre, 'Messagerie', 'notifier', exchange=Constantes.SECURITE_PUBLIC, timeout=5,
-                attachements=attachements, kind=Constantes.KIND_COMMANDE_INTER_MILLEGRILLE)
+                commande, 'Messagerie', 'notifier', exchange=Constantes.SECURITE_PUBLIC,
+                timeout=3, attachements=attachements)
 
             # Commande recue et traitee, on ne retransmet plus la cle
             if reponse.parsed.get('ok') is True:
@@ -114,8 +109,8 @@ class EmetteurNotifications:
 
         self.__logger.debug("Contenu notification a preparer : %s" % message)
 
-        message, uuid_transaction = await producer.signer(message, Constantes.KIND_DOCUMENT)
-        del message['certificat']
+        # message, uuid_transaction = await producer.signer(message, Constantes.KIND_DOCUMENT)
+        # del message['certificat']
 
         message_compresse = gzip.compress(json.dumps(message).encode('utf-8'))
 
@@ -169,10 +164,14 @@ class EmetteurNotifications:
             'format': format_chiffrage,
         }
 
-        reponse = {
+        message_a_signer = {
             'contenu': message_chiffre,
             'dechiffrage': dechiffrage,
             'origine': self.__enveloppe_ca.idmg
         }
 
-        return reponse
+        message_signe, message_id = await producer.signer(
+            message_a_signer, Constantes.KIND_COMMANDE_INTER_MILLEGRILLE, 'Messagerie', 'nouveauMessage')
+        del message_signe['certificat']
+
+        return message_signe
