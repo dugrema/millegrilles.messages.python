@@ -28,7 +28,7 @@ from millegrilles_messages.messages.MessagesModule import RessourcesConsommation
 
 PATH_RESTAURATION = '_RESTAURATION'
 TAILLE_BUFFER = 128 * 1024
-
+RESTAURATION_BATCH_SIZE = 250
 
 class RestaurateurArchives:
 
@@ -336,12 +336,13 @@ class RestaurateurTransactions:
             self.__logger.info("%s (%s) restaurer %d transactions" % (domaine, date_backup, nombre_transactions_catalogue))
 
         compteur_transactions = 0
+        process_precedent = None
         for transaction in data_transactions:
             compteur_transactions = compteur_transactions + 1
             # fingerprint = transaction['en-tete']['fingerprint_certificat']
             #fingerprint = transaction['pubkey']
 
-            sync_traitement = compteur_transactions % 200 == 0
+            sync_traitement = compteur_transactions % RESTAURATION_BATCH_SIZE == 0
 
             bypass_transaction = False
             try:
@@ -362,11 +363,27 @@ class RestaurateurTransactions:
                 enveloppe_transaction = {'transaction': transaction, 'ack': sync_traitement}
                 # enveloppe_transaction = {'transaction': transaction}
 
-                await producer.executer_commande(enveloppe_transaction,
+                commande_exec = producer.executer_commande(enveloppe_transaction,
                                                  domaine=domaine, action='restaurerTransaction',
                                                  exchange=Constantes.SECURITE_PROTEGE,
                                                  nowait=not sync_traitement,
                                                  timeout=120)
+
+                # Support preparer une batch a l'avance
+                if sync_traitement is True:
+                    if process_precedent is not None:
+                        await process_precedent
+                        process_precedent = None
+                    try:
+                        commande_exec = asyncio.Task(commande_exec)
+                        await asyncio.wait_for(asyncio.shield(commande_exec), 1)
+                    except asyncio.TimeoutError:
+                        process_precedent = commande_exec
+                else:
+                    await commande_exec
+
+        if process_precedent is not None:
+            await process_precedent
 
         info_meta['nb_transactions_traitees'] = compteur_transactions
 
