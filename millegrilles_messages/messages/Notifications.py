@@ -99,9 +99,11 @@ class EmetteurNotifications:
             self.__logger.info("Timeout emission notification")
 
     async def preparer_contenu(self, producer, contenu: str, subject: Optional[str]):
-        message = {'content': contenu}
+        message = {'content': contenu, 'format': 'html', 'version': 1}
 
-        if self.__from is not None:
+        if self.__from is None:
+            message['from'] = 'Systeme'
+        else:
             message['from'] = self.__from
 
         if subject is not None:
@@ -123,6 +125,8 @@ class EmetteurNotifications:
         message_chiffre += cipher.finalize()
         # message_chiffre = multibase.encode('base64', message_chiffre).decode('utf-8')
         message_chiffre = base64.b64encode(message_chiffre).decode('utf-8')
+        # Retirer padding a la fin (=)
+        message_chiffre = message_chiffre.replace('=', '')
 
         if self.__commande_cle is None:
             # Conserver commande cle comme reference future
