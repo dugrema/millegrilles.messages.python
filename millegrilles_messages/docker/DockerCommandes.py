@@ -407,18 +407,22 @@ class CommandeGetImage(CommandeDocker):
             pass
 
         if self.__pull is True:
-            nom_split = self.__nom_image.split(':')
-            if len(nom_split) == 1:
-                nom_image = nom_split[0]
-                tag = None
-            elif len(nom_split) == 2:
-                nom_image = nom_split[0]
-                tag = nom_split[1]
-            else:
+            repository, nom_image_tag = self.__nom_image.split('/')
+            if nom_image_tag is None:
+                nom_image_tag = repository
+                repository = None
+            nom_image, tag = nom_image_tag.split(':')
+
+            if nom_image is None:
                 raise Exception("Nom image incorrect : %s" % self.__nom_image)
 
+            if repository is not None:
+                image_repository = '%s/%s' % (repository, nom_image)
+            else:
+                image_repository = nom_image
+
             try:
-                reponse = docker_client.images.pull(nom_image, tag)
+                reponse = docker_client.images.pull(image_repository, tag)
                 self.callback({'id': reponse.id, 'tags': reponse.tags})
                 return
             except NotFound:
