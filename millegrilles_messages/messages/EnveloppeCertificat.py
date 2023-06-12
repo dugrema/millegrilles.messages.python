@@ -363,6 +363,12 @@ class EnveloppeCertificat:
         est_ed25519 = isinstance(public_key, ed25519.Ed25519PublicKey)
         return est_ed25519
 
+    def is_ecc(self):
+        public_key = self.__certificat.public_key()
+        if public_key.curve is not None:
+            return True
+        return False
+
     def __str__(self):
         return 'EnveloppeCertificat %s (%s) ' % (self.fingerprint, self.subject_rfc4514_string())
 

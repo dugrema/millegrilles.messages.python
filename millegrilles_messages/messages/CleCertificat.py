@@ -65,6 +65,9 @@ class CleCertificat:
                 public2_bytes = self.__enveloppe.get_public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
                 return public1_bytes == public2_bytes
 
+        elif self.is_ecc():
+            return True  # Todo, comparer cles. Utilise pour web.
+
         else:
             raise ValueError('Type de cle non supporte')
 
@@ -89,6 +92,9 @@ class CleCertificat:
 
     def is_ed25519(self):
         return self.enveloppe.is_ed25519()
+
+    def is_ecc(self):
+        return self.enveloppe.is_ecc()
 
     @property
     def private_key(self):
