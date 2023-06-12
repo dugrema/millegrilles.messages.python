@@ -407,11 +407,17 @@ class CommandeGetImage(CommandeDocker):
             pass
 
         if self.__pull is True:
-            repository, nom_image_tag = self.__nom_image.split('/')
-            if nom_image_tag is None:
-                nom_image_tag = repository
+            try:
+                repository, nom_image_tag = self.__nom_image.split('/')
+            except ValueError:
                 repository = None
-            nom_image, tag = nom_image_tag.split(':')
+                nom_image_tag = self.__nom_image
+
+            try:
+                nom_image, tag = nom_image_tag.split(':')
+            except ValueError:
+                nom_image = nom_image_tag
+                tag = None
 
             if nom_image is None:
                 raise Exception("Nom image incorrect : %s" % self.__nom_image)
