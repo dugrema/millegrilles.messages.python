@@ -138,7 +138,7 @@ class EmetteurNotifications:
             params_dechiffrage['domaine'] = domaine
             params_dechiffrage['format'] = 'mgs4'
 
-            self.__logger.debug("Cle secrete : %s" % list(self.__cle_secrete))
+            # self.__logger.debug("Cle secrete : %s" % list(self.__cle_secrete))
 
             signature = generer_signature_identite_cle(
                 self.__cle_secrete,
