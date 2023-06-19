@@ -1,6 +1,6 @@
 import multibase
 
-from typing import Optional
+from typing import Optional, Union
 
 from nacl.bindings.crypto_secretstream import (
     crypto_secretstream_xchacha20poly1305_ABYTES,
@@ -130,7 +130,7 @@ class CipherMgs4(CipherMgs4WithSecret):
 
 class DecipherMgs4:
 
-    def __init__(self, cle_secrete: bytes, header: bytes):
+    def __init__(self, cle_secrete: bytes, header: Union[str, bytes]):
 
         if header is not None:
             if isinstance(header, str):
@@ -150,12 +150,9 @@ class DecipherMgs4:
         header = info_dechiffrage['header']
 
         # Dechiffrer cle
-        if clecert.enveloppe.is_root_ca:
-            try:
-                cle_chiffree = info_dechiffrage['cle']
-            except KeyError:
-                cle_chiffree = info_dechiffrage['cles'][clecert.enveloppe.fingerprint]
-        else:
+        try:
+            cle_chiffree = info_dechiffrage['cle']
+        except KeyError:
             cle_chiffree = info_dechiffrage['cles'][clecert.enveloppe.fingerprint]
 
         cle_secrete = clecert.dechiffrage_asymmetrique(cle_chiffree)

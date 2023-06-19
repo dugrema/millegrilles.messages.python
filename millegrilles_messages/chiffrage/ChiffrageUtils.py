@@ -150,3 +150,4 @@ def generer_signature_identite_cle(password: bytes, domaine: str, identificateur
 #
 #   return signatureIdentiteCle
 # }
+
