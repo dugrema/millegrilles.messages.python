@@ -51,6 +51,9 @@ class CipherMgs4WithSecret:
         self.__hachage: Optional[str] = None
         self.__buffer = bytes()
 
+        self.__taille_dechiffree = 0
+        self.__taille_chiffree = 0
+
         # Generer cipher, hacheur
         self.__state, self.__header = CipherMgs4WithSecret.__generer_cipher(self.__cle_secrete)
         self.__hacheur = Hacheur('blake2b-512', 'base58btc')
@@ -78,6 +81,8 @@ class CipherMgs4WithSecret:
     def update(self, data: bytes) -> Optional[bytes]:
         data_out = bytes()
 
+        self.__taille_dechiffree += len(data)
+
         while len(data) > 0:
             taille_max = CONST_TAILLE_DATA - len(self.__buffer)
             taille_chunk = min(taille_max, len(data))
@@ -93,6 +98,7 @@ class CipherMgs4WithSecret:
 
                 self.__buffer = bytes()  # Clear buffer
 
+        self.__taille_chiffree += len(data_out)
         return data_out
 
     def finalize(self) -> bytes:
@@ -109,6 +115,7 @@ class CipherMgs4WithSecret:
 
         self.__hachage = self.__hacheur.finalize()
 
+        self.__taille_chiffree += len(data_out)
         return data_out
 
     def params_dechiffrage(self, public_peer_x25519: X25519PublicKey, enveloppes: Optional[list[EnveloppeCertificat]] = None) -> dict:
@@ -116,6 +123,14 @@ class CipherMgs4WithSecret:
             serialization.Encoding.Raw, serialization.PublicFormat.Raw)
         return generer_info_chiffrage(self.__cle_secrete, None, None, self.__header, self.__hachage,
                                       enveloppes, public_peer=key_x25519_public_bytes)
+
+    @property
+    def taille_dechiffree(self):
+        return self.__taille_dechiffree
+
+    @property
+    def taille_chiffree(self):
+        return self.__taille_chiffree
 
 
 class CipherMgs4(CipherMgs4WithSecret):
