@@ -1,10 +1,27 @@
-import setuptools
-from setuptools import setup
+import subprocess
+
+from setuptools import setup, find_packages
+
+
+def get_version():
+    with open('./build.txt', "r") as buildno_file:
+        build_no = buildno_file.read().strip()
+
+    commande_git_version = ['git', 'rev-parse', '--abbrev-ref', 'HEAD']
+    output_process = subprocess.run(commande_git_version, stdout=subprocess.PIPE)
+    resultat = output_process.stdout.decode('utf-8')
+    print('resultat git : %s' % resultat)
+    version = output_process.stdout.decode('utf8').strip()
+    version = '%s.%s' % (version, build_no)
+    print("Version: %s" % (version))
+
+    return version
+
 
 setup(
     name='millegrilles_messages',
-    version='2023.6.7',
-    packages=setuptools.find_packages(),
+    version='%s' % get_version(),
+    packages=find_packages(),
     url='https://github.com/dugrema/millegrilles.messages.python',
     license='AFFERO',
     author='Mathieu Dugre',
