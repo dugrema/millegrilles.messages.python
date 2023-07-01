@@ -51,7 +51,12 @@ class MessagesThread:
         # Loop thread tant que stop_event est clear. Note: thread est daemon, devrait fermer immediatement
         # meme si en attente asyncio.
         try:
-            await self.__messages_module.run_async()
+            coro_mq = self.__messages_module.run_async()
+            coro_stop = self.__stop_event.wait()
+            coro_timeout = self.verifier_delai_connexion()
+
+            # Arreter des qu'une condition se termine
+            await asyncio.wait([coro_mq, coro_stop, coro_timeout], return_when=asyncio.FIRST_COMPLETED)
         finally:
             await self.__messages_module.fermer()
 
@@ -102,3 +107,7 @@ class MessagesThread:
 
     def get_validateur_certificats(self):
         return self.__messages_module.get_validateur_certificats()
+
+    async def verifier_delai_connexion(self):
+        await self.attendre_pret()
+        await Event().wait()  # Ok, pas de timeout. On ne termine jamais
