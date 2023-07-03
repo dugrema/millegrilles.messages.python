@@ -7,4 +7,4 @@ ARCH_SUPPORTEES=( x86_64 aarch64 )
 BUILD=`cat build.txt`
 
 VERSION=$BRANCH.$BUILD
-echo $VERSION > version.txt
+# echo $VERSION > version.txt
