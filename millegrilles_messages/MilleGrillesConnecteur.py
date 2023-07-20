@@ -218,6 +218,9 @@ class CommandHandler:
         # Ex : return ['evenement.GrosFichiers.*.jobImageDisponible', 'evenement.GrosFichiers.annulerJobVideo']
         raise NotImplementedError('Non implemente')
 
+    def configurer_consumers(self, messages_thread):
+        raise NotImplementedError("Non implemente")
+
     async def executer_commande(self, producer: MessageProducerFormatteur, message: MessageWrapper):
         routing_key = message.routing_key
         exchange = message.exchange
@@ -267,6 +270,16 @@ class CommandHandler:
 
         raise NotImplementedError("Non implemente")
 
+    async def callback_reply_q(self, message: MessageWrapper, module_messages: MessagesThread):
+        self.__logger.debug("RabbitMQ nessage recu : %s" % message)
+        producer = module_messages.get_producer()
+        reponse = await self.executer_commande(producer, message)
+
+        if reponse is not None:
+            reply_to = message.reply_to
+            correlation_id = message.correlation_id
+            await producer.repondre(reponse, reply_to, correlation_id)
+
 
 class MqThread:
     """
@@ -298,9 +311,8 @@ class MqThread:
             Constantes.ENV_MQ_PORT: self.__mq_port,
         }
 
-        messages_thread = self.creer_ressources_consommation(env_configuration)
-        await messages_thread.start_async()  # Preparer le reste de l'environnement
-        self.__messages_thread = messages_thread
+        self.__messages_thread = self.creer_ressources_consommation(env_configuration)
+        await self.__messages_thread.start_async()  # Preparer le reste de l'environnement
 
     def creer_ressources_consommation(self, env_configuration: dict) -> MessagesThread:
         messages_thread = MessagesThread(self.__event_stop)
@@ -313,6 +325,8 @@ class MqThread:
             reply_res.ajouter_rk(Constantes.SECURITE_PRIVE, rk)
 
         messages_thread.set_reply_ressources(reply_res)
+
+        self.__command_handler.configurer_consumers(messages_thread)
 
         return messages_thread
 
