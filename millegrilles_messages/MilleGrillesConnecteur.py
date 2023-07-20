@@ -39,8 +39,7 @@ class Configuration:
         self.mq_host = 'mq'
         self.mq_port = 5673
 
-    @staticmethod
-    def get_params_list() -> list:
+    def get_params_list(self) -> list:
         return CONST_PARAMS
 
     def get_env(self) -> dict:
