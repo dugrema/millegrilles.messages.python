@@ -50,6 +50,7 @@ DELEGATION_GLOBALE_PROPRIETAIRE = 'proprietaire'
 
 
 ROLE_CORE = 'core'
+ROLE_BACKUP = 'backup'
 
 
 DOMAINE_INSTANCE = 'instance'

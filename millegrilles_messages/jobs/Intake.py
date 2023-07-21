@@ -17,6 +17,10 @@ class IntakeHandler:
         self.__event_intake: Optional[Event] = None
         self._stop_event = stop_event
 
+    @property
+    def en_cours(self) -> bool:
+        return self.__event_intake is not None and self.__event_intake.is_set() is True
+
     async def configurer(self):
         self.__event_intake = Event()
 
