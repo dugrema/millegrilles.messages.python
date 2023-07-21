@@ -15,22 +15,24 @@ class IntakeHandler:
         self._etat_instance = etat_instance
         self._timeout_cycle = timeout_cycle
         self.__event_intake: Optional[Event] = None
-        self.__stop_event = stop_event
+        self._stop_event = stop_event
 
     async def configurer(self):
         self.__event_intake = Event()
 
     async def trigger_traitement(self):
         self.__logger.info('IntakeHandler trigger intake recu')
+        en_cours = self.__event_intake.is_set()
         self.__event_intake.set()
+        return en_cours
 
     async def run(self):
         self.__logger.info('IntakeHandler running')
-        while not self.__stop_event.is_set():
+        while not self._stop_event.is_set():
             try:
                 if self.__event_intake.is_set() is False:
                     await wait(
-                        [self.__stop_event.wait(), self.__event_intake.wait()],
+                        [self._stop_event.wait(), self.__event_intake.wait()],
                         timeout=self._timeout_cycle, return_when=FIRST_COMPLETED
                     )
                     self.__event_intake.set()
@@ -38,7 +40,7 @@ class IntakeHandler:
                 self.__logger.debug("run Verifier si fichier disponible pour indexation")
                 self.__event_intake.set()
 
-            if self.__stop_event.is_set():
+            if self._stop_event.is_set():
                 self.__logger.info('run Arret loop traiter_fichiers')
                 break
 

@@ -235,6 +235,7 @@ class CommandHandler:
             reponse = await self.traiter_commande(producer, message)
 
             if reponse is None:
+                self.__logger.warning("Commande inconnue ou acces refuse : %s" % routing_key)
                 reponse = {'ok': False, 'err': 'Commande inconnue ou acces refuse'}
 
         except Exception as e:
