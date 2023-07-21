@@ -55,7 +55,7 @@ class IntakeHandler:
                 # Erreur generique non geree. Creer un delai de traitement pour poursuivre
                 self.__event_intake.clear()
 
-    async def traiter_prochaine_job(self) -> dict:
+    async def traiter_prochaine_job(self) -> Optional[dict]:
         raise NotImplementedError('must override')
 
     async def annuler_job(self, job: dict, emettre_evenement=False):
