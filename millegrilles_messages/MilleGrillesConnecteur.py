@@ -108,6 +108,8 @@ class EtatInstance:
         self.__producer: Optional[MessageProducerFormatteur] = None
         self.__partition: Optional[str] = None
 
+        self.__backup_inhibe = False
+
     async def reload_configuration(self):
         self.__logger.info("Reload configuration sur disque ou dans docker")
 
@@ -203,6 +205,14 @@ class EtatInstance:
     @property
     def formatteur_message(self):
         return self.__formatteur_message
+
+    @property
+    def backup_inhibe(self):
+        return self.__backup_inhibe
+
+    @backup_inhibe.setter
+    def backup_inhibe(self, value):
+        self.__backup_inhibe = value
 
 
 class CommandHandler:
