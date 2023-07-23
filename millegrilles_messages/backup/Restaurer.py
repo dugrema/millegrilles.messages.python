@@ -162,16 +162,21 @@ class RestaurateurTransactions:
         self.__fp_fichiers_archive = None
         self.__date_recu_catalogue: Optional[datetime.datetime] = None
         self.__catalogues_recus_event: Optional[asyncio.Event] = None
+        self.__catalogues_queue: Optional[asyncio.Queue] = None
+        self.__regeneration_event: Optional[asyncio.Event] = None
 
     async def preparer(self):
         makedirs(self.__work_path, mode=0o755, exist_ok=True)
 
         reply_res = RessourcesConsommation(self.traiter_reponse)
+        reply_res.ajouter_rk(ConstantesMillegrilles.SECURITE_PROTEGE, 'evenement.*.regenerationMaj')
         self.__stop_event = asyncio.Event()
         self.__restauration_complete_event = asyncio.Event()
         self.__catalogues_recus_event = asyncio.Event()
         messages_thread = MessagesThread(self.__stop_event)
         messages_thread.set_reply_ressources(reply_res)
+        self.__catalogues_queue = asyncio.Queue()
+        self.__regeneration_event = asyncio.Event()
 
         config = {
             'CERT_PEM': self.__config.cert_pem_path,
@@ -182,11 +187,14 @@ class RestaurateurTransactions:
 
         self.__messages_thread = messages_thread
 
-    async def traiter_reponse(self, message, module_messages: MessagesThread):
+    async def traiter_reponse(self, message: MessageWrapper, module_messages: MessagesThread):
         self.__logger.debug("traiter_reponse Message recu : %s" % json.dumps(message.parsed, indent=2))
 
+        try:
+            action = message.routage.get('action')
+        except AttributeError:
+            action = None
         correlation_id = message.correlation_id
-        message_parsed = message.parsed
 
         if correlation_id == 'restaurationCompletee':
             self.__logger.info("traiter_reponse Tous les catalogues ont ete recus")
@@ -195,7 +203,11 @@ class RestaurateurTransactions:
             self.__date_recu_catalogue = datetime.datetime.utcnow()
         elif correlation_id == 'catalogueTransactions':
             self.__date_recu_catalogue = datetime.datetime.utcnow()
-            await self.traiter_catalogue(message)
+            # await self.traiter_catalogue(message)
+            await self.__catalogues_queue.put(message)
+        elif action == 'regenerationMaj':
+            if message.parsed.get('termine') is True:
+                self.__regeneration_event.set()
 
         # if self.__restauration_complete_event.is_set() is False:
         #     # Mode recevoir liste fichiers/cles
@@ -221,6 +233,7 @@ class RestaurateurTransactions:
         tasks = [
             asyncio.create_task(self.__messages_thread.run_async()),
             asyncio.create_task(self.run_traitement_transactions()),
+            asyncio.create_task(self.traiter_catalogues_thread()),
         ]
 
         # Execution de la loop avec toutes les tasks
@@ -263,34 +276,69 @@ class RestaurateurTransactions:
         if reponse_demarrage.parsed['ok'] is not True:
             raise Exception('restaurer Erreur demarrage restauration (service backup) : %s' % reponse_demarrage.parsed.get('err'))
 
+        domaines = reponse_demarrage.parsed['domaines']
+
         self.__logger.info("restaurerAttente des transactions a restaurer")
         pending = [self.__catalogues_recus_event.wait()]
         self.__date_recu_catalogue = datetime.datetime.utcnow()
         expiration_attente = datetime.timedelta(seconds=10)
 
         while len(pending) > 0:
-            done, pending = await asyncio.wait(pending, timeout=5)
+            done, pending = await asyncio.wait(pending, timeout=30)
             self.__logger.info("restaurer Emettre rapport restauration")
             if datetime.datetime.utcnow() - expiration_attente > self.__date_recu_catalogue:
                 raise Exception('restaurer Erreur restauration - timeout attente transactions')
 
-        self.__logger.info("restaurer Tous les catalogues on ete recus")
+        self.__logger.info("restaurer Tous les catalogues on ete recus et uploades")
+        await self.regenerer(producer, domaines)
 
-    async def traiter_catalogue(self, message: MessageWrapper):
-        self.__date_recu_catalogue = datetime.datetime.utcnow()
+    async def regenerer(self, producer, domaines: list):
+        for domaine in domaines:
+            nom_domaine = domaine['domaine']
+            self.__logger.info("Regenerer domaine %s" % nom_domaine)
+            commande = {'domaine': nom_domaine}
+            self.__regeneration_event.clear()
+            await producer.executer_commande(commande,
+                                             domaine=nom_domaine, action='regenerer',
+                                             exchange=ConstantesMillegrilles.SECURITE_PROTEGE, nowait=True)
+            try:
+                await asyncio.wait_for(self.__regeneration_event.wait(), 20)
+                self.__logger.info("Regeneration %s terminee avec succes" % nom_domaine)
+            except asyncio.TimeoutError:
+                self.__logger.warning("Timeout regeneration %s, on continue" % nom_domaine)
 
-        contenu = message.parsed
-        catalogue_id = contenu['__original']['id']
+    async def traiter_catalogues_thread(self):
 
-        # Confirmer le traitement du catalogue
-        producer = self.__messages_thread.get_producer()
-        await producer.producer_pret().wait()
+        stop_task = asyncio.create_task(self.__stop_event.wait())
+        while self.__stop_event.is_set() is False:
+            done, pending = await asyncio.wait([stop_task, self.__catalogues_queue.get()], return_when=asyncio.FIRST_COMPLETED)
+            if self.__stop_event.is_set():
+                break  # Stopped
+            catalogue = done.pop().result()
 
-        commande = {'catalogue_id': catalogue_id}
-        await producer.executer_commande(
-            commande, ConstantesMillegrilles.DOMAINE_BACKUP, 'catalogueTraite',
-            exchange=ConstantesMillegrilles.SECURITE_PRIVE, nowait=True
-        )
+            self.__date_recu_catalogue = datetime.datetime.utcnow()
+
+            contenu = catalogue.parsed
+            nom_domaine = contenu['domaine']
+            catalogue_id = contenu['__original']['id']
+
+            # Verifier
+            try:
+                self.__logger.info("Dechiffrage catalogue %s/%s" % (nom_domaine, catalogue_id))
+                meta_traitement = await self.traiter_transactions_fichier(contenu)
+                # meta_domaine['transactions'] = meta_domaine['transactions'] + meta_traitement['nb_transactions_traitees']
+            except ValueError:
+                self.__logger.exception("Erreur dechiffrage catalogue %s/%s" % (nom_domaine, catalogue_id))
+
+            # Confirmer le traitement du catalogue
+            producer = self.__messages_thread.get_producer()
+            await producer.producer_pret().wait()
+
+            commande = {'catalogue_id': catalogue_id}
+            await producer.executer_commande(
+                commande, ConstantesMillegrilles.DOMAINE_BACKUP, 'catalogueTraite',
+                exchange=ConstantesMillegrilles.SECURITE_PRIVE, nowait=True
+            )
 
     async def traiter_transactions(self):
         producer = self.__messages_thread.get_producer()
@@ -358,6 +406,7 @@ class RestaurateurTransactions:
         certificats = self.preparer_certificats(backup['certificats'])
 
         producer = self.__messages_thread.get_producer()
+        await producer.producer_pret().wait()
 
         # Emettre les certificats vers CorePki
         for commande_certificat in certificats.values():
