@@ -15,11 +15,12 @@ from typing import Optional
 import pytz
 
 from millegrilles_messages.backup.Configuration import ConfigurationBackup
-from millegrilles_messages.messages import Constantes
+from millegrilles_messages.messages import Constantes as ConstantesMillegrilles
 from millegrilles_messages.messages.ValidateurMessage import ValidateurMessage, ValidateurCertificatCache
 from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
 from millegrilles_messages.messages.CleCertificat import CleCertificat
 from millegrilles_messages.messages.FormatteurMessages import SignateurTransactionSimple, FormatteurMessageMilleGrilles
+from millegrilles_messages.messages.MessagesModule import MessageWrapper
 from millegrilles_messages.chiffrage.Mgs4 import DecipherMgs4
 
 from millegrilles_messages.messages.MessagesThread import MessagesThread
@@ -159,6 +160,8 @@ class RestaurateurTransactions:
 
         self.__path_fichier_archives = path.join(work_path, 'liste.txt')
         self.__fp_fichiers_archive = None
+        self.__date_recu_catalogue: Optional[datetime.datetime] = None
+        self.__catalogues_recus_event: Optional[asyncio.Event] = None
 
     async def preparer(self):
         makedirs(self.__work_path, mode=0o755, exist_ok=True)
@@ -166,6 +169,7 @@ class RestaurateurTransactions:
         reply_res = RessourcesConsommation(self.traiter_reponse)
         self.__stop_event = asyncio.Event()
         self.__restauration_complete_event = asyncio.Event()
+        self.__catalogues_recus_event = asyncio.Event()
         messages_thread = MessagesThread(self.__stop_event)
         messages_thread.set_reply_ressources(reply_res)
 
@@ -179,26 +183,36 @@ class RestaurateurTransactions:
         self.__messages_thread = messages_thread
 
     async def traiter_reponse(self, message, module_messages: MessagesThread):
-        self.__logger.debug("Message recu : %s" % json.dumps(message.parsed, indent=2))
+        self.__logger.debug("traiter_reponse Message recu : %s" % json.dumps(message.parsed, indent=2))
 
+        correlation_id = message.correlation_id
         message_parsed = message.parsed
 
-        if self.__restauration_complete_event.is_set() is False:
-            # Mode recevoir liste fichiers/cles
-            # try:
-            #     cles = message_parsed['cles']
-            #     self.__logger.info("Cles recues : %s", cles)
-            #
-            #     await asyncio.to_thread(self.conserver_liste_fichiers, cles)
-            #
-            # except KeyError:
-            #     pass
+        if correlation_id == 'restaurationCompletee':
+            self.__logger.info("traiter_reponse Tous les catalogues ont ete recus")
+            self.__catalogues_recus_event.set()
+        elif correlation_id == 'domaineComplete':
+            self.__date_recu_catalogue = datetime.datetime.utcnow()
+        elif correlation_id == 'catalogueTransactions':
+            self.__date_recu_catalogue = datetime.datetime.utcnow()
+            await self.traiter_catalogue(message)
 
-            try:
-                if message_parsed['complet'] is True:
-                    self.__restauration_complete_event.set()
-            except KeyError:
-                pass
+        # if self.__restauration_complete_event.is_set() is False:
+        #     # Mode recevoir liste fichiers/cles
+        #     # try:
+        #     #     cles = message_parsed['cles']
+        #     #     self.__logger.info("Cles recues : %s", cles)
+        #     #
+        #     #     await asyncio.to_thread(self.conserver_liste_fichiers, cles)
+        #     #
+        #     # except KeyError:
+        #     #     pass
+        #
+        #     try:
+        #         if message_parsed['complet'] is True:
+        #             self.__restauration_complete_event.set()
+        #     except KeyError:
+        #         pass
 
     async def run(self):
         # Demarrer traitement messages
@@ -229,33 +243,54 @@ class RestaurateurTransactions:
         #         raise ValueError('Mauvais certificat de rechiffrage recu - doit avoir role maitredescles')
         #     self.__certificats_rechiffrage = [certificat_rechiffrage]
 
-        await self.demarrer_restauration()
+        await self.restaurer()
 
-    async def demarrer_restauration(self):
+    async def restaurer(self):
         producer = self.__messages_thread.get_producer()
         await producer.producer_pret().wait()
 
-        self.__fp_fichiers_archive = open(self.__path_fichier_archives, 'w')
+        # self.__fp_fichiers_archive = open(self.__path_fichier_archives, 'w')
 
         commande_demarrer = dict()
         if self.__domaine:
             commande_demarrer['domaines'] = [self.__domaine]
 
         reponse_demarrage = await producer.executer_commande(
-            commande_demarrer, domaine='backup', action='demarrerRestauration',
-            exchange=Constantes.SECURITE_PRIVE)
+            commande_demarrer, domaine='backup', action='restaurerTransactions',
+            exchange=ConstantesMillegrilles.SECURITE_PRIVE)
 
-        self.__logger.info("Reponse demarrage restauration : %s", reponse_demarrage)
+        self.__logger.info("restaurer Reponse demarrage restauration : %s", reponse_demarrage.parsed)
+        if reponse_demarrage.parsed['ok'] is not True:
+            raise Exception('restaurer Erreur demarrage restauration (service backup) : %s' % reponse_demarrage.parsed.get('err'))
 
-        raise Exception('todo')
+        self.__logger.info("restaurerAttente des transactions a restaurer")
+        pending = [self.__catalogues_recus_event.wait()]
+        self.__date_recu_catalogue = datetime.datetime.utcnow()
+        expiration_attente = datetime.timedelta(seconds=10)
 
-        self.__logger.info("Attente de la liste de fichiers a restaurer")
-        await asyncio.wait_for(self.__restauration_complete_event.wait(), 300)
-        self.__fp_fichiers_archive.close()
-        self.__fp_fichiers_archive = None
-        self.__logger.info("Liste de fichiers recue")
+        while len(pending) > 0:
+            done, pending = await asyncio.wait(pending, timeout=5)
+            self.__logger.info("restaurer Emettre rapport restauration")
+            if datetime.datetime.utcnow() - expiration_attente > self.__date_recu_catalogue:
+                raise Exception('restaurer Erreur restauration - timeout attente transactions')
 
-        await self.traiter_transactions()
+        self.__logger.info("restaurer Tous les catalogues on ete recus")
+
+    async def traiter_catalogue(self, message: MessageWrapper):
+        self.__date_recu_catalogue = datetime.datetime.utcnow()
+
+        contenu = message.parsed
+        catalogue_id = contenu['__original']['id']
+
+        # Confirmer le traitement du catalogue
+        producer = self.__messages_thread.get_producer()
+        await producer.producer_pret().wait()
+
+        commande = {'catalogue_id': catalogue_id}
+        await producer.executer_commande(
+            commande, ConstantesMillegrilles.DOMAINE_BACKUP, 'catalogueTraite',
+            exchange=ConstantesMillegrilles.SECURITE_PRIVE, nowait=True
+        )
 
     async def traiter_transactions(self):
         producer = self.__messages_thread.get_producer()
@@ -313,7 +348,7 @@ class RestaurateurTransactions:
             commande = {'domaine': nom_domaine}
             await producer.executer_commande(commande,
                                              domaine=nom_domaine, action='regenerer',
-                                             exchange=Constantes.SECURITE_PROTEGE, nowait=True)
+                                             exchange=ConstantesMillegrilles.SECURITE_PROTEGE, nowait=True)
 
     async def traiter_transactions_fichier(self, backup: dict) -> dict:
         domaine = backup['domaine']
@@ -328,7 +363,7 @@ class RestaurateurTransactions:
         for commande_certificat in certificats.values():
             await producer.executer_commande(commande_certificat,
                                              domaine='CorePki', action='certificat',
-                                             exchange=Constantes.SECURITE_PROTEGE,
+                                             exchange=ConstantesMillegrilles.SECURITE_PROTEGE,
                                              timeout=15)
 
         # Dechiffrer transactions
@@ -370,7 +405,7 @@ class RestaurateurTransactions:
 
                 commande_exec = producer.executer_commande(enveloppe_transaction,
                                                  domaine=domaine, action='restaurerTransaction',
-                                                 exchange=Constantes.SECURITE_PROTEGE,
+                                                 exchange=ConstantesMillegrilles.SECURITE_PROTEGE,
                                                  nowait=not sync_traitement,
                                                  timeout=120)
 
@@ -421,7 +456,7 @@ class RestaurateurTransactions:
                 pass  # OK, champs optionnel
 
         await producer.executer_commande(commande_rechiffree, domaine='MaitreDesCles', action='sauvegarderCle',
-                                         partition=partition, exchange=Constantes.SECURITE_PRIVE, nowait=nowait,
+                                         partition=partition, exchange=ConstantesMillegrilles.SECURITE_PRIVE, nowait=nowait,
                                          timeout=120)
 
     def extraire_transactions(self, data: str, decipher: DecipherMgs4):

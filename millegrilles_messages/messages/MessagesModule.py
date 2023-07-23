@@ -565,10 +565,15 @@ class MessageProducerFormatteur(MessageProducer):
                                                   exchange=exchange, correlation_id=correlation_id, reply_to=reply_to)
             return reponse
 
-    async def repondre(self, reponse: dict, reply_to, correlation_id, version=1, attachements: Optional[dict] = None):
-        message, uuid_message = self.__formatteur_messages.signer_message(Constantes.KIND_REPONSE, reponse)
+    async def repondre(self, reponse: dict, reply_to, correlation_id, version=1, noformat=False, attachements: Optional[dict] = None):
+        if noformat is not True:
+            message, uuid_message = self.__formatteur_messages.signer_message(Constantes.KIND_REPONSE, reponse)
+        else:
+            message = reponse
+
         if attachements is not None:
             message['attachements'] = attachements
+
         message_bytes = json.dumps(message)
         routing_key = reply_to
         await self.emettre(message_bytes, routing_key, correlation_id=correlation_id, reply_to=reply_to)
