@@ -30,6 +30,7 @@ PATH_RESTAURATION = '_RESTAURATION'
 TAILLE_BUFFER = 128 * 1024
 RESTAURATION_BATCH_SIZE = 250
 
+
 class RestaurateurArchives:
 
     def __init__(self, config: dict, archive: str, transactions: bool, work_path: str, clecert_ca: CleCertificat, domaine: Optional[str], delai: Optional[int]):
@@ -130,8 +131,7 @@ class RestaurateurArchives:
             data = decipher.finalize()
             fichier_output.write(data)
 
-        print("Dechiffrage OK")
-
+        self.__logger.debug("Dechiffrage %s OK" % path_archive)
         unlink(path_archive)
 
         return path_archive_dechiffree
@@ -151,7 +151,7 @@ class RestaurateurTransactions:
         self.__work_path = work_path
         self.__rechiffrer = rechiffrer
         self.__stop_event: Optional[asyncio.Event] = None
-        self.__liste_complete_event: Optional[asyncio.Event] = None
+        self.__restauration_complete_event: Optional[asyncio.Event] = None
         self.__messages_thread: Optional[MessagesThread] = None
         self.__certificats_rechiffrage: Optional[list[EnveloppeCertificat]] = None
         self.__domaine = domaine
@@ -165,7 +165,7 @@ class RestaurateurTransactions:
 
         reply_res = RessourcesConsommation(self.traiter_reponse)
         self.__stop_event = asyncio.Event()
-        self.__liste_complete_event = asyncio.Event()
+        self.__restauration_complete_event = asyncio.Event()
         messages_thread = MessagesThread(self.__stop_event)
         messages_thread.set_reply_ressources(reply_res)
 
@@ -183,26 +183,22 @@ class RestaurateurTransactions:
 
         message_parsed = message.parsed
 
-        if self.__liste_complete_event.is_set() is False:
+        if self.__restauration_complete_event.is_set() is False:
             # Mode recevoir liste fichiers/cles
-            try:
-                cles = message_parsed['cles']
-                self.__logger.info("Cles recues : %s", cles)
-
-                await asyncio.to_thread(self.conserver_liste_fichiers, cles)
-
-            except KeyError:
-                pass
+            # try:
+            #     cles = message_parsed['cles']
+            #     self.__logger.info("Cles recues : %s", cles)
+            #
+            #     await asyncio.to_thread(self.conserver_liste_fichiers, cles)
+            #
+            # except KeyError:
+            #     pass
 
             try:
                 if message_parsed['complet'] is True:
-                    self.__liste_complete_event.set()
+                    self.__restauration_complete_event.set()
             except KeyError:
                 pass
-
-    def conserver_liste_fichiers(self, cles: dict):
-        for nom_fichier, cle in cles.items():
-            self.__fp_fichiers_archive.write(nom_fichier + '\n')
 
     async def run(self):
         # Demarrer traitement messages
@@ -221,31 +217,40 @@ class RestaurateurTransactions:
         await self.__messages_thread.attendre_pret()
         self.__logger.info("MQ pret")
 
-        if self.__rechiffrer is True:
-            self.__logger.info("Recuperer certificats maitre des cles")
-            producer = self.__messages_thread.get_producer()
-            cert = await asyncio.wait_for(producer.executer_requete(
-                dict(), domaine='MaitreDesCles', action='certMaitreDesCles', exchange=Constantes.SECURITE_PRIVE), 10)
-            cert_pem = ''.join(cert.parsed['certificat'])
-            certificat_rechiffrage = EnveloppeCertificat.from_pem(cert_pem)
-            if 'maitredescles' not in certificat_rechiffrage.get_roles:
-                raise ValueError('Mauvais certificat de rechiffrage recu - doit avoir role maitredescles')
-            self.__certificats_rechiffrage = [certificat_rechiffrage]
+        # if self.__rechiffrer is True:
+        #     self.__logger.info("Recuperer certificats maitre des cles")
+        #     producer = self.__messages_thread.get_producer()
+        #     cert = await producer.executer_requete(
+        #         dict(),
+        #         domaine='MaitreDesCles', action='certMaitreDesCles', exchange=Constantes.SECURITE_PRIVE, timeout=10)
+        #     cert_pem = ''.join(cert.parsed['certificat'])
+        #     certificat_rechiffrage = EnveloppeCertificat.from_pem(cert_pem)
+        #     if 'maitredescles' not in certificat_rechiffrage.get_roles:
+        #         raise ValueError('Mauvais certificat de rechiffrage recu - doit avoir role maitredescles')
+        #     self.__certificats_rechiffrage = [certificat_rechiffrage]
 
-        await self.recuperer_liste_fichiers()
+        await self.demarrer_restauration()
 
-    async def recuperer_liste_fichiers(self):
+    async def demarrer_restauration(self):
         producer = self.__messages_thread.get_producer()
+        await producer.producer_pret().wait()
 
         self.__fp_fichiers_archive = open(self.__path_fichier_archives, 'w')
 
-        await producer.executer_commande(
-            dict(), domaine='fichiers', action='getClesBackupTransactions',
-            exchange=Constantes.SECURITE_PRIVE,
-            nowait=True)
+        commande_demarrer = dict()
+        if self.__domaine:
+            commande_demarrer['domaines'] = [self.__domaine]
+
+        reponse_demarrage = await producer.executer_commande(
+            commande_demarrer, domaine='backup', action='demarrerRestauration',
+            exchange=Constantes.SECURITE_PRIVE)
+
+        self.__logger.info("Reponse demarrage restauration : %s", reponse_demarrage)
+
+        raise Exception('todo')
 
         self.__logger.info("Attente de la liste de fichiers a restaurer")
-        await asyncio.wait_for(self.__liste_complete_event.wait(), 300)
+        await asyncio.wait_for(self.__restauration_complete_event.wait(), 300)
         self.__fp_fichiers_archive.close()
         self.__fp_fichiers_archive = None
         self.__logger.info("Liste de fichiers recue")
@@ -268,7 +273,7 @@ class RestaurateurTransactions:
 
                 # Bounce la requete de fichier de backup
                 requete = {'fichierBackup': nom_fichier}
-                resultat = await producer.executer_requete(requete, domaine='fichiers',
+                resultat = await producer.executer_requete(requete, domaine='backup',
                                                            action='getBackupTransaction', exchange='2.prive')
                 transaction_backup = resultat.parsed['backup']
                 contenu_transaction = json.loads(transaction_backup['contenu'])
