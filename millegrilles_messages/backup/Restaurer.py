@@ -162,6 +162,7 @@ class RestaurateurTransactions:
         self.__fp_fichiers_archive = None
         self.__date_recu_catalogue: Optional[datetime.datetime] = None
         self.__catalogues_recus_event: Optional[asyncio.Event] = None
+        self.__domaine_complete_queue: Optional[asyncio.Queue] = None
         self.__catalogues_queue: Optional[asyncio.Queue] = None
         self.__regeneration_event: Optional[asyncio.Event] = None
 
@@ -173,6 +174,7 @@ class RestaurateurTransactions:
         self.__stop_event = asyncio.Event()
         self.__restauration_complete_event = asyncio.Event()
         self.__catalogues_recus_event = asyncio.Event()
+        self.__domaine_complete_queue = asyncio.Queue()
         messages_thread = MessagesThread(self.__stop_event)
         messages_thread.set_reply_ressources(reply_res)
         self.__catalogues_queue = asyncio.Queue()
@@ -201,6 +203,7 @@ class RestaurateurTransactions:
             self.__catalogues_recus_event.set()
         elif correlation_id == 'domaineComplete':
             self.__date_recu_catalogue = datetime.datetime.utcnow()
+            await self.__domaine_complete_queue.put(message)
         elif correlation_id == 'catalogueTransactions':
             self.__date_recu_catalogue = datetime.datetime.utcnow()
             # await self.traiter_catalogue(message)
@@ -234,6 +237,7 @@ class RestaurateurTransactions:
             asyncio.create_task(self.__messages_thread.run_async()),
             asyncio.create_task(self.run_traitement_transactions()),
             asyncio.create_task(self.traiter_catalogues_thread()),
+            # asyncio.create_task(self.complete_domaine_thread())
         ]
 
         # Execution de la loop avec toutes les tasks
@@ -308,7 +312,6 @@ class RestaurateurTransactions:
                 self.__logger.warning("Timeout regeneration %s, on continue" % nom_domaine)
 
     async def traiter_catalogues_thread(self):
-
         stop_task = asyncio.create_task(self.__stop_event.wait())
         while self.__stop_event.is_set() is False:
             done, pending = await asyncio.wait([stop_task, self.__catalogues_queue.get()], return_when=asyncio.FIRST_COMPLETED)
@@ -326,7 +329,6 @@ class RestaurateurTransactions:
             try:
                 self.__logger.info("Dechiffrage catalogue %s/%s" % (nom_domaine, catalogue_id))
                 meta_traitement = await self.traiter_transactions_fichier(contenu)
-                # meta_domaine['transactions'] = meta_domaine['transactions'] + meta_traitement['nb_transactions_traitees']
             except ValueError:
                 self.__logger.exception("Erreur dechiffrage catalogue %s/%s" % (nom_domaine, catalogue_id))
 
@@ -339,6 +341,24 @@ class RestaurateurTransactions:
                 commande, ConstantesMillegrilles.DOMAINE_BACKUP, 'catalogueTraite',
                 exchange=ConstantesMillegrilles.SECURITE_PRIVE, nowait=True
             )
+
+    # async def complete_domaine_thread(self):
+    #     stop_task = asyncio.create_task(self.__stop_event.wait())
+    #     while self.__stop_event.is_set() is False:
+    #         done, pending = await asyncio.wait([stop_task, self.__domaine_complete_queue.get()], return_when=asyncio.FIRST_COMPLETED)
+    #         if self.__stop_event.is_set():
+    #             break  # Stopped
+    #         message = done.pop().result()
+    #
+    #         nom_domaine = message.parsed['domaine']
+    #         if nom_domaine == 'CorePki':
+    #             self.__logger.info("Domaine CorePki complete, regenerer immediatement")
+    #
+    #         producer = self.__messages_thread.get_producer()
+    #         await producer.producer_pret().wait()
+    #         await producer.executer_commande(
+    #             {'domaine': nom_domaine}, domaine='backup', action='domaineTraite',
+    #             exchange=ConstantesMillegrilles.SECURITE_PRIVE, nowait=True)
 
     async def traiter_transactions(self):
         producer = self.__messages_thread.get_producer()
