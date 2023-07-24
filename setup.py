@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-__VERSION__ = "2023.7.1"
+__VERSION__ = "2023.7.2"
 
 
 setup(
