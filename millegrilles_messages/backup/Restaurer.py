@@ -429,11 +429,11 @@ class RestaurateurTransactions:
         await producer.producer_pret().wait()
 
         # Emettre les certificats vers CorePki
-        for commande_certificat in certificats.values():
-            await producer.executer_commande(commande_certificat,
-                                             domaine='CorePki', action='certificat',
-                                             exchange=ConstantesMillegrilles.SECURITE_PROTEGE,
-                                             timeout=15)
+        # for commande_certificat in certificats.values():
+        #     await producer.executer_commande(commande_certificat,
+        #                                      domaine='CorePki', action='certificat',
+        #                                      exchange=ConstantesMillegrilles.SECURITE_PROTEGE,
+        #                                      timeout=20)
 
         # Dechiffrer transactions
         cle_dechiffree = self.__clecert_ca.dechiffrage_asymmetrique(backup['cle'])
@@ -480,6 +480,7 @@ class RestaurateurTransactions:
 
                 # Support preparer une batch a l'avance
                 if sync_traitement is True:
+                    self.__date_recu_catalogue = datetime.datetime.utcnow()  # Touch pour eviter timeout
                     if process_precedent is not None:
                         await process_precedent
                         process_precedent = None
