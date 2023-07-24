@@ -161,6 +161,7 @@ class RestaurateurTransactions:
         self.__path_fichier_archives = path.join(work_path, 'liste.txt')
         self.__fp_fichiers_archive = None
         self.__date_recu_catalogue: Optional[datetime.datetime] = None
+        self.__timeout_traitement_catalogue_desactive = False
         self.__catalogues_recus_event: Optional[asyncio.Event] = None
         self.__domaine_complete_queue: Optional[asyncio.Queue] = None
         self.__catalogues_queue: Optional[asyncio.Queue] = None
@@ -202,10 +203,10 @@ class RestaurateurTransactions:
             self.__logger.info("traiter_reponse Tous les catalogues ont ete recus")
             self.__catalogues_recus_event.set()
         elif correlation_id == 'domaineComplete':
-            self.__date_recu_catalogue = datetime.datetime.utcnow()
+            self.touch_activite_transactions("traiter_reponse message domaineComplete")
             await self.__domaine_complete_queue.put(message)
         elif correlation_id == 'catalogueTransactions':
-            self.__date_recu_catalogue = datetime.datetime.utcnow()
+            self.touch_activite_transactions("traiter_reponse message catalogueTransactions")
             # await self.traiter_catalogue(message)
             await self.__catalogues_queue.put(message)
         elif action == 'regenerationMaj':
@@ -262,6 +263,12 @@ class RestaurateurTransactions:
 
         await self.restaurer()
 
+    def touch_activite_transactions(self, label: Optional[str] = None, desactiver_timeout=False):
+        now = datetime.datetime.utcnow()
+        self.__logger.debug("touch_activite_transactions Touch activite transactions %s : %s (desactive: %s)" % (label, now, desactiver_timeout))
+        self.__date_recu_catalogue = now
+        self.__timeout_traitement_catalogue_desactive = desactiver_timeout
+
     async def restaurer(self):
         producer = self.__messages_thread.get_producer()
         await producer.producer_pret().wait()
@@ -284,14 +291,16 @@ class RestaurateurTransactions:
 
         self.__logger.info("restaurerAttente des transactions a restaurer")
         pending = [self.__catalogues_recus_event.wait()]
-        self.__date_recu_catalogue = datetime.datetime.utcnow()
-        expiration_attente = datetime.timedelta(seconds=10)
+        self.touch_activite_transactions("restaurer debut")
+        expiration_attente = datetime.timedelta(seconds=30)
 
         while len(pending) > 0:
-            done, pending = await asyncio.wait(pending, timeout=30)
+            done, pending = await asyncio.wait(pending, timeout=5)
             self.__logger.info("restaurer Emettre rapport restauration")
-            if datetime.datetime.utcnow() - expiration_attente > self.__date_recu_catalogue:
-                raise Exception('restaurer Erreur restauration - timeout attente transactions')
+            now = datetime.datetime.utcnow()
+            if self.__timeout_traitement_catalogue_desactive is False and \
+                    now - expiration_attente > self.__date_recu_catalogue:
+                raise Exception('restaurer Erreur restauration - timeout attente transactions : %s (derniere action %s)' % (now, self.__date_recu_catalogue))
 
         self.__logger.info("restaurer Tous les catalogues on ete recus et uploades")
         await self.regenerer(producer, domaines)
@@ -306,7 +315,7 @@ class RestaurateurTransactions:
                                              domaine=nom_domaine, action='regenerer',
                                              exchange=ConstantesMillegrilles.SECURITE_PROTEGE, nowait=True)
             try:
-                await asyncio.wait_for(self.__regeneration_event.wait(), 20)
+                await asyncio.wait_for(self.__regeneration_event.wait(), 45)
                 self.__logger.info("Regeneration %s terminee avec succes" % nom_domaine)
             except asyncio.TimeoutError:
                 self.__logger.warning("Timeout regeneration %s, on continue" % nom_domaine)
@@ -319,11 +328,11 @@ class RestaurateurTransactions:
                 break  # Stopped
             catalogue = done.pop().result()
 
-            self.__date_recu_catalogue = datetime.datetime.utcnow()
-
             contenu = catalogue.parsed
             nom_domaine = contenu['domaine']
             catalogue_id = contenu['__original']['id']
+
+            self.touch_activite_transactions("traiter_catalogues_thread debut %s / %s" % (nom_domaine, catalogue_id))
 
             # Verifier
             try:
@@ -406,6 +415,7 @@ class RestaurateurTransactions:
                         await asyncio.sleep(self.__delai)
                     except asyncio.TimeoutError:
                         pass
+                    self.touch_activite_transactions("traiter_catalogues_thread apres delai")
 
         self.__logger.info(" ** INFO RESTAURATION DOMAINES ** ")
         for nom_domaine, meta_domaine in domaines.items():
@@ -414,6 +424,7 @@ class RestaurateurTransactions:
 
             self.__logger.info("Regenerer domaine %s" % domaine)
             commande = {'domaine': nom_domaine}
+            self.touch_activite_transactions("traiter_catalogues_thread regeneration %s" % nom_domaine)
             await producer.executer_commande(commande,
                                              domaine=nom_domaine, action='regenerer',
                                              exchange=ConstantesMillegrilles.SECURITE_PROTEGE, nowait=True)
@@ -428,17 +439,26 @@ class RestaurateurTransactions:
         producer = self.__messages_thread.get_producer()
         await producer.producer_pret().wait()
 
+        self.touch_activite_transactions("traiter_transactions_fichier Emettre certificat")
+
         # Emettre les certificats vers CorePki
-        # for commande_certificat in certificats.values():
-        #     await producer.executer_commande(commande_certificat,
-        #                                      domaine='CorePki', action='certificat',
-        #                                      exchange=ConstantesMillegrilles.SECURITE_PROTEGE,
-        #                                      timeout=20)
+        for commande_certificat in certificats.values():
+            try:
+                await producer.executer_commande(commande_certificat,
+                                                 domaine='CorePki', action='certificat',
+                                                 exchange=ConstantesMillegrilles.SECURITE_PROTEGE,
+                                                 timeout=1)
+            except asyncio.TimeoutError:
+                self.__logger.info("Timeout sur emission de certificat")
 
         # Dechiffrer transactions
-        cle_dechiffree = self.__clecert_ca.dechiffrage_asymmetrique(backup['cle'])
-        decipher = DecipherMgs4(cle_dechiffree, backup['header'])
-        data_transactions = await asyncio.to_thread(self.extraire_transactions, backup['data_transactions'], decipher)
+        try:
+            self.touch_activite_transactions("traiter_transactions_fichier Dechiffrer transactions", desactiver_timeout=True)
+            cle_dechiffree = self.__clecert_ca.dechiffrage_asymmetrique(backup['cle'])
+            decipher = DecipherMgs4(cle_dechiffree, backup['header'])
+            data_transactions = await asyncio.to_thread(self.extraire_transactions, backup['data_transactions'], decipher)
+        finally:
+            self.touch_activite_transactions("traiter_transactions_fichier Transactions dechiffrees", desactiver_timeout=False)
 
         if self.__logger.isEnabledFor(logging.INFO):
             date_backup = datetime.datetime.fromtimestamp(backup['date_transactions_debut'], tz=pytz.UTC)
@@ -480,7 +500,7 @@ class RestaurateurTransactions:
 
                 # Support preparer une batch a l'avance
                 if sync_traitement is True:
-                    self.__date_recu_catalogue = datetime.datetime.utcnow()  # Touch pour eviter timeout
+                    self.touch_activite_transactions("traiter_transactions_fichier sync debut")
                     if process_precedent is not None:
                         await process_precedent
                         process_precedent = None
@@ -489,6 +509,7 @@ class RestaurateurTransactions:
                         await asyncio.wait_for(asyncio.shield(commande_exec), 1)
                     except asyncio.TimeoutError:
                         process_precedent = commande_exec
+                    self.touch_activite_transactions("traiter_transactions_fichier sync fin")
                 else:
                     await commande_exec
 
