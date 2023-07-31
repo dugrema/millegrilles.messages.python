@@ -110,6 +110,8 @@ class EtatInstance:
 
         self.__backup_inhibe = False
 
+        self.__listener_backup_complete = list()
+
     async def reload_configuration(self):
         self.__logger.info("Reload configuration sur disque ou dans docker")
 
@@ -167,6 +169,13 @@ class EtatInstance:
         except:
             self.__logger.warning("Le certificat local est expire")
             return True
+
+    def ajouter_listener_backup_complete(self, listener):
+        self.__listener_backup_complete.append(listener)
+
+    async def trigger_backup_complete(self):
+        for listener in self.__listener_backup_complete:
+            await listener()
 
     @property
     def configuration(self):
