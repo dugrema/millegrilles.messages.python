@@ -169,7 +169,7 @@ class EtatInstance:
             return True
 
     @property
-    def configuration(self):
+    def configuration(self) -> Configuration:
         return self.__configuration
 
     @property
