@@ -12,7 +12,7 @@ from millegrilles_messages.messages.MessagesThread import MessagesThread
 from millegrilles_messages.messages.CleCertificat import CleCertificat
 from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
 from millegrilles_messages.messages.FormatteurMessages import SignateurTransactionSimple, FormatteurMessageMilleGrilles
-from millegrilles_messages.messages.ValidateurCertificats import ValidateurCertificatCache
+from millegrilles_messages.messages.ValidateurCertificats import ValidateurCertificatCache, CertificatInconnu
 from millegrilles_messages.messages.ValidateurMessage import ValidateurMessage
 from millegrilles_messages.messages.MessagesModule import MessageProducerFormatteur
 
@@ -167,6 +167,23 @@ class EtatInstance:
         except:
             self.__logger.warning("Le certificat local est expire")
             return True
+
+    async def charger_certificat(self, fingerprint: str):
+        """ Charge un certificat a partir de son fingerprint """
+        try:
+            return await self.__validateur_certificats.valider_fingerprint(fingerprint)
+        except CertificatInconnu as ce:
+            # Tenter de charger a partir de MQ
+            producer = self.producer
+            if producer is not None:
+                await asyncio.wait_for(producer.producer_pret().wait(), 1)
+                self.__validateur_certificats.set_producer_messages(producer)
+                cert_pems = await self.__validateur_certificats.fetch_certificat(fingerprint)
+                enveloppe = await self.__validateur_certificats.valider(cert_pems)
+                return enveloppe
+
+            # Echec de chargement
+            raise ce
 
     @property
     def configuration(self) -> Configuration:
