@@ -8,6 +8,7 @@ import logging
 import math
 import struct
 import pytz
+import os
 
 from typing import Optional, Union
 
@@ -26,6 +27,7 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PublicKey
 from cryptography.hazmat.primitives.asymmetric import rsa, ed25519
 from nacl.signing import VerifyKey
 
+from millegrilles_messages.messages import Constantes
 from millegrilles_messages.messages.Hachage import hacher, map_code_to_hashes
 from millegrilles_messages.messages.Ed25519Utils import chiffrer_cle_ed25519
 
@@ -326,14 +328,19 @@ class EnveloppeCertificat:
         date_courante = datetime.datetime.now(tz=pytz.UTC)
         est_expire = date_expiration < date_courante
 
-        # Calculer 2/3 de la duree du certificat
+        # Calculer duree restante du certificat
         not_valid_before = self.not_valid_before
         if not_valid_before is None:
             date_renouvellement = date_expiration - datetime.timedelta(days=2)
         else:
+            try:
+                fraction_renouveller = float(os.environ[Constantes.ENV_CERT_RENOUVELER])
+            except (KeyError, ValueError):
+                fraction_renouveller = 2/3
+
             delta_fin_debut = date_expiration.timestamp() - not_valid_before.timestamp()
-            epoch_deux_tiers = delta_fin_debut / 3 * 2 + not_valid_before.timestamp()
-            date_renouvellement = datetime.datetime.fromtimestamp(epoch_deux_tiers, tz=pytz.UTC)
+            epoch_renouveler = fraction_renouveller * delta_fin_debut + not_valid_before.timestamp()
+            date_renouvellement = datetime.datetime.fromtimestamp(epoch_renouveler, tz=pytz.UTC)
 
         peut_renouveler = date_renouvellement < date_courante
 
