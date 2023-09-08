@@ -231,6 +231,10 @@ class EtatInstance:
     def backup_inhibe(self, value):
         self.__backup_inhibe = value
 
+    @property
+    def validateur_message(self):
+        return self.__validateur_message
+
 
 class CommandHandler:
     """
