@@ -291,7 +291,7 @@ class PikaModuleConsumer(MessageConsumerVerificateur):
             self.__channel.basic_cancel(self.__consumer_tag, self.on_cancel_ok)
         self._event_consumer.clear()
         self._consumer_pret.clear()
-        self.__consumer_tag = None
+        # self.__consumer_tag = None
 
     def on_channel_open(self, channel: Channel):
         self.set_channel(channel)
@@ -335,8 +335,10 @@ class PikaModuleConsumer(MessageConsumerVerificateur):
         self._event_consumer.clear()
         self.__consumer_tag = None
 
-    def on_cancel_ok(self, _param, _unused_frame, data):
+    def on_cancel_ok(self, data):
         self.__logger.debug("Cancel consumer ok: %s" % data)
+        self._event_consumer.clear()
+        self.__consumer_tag = None
 
     def on_message(self, _unused_channel, basic_deliver, properties, body):
         self.__logger.debug("Message recu : %s" % body)
