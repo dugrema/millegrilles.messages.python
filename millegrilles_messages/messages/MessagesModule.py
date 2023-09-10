@@ -27,7 +27,7 @@ ATTENTE_MESSAGE_DUREE = 15  # Attente par defaut de 15 secondes
 class RessourcesConsommation:
 
     def __init__(self, callback, nom_queue: Optional[str] = None,
-                 channel_separe=False, est_asyncio=False, prefetch_count=1, auto_delete=False, exclusive=False, durable=False):
+                 channel_separe=False, est_asyncio=False, prefetch_count=1, auto_delete=False, exclusive=False, durable=False, actif=True):
         """
         Pour creer une reply-Q, laisser nom_queue vide.
         Pour configurer une nouvelle Q, inlcure une liste de routing_keys avec le nom de la Q.
@@ -45,6 +45,7 @@ class RessourcesConsommation:
         self.durable = durable
         self.auto_delete = auto_delete
         self.arguments: Optional[dict] = None
+        self.actif = actif
 
     def ajouter_rk(self, exchange: str, rk: str):
         if self.rk is None:
@@ -55,6 +56,14 @@ class RessourcesConsommation:
         if self.arguments is None:
             self.arguments = dict()
         self.arguments['x-message-ttl'] = ttl
+
+    def start(self):
+        if self.actif is False:
+            raise NotImplementedError('todo')
+
+    def stop(self):
+        if self._actif:
+            raise NotImplementedError('todo')
 
 
 class RessourcesRoutingKey:
