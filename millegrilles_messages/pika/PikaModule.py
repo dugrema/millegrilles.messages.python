@@ -211,6 +211,16 @@ class PikaModule(MessagesModule):
     def configuration(self) -> ConfigurationPika:
         return self.__pika_configuration
 
+    async def start_consumer(self, nom_q: str):
+        for consumer in self.get_consumers():
+            if consumer.q == nom_q:
+                consumer.start_consuming()
+
+    async def stop_consumer(self, nom_q: str):
+        for consumer in self.get_consumers():
+            if consumer.q == nom_q:
+                consumer.stop_consuming()
+
 
 class PikaModuleConsumer(MessageConsumerVerificateur):
 
@@ -277,7 +287,8 @@ class PikaModuleConsumer(MessageConsumerVerificateur):
         self._consumer_pret.set()
 
     def stop_consuming(self):
-        self.__channel.basic_cancel(self.__consumer_tag, self.on_cancel_ok)
+        if self.__consumer_tag is not None:
+            self.__channel.basic_cancel(self.__consumer_tag, self.on_cancel_ok)
         self._event_consumer.clear()
         self._consumer_pret.clear()
         self.__consumer_tag = None
@@ -287,7 +298,8 @@ class PikaModuleConsumer(MessageConsumerVerificateur):
         self.enregistrer_q()
 
     def on_basic_qos_ok(self, _unused_frame):
-        self.start_consuming()
+        if self._ressources.actif:
+            self.start_consuming()
 
     def on_queue_declare(self, queue):
         nom_queue = queue.method.queue
@@ -323,7 +335,7 @@ class PikaModuleConsumer(MessageConsumerVerificateur):
         self._event_consumer.clear()
         self.__consumer_tag = None
 
-    def on_cancel_ok(self, _unused_frame, data):
+    def on_cancel_ok(self, _param, _unused_frame, data):
         self.__logger.debug("Cancel consumer ok: %s" % data)
 
     def on_message(self, _unused_channel, basic_deliver, properties, body):
@@ -348,6 +360,10 @@ class PikaModuleConsumer(MessageConsumerVerificateur):
 
     def ack_message(self, message: MessageWrapper):
         self.__channel.basic_ack(message.delivery_tag)
+
+    @property
+    def q(self):
+        return self._ressources.q
 
 
 class PikaModuleProducer(MessageProducerFormatteur):

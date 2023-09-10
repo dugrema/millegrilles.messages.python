@@ -393,6 +393,12 @@ class MqThread:
         else:
             return False
 
+    async def start_consumer(self, nom_q: str):
+        await self.__messages_thread.start_consumer(nom_q)
+
+    async def stop_consumer(self, nom_q: str):
+        await self.__messages_thread.stop_consumer(nom_q)
+
 
 class MilleGrillesConnecteur:
     """
@@ -505,3 +511,7 @@ class MilleGrillesConnecteur:
             return await self.__mq_thread.attendre_pret(timeout)
         else:
             return False
+
+    @property
+    def mq_thread(self) -> Optional[MqThread]:
+        return self.__mq_thread

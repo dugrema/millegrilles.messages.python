@@ -22,7 +22,7 @@ class MessagesThread:
 
         self.__env_configuration: Optional[dict] = None
         self.__reply_ressources: Optional[RessourcesConsommation] = None
-        self.__consumer_ressources = list()
+        self.__consumer_ressources: list[RessourcesConsommation] = list()
         self.__exchanges: Optional[list] = None
 
         self.__locked = False
@@ -111,3 +111,9 @@ class MessagesThread:
     async def verifier_delai_connexion(self):
         await self.attendre_pret()
         await self.__stop_event.wait()  # Ok, pas de timeout.
+
+    async def start_consumer(self, nom_q: str):
+        await self.__messages_module.start_consumer(nom_q)
+
+    async def stop_consumer(self, nom_q: str):
+        await self.__messages_module.stop_consumer(nom_q)
