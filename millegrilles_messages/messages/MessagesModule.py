@@ -128,11 +128,11 @@ class MessagesModule:
                 pass
 
     async def entretien(self):
-        if self.est_connecte() is True:
-            self.__logger.debug("Verifier etat connexion MQ")
+        est_connecte = self.est_connecte()
+        self.__logger.debug("entretien Etat connexion MQ : Connecte = %s" % est_connecte)
 
-        if self.est_connecte() is False:
-            self.__logger.debug("Connecter MQ")
+        if est_connecte is False:
+            self.__logger.debug("entretien Reconnecter MQ")
             await self._connect()
 
     async def run_async(self):
@@ -148,7 +148,10 @@ class MessagesModule:
             tasks.append(asyncio.create_task(consumer.run_async()))
 
         # Execution de la loop avec toutes les tasks
-        await asyncio.tasks.wait(tasks, return_when=asyncio.tasks.FIRST_COMPLETED)
+        pending = set(tasks)
+        while len(pending) > 0:
+            done, pending = await asyncio.tasks.wait(pending, return_when=asyncio.tasks.FIRST_COMPLETED)
+            self.__logger.info("run_async %d Consumers done, %d remaining" % (len(done), len(pending)))
 
         self.__logger.info("run_async thread completee")
 
@@ -159,10 +162,13 @@ class MessagesModule:
         raise NotImplementedError('Not implemented')
 
     async def _close(self):
-        raise NotImplementedError('Not implemented')
+        pass
+        # await self._reply_consumer.fermer()
+        # for consumer in self._consumers:
+        #     consumer.fermer()
+        # raise NotImplementedError('Not implemented')
 
     async def fermer(self):
-
         await self._reply_consumer.fermer()
         for consumer in self._consumers:
             await consumer.fermer()
@@ -623,7 +629,7 @@ class MessageConsumer:
         self._event_message.set()
 
     async def run_async(self):
-        self.__logger.info("Demarrage consumer %s" % self._module_messages)
+        self.__logger.info("Demarrage consumer %s" % self._ressources.q)
 
         # Setup asyncio
         self.__loop = asyncio.get_event_loop()
@@ -646,16 +652,24 @@ class MessageConsumer:
         await asyncio.tasks.wait(tasks, return_when=asyncio.tasks.FIRST_COMPLETED)
 
         self._consumer_pret.clear()
-        self.__logger.info("Arret consumer %s" % self._module_messages)
+        self.__logger.info("Arret consumer %s" % self._ressources.q)
 
     async def __traiter_messages(self):
         while self._event_consumer.is_set():
             self._event_message.clear()
+
             # Traiter messages
-            while len(self._messages) > 0:
-                message = self._messages.pop(0)
-                await self.__traiter_message(message)
-            await self._event_message.wait()
+            try:
+                while len(self._messages) > 0:
+                    message = self._messages.pop(0)
+                    await self.__traiter_message(message)
+                await self._event_message.wait()
+            except Exception as e:
+                self.__logger.exception("MessageConsumer.traiter_messages erreur")
+                try:
+                    await asyncio.wait_for(self._event_consumer.wait(), timeout=10)
+                except asyncio.TimeoutError:
+                    pass  # OK
 
     async def __entretien(self):
         while self._event_consumer.is_set():
