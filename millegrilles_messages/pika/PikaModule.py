@@ -270,6 +270,7 @@ class PikaModuleConsumer(MessageConsumerVerificateur):
 
     def set_channel(self, channel: Channel):
         self.__channel = channel
+        self.__channel.add_on_cancel_callback(self.on_consumer_cancelled)
         channel.add_on_close_callback(self.clear_channel)
         self._event_channel.set()
 
@@ -283,7 +284,11 @@ class PikaModuleConsumer(MessageConsumerVerificateur):
 
     def enregistrer_ressources(self):
         if self._ressources.channel_separe is True:
-            self.__pika_module.open_channel(self.on_channel_open)
+            if self._ressources.actif is True:
+                self.__pika_module.open_channel(self.on_channel_open)
+            else:
+                # Indiquer que le consumer est pret meme si on n'a aucuns ressources (il est inactif)
+                self._consumer_pret.set()
         else:
             self.enregistrer_q()
 
@@ -311,18 +316,26 @@ class PikaModuleConsumer(MessageConsumerVerificateur):
         self.__channel.basic_qos(prefetch_count=self._ressources.prefetch_count, callback=self.on_basic_qos_ok)
 
     def start_consuming(self):
-        self.__channel.add_on_cancel_callback(self.on_consumer_cancelled)
+        # self.__channel.add_on_cancel_callback(self.on_consumer_cancelled)
+        self._ressources.actif = True
+        if self.__channel is None:
+            # Le channel n'a pas ete cree (thread = False)
+            # Creer channel et attendre callback
+            self.__pika_module.open_channel(self.on_channel_open)
+            return  # On va avoir un callback via set_qos
+
         self.__consumer_tag = self.__channel.basic_consume(self._ressources.q, self.on_message)
         self._event_consumer.set()
         self._consumer_pret.set()
 
     def stop_consuming(self):
+        self._ressources.actif = False
         if self.__consumer_tag is not None:
             self.__channel.basic_cancel(self.__consumer_tag, self.on_cancel_ok)
-        self.__channel.close(reply_text='PikaModuleConsumer stop_consuming')
-        self.__channel = None
-        self._event_consumer.clear()
-        self._consumer_pret.clear()
+        # self.__channel.close(reply_text='PikaModuleConsumer stop_consuming')
+        # self.__channel = None
+        # self._event_consumer.clear()
+        # self._consumer_pret.clear()
         # self.__consumer_tag = None
 
     def on_channel_open(self, channel: Channel):
@@ -375,6 +388,11 @@ class PikaModuleConsumer(MessageConsumerVerificateur):
 
     def on_message(self, _unused_channel, basic_deliver, properties, body):
         self.__logger.debug("Message recu : %s" % body)
+
+        if self.__consumer_tag is None:
+            self.__logger.warning("Message recu sur %s, pas mode consuming - NACK", self.q)
+            self.__channel.basic_nack(basic_deliver.delivery_tag)
+            return
 
         # Traiter via une task asyncio
         correlation_id = properties.correlation_id

@@ -615,7 +615,7 @@ class MessageConsumer:
         self._stop_event: Optional[Event] = None
 
         # Q de messages en memoire
-        self._messages = list()
+        self._messages: Optional[asyncio.Queue] = None
 
         self._consumer_pret = Event()
 
@@ -632,6 +632,7 @@ class MessageConsumer:
         self.__logger.info("Demarrage consumer %s" % self._ressources.q)
 
         # Setup asyncio
+        self._messages = asyncio.Queue(maxsize=2)  # On ne devrait jamais avoir plus d'un message (ACK emis apres)
         self.__loop = asyncio.get_event_loop()
         self._event_channel = Event()
         self._event_consumer = Event()
@@ -639,9 +640,9 @@ class MessageConsumer:
         self._stop_event = Event()
         self._event_correlation_pret = Event()
 
-        # Attente ressources
-        await self._event_channel.wait()
-        await self._event_consumer.wait()
+        # # Attente ressources
+        # await self._event_channel.wait()
+        # await self._event_consumer.wait()
 
         self.__logger.info("Consumer actif")
         tasks = [
@@ -655,25 +656,18 @@ class MessageConsumer:
         self.__logger.info("Arret consumer %s" % self._ressources.q)
 
     async def __traiter_messages(self):
-        while self._event_consumer.is_set():
-            self._event_message.clear()
-
-            # Traiter messages
-            try:
-                while len(self._messages) > 0:
-                    message = self._messages.pop(0)
-                    await self.__traiter_message(message)
-                await self._event_message.wait()
-            except Exception as e:
-                self.__logger.exception("MessageConsumer.traiter_messages erreur")
-                try:
-                    await asyncio.wait_for(self._event_consumer.wait(), timeout=10)
-                except asyncio.TimeoutError:
-                    pass  # OK
+        pending = {self._stop_event.wait()}
+        while self._stop_event.is_set() is False:
+            pending.add(self._messages.get())
+            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+            if self._stop_event.is_set():
+                break  # Done
+            done_coro = done.pop()
+            message = done_coro.result()
+            await self.__traiter_message(message)
 
     async def __entretien(self):
-        while self._event_consumer.is_set():
-
+        while self._stop_event.is_set() is False:
             if self._correlation_reponse is not None:
                 correlations = list(self._correlation_reponse.values())
                 for corr in correlations:
@@ -689,11 +683,9 @@ class MessageConsumer:
 
     def recevoir_message(self, message: MessageWrapper):
         self.__logger.debug("recevoir_message")
-        self._messages.append(message)
 
-        # call_soon_threadsafe permet d'interagir avec asyncio a partir d'une thread externe
-        # Requis pour demarrer le traitement des messages immediatement
-        self.__loop.call_soon_threadsafe(self._event_message.set)
+        # Utiliser le put_nowait - la Q interne ne devrait jamais avoir plus d'un message en traitement
+        self.__loop.call_soon_threadsafe(self._messages.put_nowait, message)
 
     async def __traiter_message(self, message: MessageWrapper):
         # Clear flag, permet de s'assurer de bloquer sur un message en attente
