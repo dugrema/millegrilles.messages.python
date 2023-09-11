@@ -423,35 +423,26 @@ class MilleGrillesConnecteur:
         return self.__producer
 
     async def run(self):
+        self.__logger.info("Debut thread asyncio MessagesThread")
 
-        while not self.__event_stop.is_set():
-            self.__logger.info("Debut thread asyncio MessagesThread")
+        try:
+            # Toujours tenter de creer le compte sur MQ - la detection n'est pas au point a l'interne
+            resultat_creer_compte = await self.creer_compte_mq()
+            self.__logger.info("Resultat creer compte MQ : %s" % resultat_creer_compte)
 
-            try:
-                # Toujours tenter de creer le compte sur MQ - la detection n'est pas au point a l'interne
-                resultat_creer_compte = await self.creer_compte_mq()
-                self.__logger.info("Resultat creer compte MQ : %s" % resultat_creer_compte)
+            # coroutine principale d'execution MQ
+            self.__mq_thread = await self.__creer_thread()
+            await self.__mq_thread.configurer()
+            self.__producer = self.__mq_thread.get_producer()
+            self.__etat_instance.set_producer(self.__producer)  # Hook producer globalement
 
-                # coroutine principale d'execution MQ
-                self.__mq_thread = await self.__creer_thread()
-                await self.__mq_thread.configurer()
-                self.__producer = self.__mq_thread.get_producer()
-                self.__etat_instance.set_producer(self.__producer)  # Hook producer globalement
-
-                await self.__mq_thread.run()
-            except Exception as e:
-                self.__logger.exception("Erreur connexion MQ")
-            finally:
-                self.__mq_thread = None
-                self.__producer = None
-                self.__etat_instance.set_producer(None)  # Cleanup hook producer globalement
-
-            # Attendre pour redemarrer execution module
-            self.__logger.info("Fin thread asyncio MessagesThread, attendre 30 secondes pour redemarrer")
-            try:
-                await asyncio.wait_for(self.__event_stop.wait(), 30)
-            except TimeoutError:
-                pass
+            await self.__mq_thread.run()
+        except Exception as e:
+            self.__logger.exception("Erreur connexion MQ")
+        finally:
+            self.__mq_thread = None
+            self.__producer = None
+            self.__etat_instance.set_producer(None)  # Cleanup hook producer globalement
 
         self.__logger.info("Fin thread MessagesThread")
 

@@ -1,4 +1,5 @@
 # Plug-in module pour pika 1.2 dans millegrilles messages
+import asyncio
 import logging
 import pika
 import ssl
@@ -32,6 +33,10 @@ class PikaModule(MessagesModule):
         self.__connexion: Optional[AsyncioConnection] = None
         self.__channel_main: Optional[Channel] = None
         self.__exchanges_pending: Optional[set] = None
+
+        self.__sync_connect = asyncio.Event()
+
+        self.__connexions = list()
 
     def est_connecte(self) -> bool:
         return self.__connexion is not None
@@ -95,6 +100,9 @@ class PikaModule(MessagesModule):
     async def _connect(self):
         self.__logger.debug("Connecter a MQ avec configuration %s" % self.__pika_configuration)
 
+        if self.__connexion is not None:
+            raise Exception('Connexion existante')
+
         hostname = self.__pika_configuration.hostname
 
         # Extraire IDMG du certificat. C'est le virtual host RabbitMQ.
@@ -125,6 +133,15 @@ class PikaModule(MessagesModule):
     async def _close(self):
         self._consuming = False
 
+        try:
+            await MessagesModule._close(self)
+        except Exception:
+            self.__logger.exception("Erreur MessagesModule._close")
+
+        if self.__channel_main is not None:
+            self.__channel_main.close(reply_text='PikaModule._close() channel')
+            self.__channel_main = None
+
         if self.__connexion is None:
             self.__logger.info('Connection already closed')
             return
@@ -132,10 +149,10 @@ class PikaModule(MessagesModule):
         if self.__connexion.is_closing or self.__connexion.is_closed:
             self.__logger.info('Connection is closing or already closed')
         else:
-            self.__logger.info('Closing connection')
-            self.__connexion.close()
+            self.__logger.info('Closing connection %s' % self.__connexion)
+            self.__connexion.close(reply_text='PikaModule._close()')
 
-        self.__connexion = None
+        # self.__connexion = None
 
     def on_connect_done(self, connexion: Union[AsyncioConnection, AMQPConnectionWorkflowFailed] = None):
         if isinstance(connexion, AMQPConnectionWorkflowFailed):
@@ -143,9 +160,17 @@ class PikaModule(MessagesModule):
                 self.__logger.error("Erreur de connexion a MQ : %s" % connexion.exceptions)
             except:
                 self.__logger.error("Erreur de connexion a MQ : %s" % connexion)
-            self.__connexion = None
+            # self.__connexion = None
         else:
-            self.__logger.debug("Connexion a MQ reussi")
+            self.__connexions.append(connexion)
+
+            if self.__connexion is not None:
+                self.__logger.warning('Connexion MQ deja presente - on la ferme sur reception de nouvelle')
+                connexion_existante = self.__connexion
+                if not (connexion_existante.is_closed or connexion_existante.is_closing):
+                    connexion_existante.close(reply_text='PikaModule ERROR duplication connexion received')
+
+            self.__logger.debug("Connexion a MQ reussi %s" % connexion)
             self.__connexion = connexion
 
             # Enregistrer callbacks
@@ -199,7 +224,7 @@ class PikaModule(MessagesModule):
         self._producer.clear_channel()
         for consumer in self._consumers:
             res = consumer.get_ressources()
-            if res.channel_separe is not True:
+            if res.channel_separe is True:
                 consumer.clear_channel()
 
     def on_close(self, _unused_connection, reason):
@@ -248,7 +273,12 @@ class PikaModuleConsumer(MessageConsumerVerificateur):
         channel.add_on_close_callback(self.clear_channel)
         self._event_channel.set()
 
-    def clear_channel(self, _channel=None, reason=None):
+    def clear_channel(self, _channel=None, reason='clear channel'):
+        if self.__channel is not None:
+            try:
+                self.__channel.close(reply_text=reason)
+            except pika.exceptions.ChannelWrongStateError:
+                pass  # OK
         self.__channel = None
 
     def enregistrer_ressources(self):
@@ -289,6 +319,8 @@ class PikaModuleConsumer(MessageConsumerVerificateur):
     def stop_consuming(self):
         if self.__consumer_tag is not None:
             self.__channel.basic_cancel(self.__consumer_tag, self.on_cancel_ok)
+        self.__channel.close(reply_text='PikaModuleConsumer stop_consuming')
+        self.__channel = None
         self._event_consumer.clear()
         self._consumer_pret.clear()
         # self.__consumer_tag = None
@@ -332,6 +364,7 @@ class PikaModuleConsumer(MessageConsumerVerificateur):
 
     def on_consumer_cancelled(self, method_frame):
         self.__logger.debug("Consumer cancelled")
+        self.__channel.close(reply_text="Consumer cancelled")
         self._event_consumer.clear()
         self.__consumer_tag = None
 
@@ -387,6 +420,10 @@ class PikaModuleProducer(MessageProducerFormatteur):
 
     def clear_channel(self, _channel=None, reason=None):
         self.__logger.debug("Fermeture channel producer : %s", reason)
+        try:
+            self.__channel.close(reply_text='producer clear_channel')
+        except (AttributeError, pika.exceptions.ChannelWrongStateError):
+            pass  # OK
         self.__channel = None
         self._producer_pret.clear()
 
