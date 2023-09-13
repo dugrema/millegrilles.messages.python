@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-__VERSION__ = "2023.8.4"
+__VERSION__ = "2023.9.0"
 
 
 setup(
@@ -17,9 +17,10 @@ setup(
         'urllib3>=1.26.9',
         'requests>=2.27.1',
         'asyncio>=3.4.3,<4',
+        'aiohttp>=3.8.1,<4',
         'certifi>=2020.12.5',
         'certvalidator>=0.11.1',
-        'cryptography>=37.0.2',
+        'cryptography>=38,<39',
         'pycryptodome>=3.15.0,<4',
         'base58>=2.0.1',
         'py-multihash>=2.0.1',
