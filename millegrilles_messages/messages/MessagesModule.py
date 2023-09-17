@@ -656,15 +656,31 @@ class MessageConsumer:
         self.__logger.info("Arret consumer %s" % self._ressources.q)
 
     async def __traiter_messages(self):
-        pending = {self._stop_event.wait()}
+        pending = {asyncio.create_task(self._stop_event.wait())}
         while self._stop_event.is_set() is False:
-            pending.add(self._messages.get())
+            pending.add(asyncio.create_task(self._messages.get()))
             done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
             if self._stop_event.is_set():
                 break  # Done
-            done_coro = done.pop()
-            message = done_coro.result()
-            await self.__traiter_message(message)
+
+            for d in done:
+                if d.exception():
+                    self.__logger.error("__traiter_messages Erreur %s" % d.exception())
+                else:
+                    try:
+                        message = d.result()
+                        await self.__traiter_message(message)
+                    except:
+                        self.__logger.exception("__traiter_messages Erreur traitement message")
+
+        for p in pending:
+            p.cancel()
+            try:
+                await p
+            except asyncio.CancelledError:
+                pass  # OK
+            except AttributeError:
+                pass  # Pas une task
 
     async def __entretien(self):
         while self._stop_event.is_set() is False:

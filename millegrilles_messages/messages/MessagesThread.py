@@ -51,13 +51,23 @@ class MessagesThread:
         # Loop thread tant que stop_event est clear. Note: thread est daemon, devrait fermer immediatement
         # meme si en attente asyncio.
         coro_timeout = asyncio.create_task(self.verifier_delai_connexion())
-        coro_mq = self.__messages_module.run_async()
-        coro_stop = self.__stop_event.wait()
+        coro_mq = asyncio.create_task(self.__messages_module.run_async())
+        coro_stop = asyncio.create_task(self.__stop_event.wait())
         try:
             # Arreter des qu'une condition se termine
-            await asyncio.wait([coro_mq, coro_stop, coro_timeout], return_when=asyncio.FIRST_COMPLETED)
+            done, pending = await asyncio.wait([coro_mq, coro_stop, coro_timeout], return_when=asyncio.FIRST_COMPLETED)
+            for p in pending:
+                p.cancel()
+                try:
+                    await p
+                except asyncio.CancelledError:
+                    pass  # OK
+
+            for d in done:
+                if d.exception():
+                    self.__logger.error("Exception run_aync %s" % d.exception())
+
         finally:
-            coro_timeout.cancel()
             await self.__messages_module.fermer()
 
         # while not self.__stop_event.is_set():
