@@ -5,6 +5,7 @@ import asyncio
 import datetime
 import json
 import logging
+import resource
 
 from threading import Event as EventThreading
 from typing import Optional, Union
@@ -632,7 +633,7 @@ class MessageConsumer:
         self.__logger.info("Demarrage consumer %s" % self._ressources.q)
 
         # Setup asyncio
-        self._messages = asyncio.Queue(maxsize=2)  # On ne devrait jamais avoir plus d'un message (ACK emis apres)
+        self._messages = asyncio.Queue(maxsize=self._ressources.prefetch_count + 2)
         self.__loop = asyncio.get_event_loop()
         self._event_channel = Event()
         self._event_consumer = Event()
@@ -701,7 +702,11 @@ class MessageConsumer:
         self.__logger.debug("recevoir_message")
 
         # Utiliser le put_nowait - la Q interne ne devrait jamais avoir plus d'un message en traitement
-        self.__loop.call_soon_threadsafe(self._messages.put_nowait, message)
+        try:
+            self._messages.put_nowait(message)
+        except asyncio.QueueFull:
+            self.__logger.exception("recevoir_message FATAL Queue interne de traitement pleine, message perdu %s/%s %s" % (
+                message.correlation_id, message.routing_key, message.parsed))
 
     async def __traiter_message(self, message: MessageWrapper):
         # Clear flag, permet de s'assurer de bloquer sur un message en attente
