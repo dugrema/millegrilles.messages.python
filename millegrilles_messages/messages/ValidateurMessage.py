@@ -64,7 +64,7 @@ class ValidateurMessage:
         message_id = message[Constantes.MESSAGE_ID]
         message_bytes = preparer_message(message)
 
-        self.__logger.debug("Hacher %s" % message)
+        # self.__logger.debug("Hacher %s" % message)
         hash_fct = hashes.Hash(hashes.BLAKE2s(32))
         hash_fct.update(message_bytes)
         hachage_calcule = binascii.hexlify(hash_fct.finalize()).decode('utf-8')
