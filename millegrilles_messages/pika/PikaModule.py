@@ -316,27 +316,24 @@ class PikaModuleConsumer(MessageConsumerVerificateur):
         self.__channel.basic_qos(prefetch_count=self._ressources.prefetch_count, callback=self.on_basic_qos_ok)
 
     def start_consuming(self):
-        # self.__channel.add_on_cancel_callback(self.on_consumer_cancelled)
-        self._ressources.actif = True
-        if self.__channel is None:
-            # Le channel n'a pas ete cree (thread = False)
-            # Creer channel et attendre callback
-            self.__pika_module.open_channel(self.on_channel_open)
-            return  # On va avoir un callback via set_qos
+        if self.__consumer_tag is None:
+            self._ressources.actif = True
+            if self.__channel is None:
+                # Le channel n'a pas ete cree (thread = False)
+                # Creer channel et attendre callback
+                self.__pika_module.open_channel(self.on_channel_open)
+                return  # On va avoir un callback via set_qos
 
-        self.__consumer_tag = self.__channel.basic_consume(self._ressources.q, self.on_message)
-        self._event_consumer.set()
-        self._consumer_pret.set()
+            self.__consumer_tag = self.__channel.basic_consume(self._ressources.q, self.on_message)
+            self._event_consumer.set()
+            self._consumer_pret.set()
+        else:
+            self.__logger.debug('start_consuming Consuming deja actif')
 
     def stop_consuming(self):
         self._ressources.actif = False
         if self.__consumer_tag is not None:
             self.__channel.basic_cancel(self.__consumer_tag, self.on_cancel_ok)
-        # self.__channel.close(reply_text='PikaModuleConsumer stop_consuming')
-        # self.__channel = None
-        # self._event_consumer.clear()
-        # self._consumer_pret.clear()
-        # self.__consumer_tag = None
 
     def on_channel_open(self, channel: Channel):
         self.set_channel(channel)
