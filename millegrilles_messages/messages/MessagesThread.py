@@ -47,42 +47,30 @@ class MessagesThread:
 
         self.__locked = True
 
+    async def __stop_thread(self, tasks: list[asyncio.Task]):
+        await self.__stop_event.wait()
+        self.__logger.info('__stop_thread Cancel all running tasks')
+        for t in tasks:
+            t.cancel()
+
     async def run_async(self):
         # Loop thread tant que stop_event est clear. Note: thread est daemon, devrait fermer immediatement
         # meme si en attente asyncio.
-        coro_timeout = asyncio.create_task(self.verifier_delai_connexion())
-        coro_mq = asyncio.create_task(self.__messages_module.run_async())
-        coro_stop = asyncio.create_task(self.__stop_event.wait())
         try:
             # Arreter des qu'une condition se termine
-            done, pending = await asyncio.wait([coro_mq, coro_stop, coro_timeout], return_when=asyncio.FIRST_COMPLETED)
-            for p in pending:
-                p.cancel()
-                try:
-                    await p
-                except asyncio.CancelledError:
-                    pass  # OK
+            tasks = [
+                asyncio.create_task(self.verifier_delai_connexion()),
+                asyncio.create_task(self.__messages_module.run_async()),
+            ]
 
-            for d in done:
-                if d.exception():
-                    self.__logger.error("Exception run_aync %s" % d.exception())
+            try:
+                await asyncio.gather(self.__stop_thread(tasks), *tasks)
+            except asyncio.CancelledError:
+                if self.__stop_event.is_set() is not True:
+                    self.__logger.debug("run_async Tasks cancelled")
 
         finally:
             await self.__messages_module.fermer()
-
-        # while not self.__stop_event.is_set():
-        #     self.__logger.info("Debut thread asyncio MessagesThread")
-        #
-        #     # Run loop asyncio
-        #     # asyncio.run(self.__messages_module.run_async())
-        #     await self.__messages_module.run_async()
-        #
-        #     # Attendre pour redemarrer execution module
-        #     self.__logger.info("Fin thread asyncio MessagesThread, attendre 30 secondes pour redemarrer")
-        #     try:
-        #         await asyncio.wait_for(self.__stop_event.wait(), 30)
-        #     except TimeoutError:
-        #         pass
 
         self.__logger.info("Fin thread MessagesThread")
 

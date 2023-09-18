@@ -290,7 +290,7 @@ class RestaurateurTransactions:
         domaines = reponse_demarrage.parsed['domaines']
 
         self.__logger.info("restaurerAttente des transactions a restaurer")
-        pending = [self.__catalogues_recus_event.wait()]
+        pending = {asyncio.create_task(self.__catalogues_recus_event.wait())}
         self.touch_activite_transactions("restaurer debut")
         expiration_attente = datetime.timedelta(seconds=30)
 
@@ -322,9 +322,17 @@ class RestaurateurTransactions:
 
     async def traiter_catalogues_thread(self):
         stop_task = asyncio.create_task(self.__stop_event.wait())
+        pending = {stop_task}
         while self.__stop_event.is_set() is False:
-            done, pending = await asyncio.wait([stop_task, self.__catalogues_queue.get()], return_when=asyncio.FIRST_COMPLETED)
+            pending.add(asyncio.create_task(self.__catalogues_queue.get()))
+            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
             if self.__stop_event.is_set():
+                for p in pending:
+                    p.cancel()
+                    try:
+                        await p
+                    except asyncio.CancelledError:
+                        pass  # OK
                 break  # Stopped
             catalogue = done.pop().result()
 
@@ -350,24 +358,6 @@ class RestaurateurTransactions:
                 commande, ConstantesMillegrilles.DOMAINE_BACKUP, 'catalogueTraite',
                 exchange=ConstantesMillegrilles.SECURITE_PRIVE, nowait=True
             )
-
-    # async def complete_domaine_thread(self):
-    #     stop_task = asyncio.create_task(self.__stop_event.wait())
-    #     while self.__stop_event.is_set() is False:
-    #         done, pending = await asyncio.wait([stop_task, self.__domaine_complete_queue.get()], return_when=asyncio.FIRST_COMPLETED)
-    #         if self.__stop_event.is_set():
-    #             break  # Stopped
-    #         message = done.pop().result()
-    #
-    #         nom_domaine = message.parsed['domaine']
-    #         if nom_domaine == 'CorePki':
-    #             self.__logger.info("Domaine CorePki complete, regenerer immediatement")
-    #
-    #         producer = self.__messages_thread.get_producer()
-    #         await producer.producer_pret().wait()
-    #         await producer.executer_commande(
-    #             {'domaine': nom_domaine}, domaine='backup', action='domaineTraite',
-    #             exchange=ConstantesMillegrilles.SECURITE_PRIVE, nowait=True)
 
     async def traiter_transactions(self):
         producer = self.__messages_thread.get_producer()

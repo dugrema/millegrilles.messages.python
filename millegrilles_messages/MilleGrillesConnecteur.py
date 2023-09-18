@@ -147,7 +147,10 @@ class EtatInstance:
             # Taches entretien
             await self.entretien(rabbitmq_dao)
 
-            await asyncio.wait([stop_event.wait()], timeout=30)
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=30)
+            except asyncio.TimeoutError:
+                pass  # OK
 
     async def entretien(self, rabbitmq_dao):
         pass
