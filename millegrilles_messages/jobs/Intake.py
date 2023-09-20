@@ -25,7 +25,7 @@ class IntakeHandler:
         self.__event_intake = Event()
 
     async def trigger_traitement(self):
-        self.__logger.info('IntakeHandler trigger intake recu')
+        self.__logger.debug('IntakeHandler trigger intake recu')
         en_cours = self.__event_intake.is_set()
         self.__event_intake.set()
         return en_cours
