@@ -106,6 +106,7 @@ class EtatInstance:
         self.__validateur_message: Optional[ValidateurMessage] = None
 
         self.__producer: Optional[MessageProducerFormatteur] = None
+        self.__event_producer = asyncio.Event()
         self.__partition: Optional[str] = None
 
         self.__backup_inhibe = False
@@ -209,10 +210,20 @@ class EtatInstance:
         return self.__mq_port
 
     def set_producer(self, producer: MessageProducerFormatteur):
+        if producer is not None:
+            self.__event_producer.set()
+        else:
+            self.__event_producer.clear()
         self.__producer = producer
 
     @property
     def producer(self):
+        return self.__producer
+
+    async def producer_wait(self):
+        await self.__event_producer.wait()
+        if self.__producer is not None:
+            await self.__producer.producer_pret().wait()
         return self.__producer
 
     def set_partition(self, partition: str):

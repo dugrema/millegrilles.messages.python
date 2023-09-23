@@ -54,6 +54,7 @@ DELEGATION_GLOBALE_PROPRIETAIRE = 'proprietaire'
 ROLE_CORE = 'core'
 ROLE_BACKUP = 'backup'
 ROLE_USAGER = 'usager'
+ROLE_MAITRE_DES_CLES = 'maitredescles'
 
 
 DOMAINE_INSTANCE = 'instance'
@@ -63,6 +64,8 @@ DOMAINE_CORE_TOPOLOGIE = 'CoreTopologie'
 DOMAINE_CORE_MAITREDESCOMPTES = 'CoreMaitreDesComptes'
 DOMAINE_FICHIERS = 'fichiers'
 DOMAINE_BACKUP = 'backup'
+DOMAINE_MAITRE_DES_CLES = 'MaitreDesCles'
+
 
 # Champs messages
 # MESSAGE_ENTETE='en-tete'
@@ -85,3 +88,5 @@ MESSAGE_CERTIFICAT_INCLUS = 'certificat'
 
 REQUETE_CORETOPOLOGIE_LISTE_DOMAINES = 'listeDomaines'
 REQUETE_GLOBAL_NOMBRE_TRANSACTIONS = 'getNombreTransactions'
+
+EVENEMENT_MAITREDESCLES_CERTIFICAT = 'certMaitreDesCles'
