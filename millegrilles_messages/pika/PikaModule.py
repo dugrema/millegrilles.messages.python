@@ -415,6 +415,24 @@ class PikaModuleConsumer(MessageConsumerVerificateur):
     def q(self):
         return self._ressources.q
 
+    def ajouter_routing_key(self, exchange: str, rk: str):
+        if not self.__channel:
+            raise Exception('channel pas pret')
+
+        def callback_binding(_unused_frame, self=self, nom_queue=self.q, rk=rk):
+            self.__logger.debug("Resultat binding OK: %s sur %s" % (nom_queue, rk))
+
+        self.__channel.queue_bind(self.q, exchange, rk, callback=callback_binding)
+
+    def retirer_routing_key(self, exchange: str, rk: str):
+        if not self.__channel:
+            raise Exception('channel pas pret')
+
+        def callback_binding(_unused_frame, self=self, nom_queue=self.q, rk=rk):
+            self.__logger.debug("Resultat unbinding OK: %s sur %s" % (nom_queue, rk))
+
+        self.__channel.queue_unbind(self.q, exchange, rk, callback=callback_binding)
+
 
 class PikaModuleProducer(MessageProducerFormatteur):
 

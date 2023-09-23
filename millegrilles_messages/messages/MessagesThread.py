@@ -27,6 +27,10 @@ class MessagesThread:
 
         self.__locked = False
 
+    @property
+    def messages_module(self) -> MessagesModule:
+        return self.__messages_module
+
     # def start(self):
     #     if self.__thread is not None:
     #         raise Exception("Deja demarre")
