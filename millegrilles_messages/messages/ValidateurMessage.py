@@ -131,9 +131,14 @@ class ValidateurMessage:
 
 def preparer_message(message: dict) -> bytes:
     message_hachage = list()
-    champs = ['pubkey', 'estampille', 'kind', 'contenu', 'routage']
+
+    champs = ['pubkey', 'estampille', 'kind', 'contenu']
     for champ in champs:
-        if message.get(champ) is not None:
+        message_hachage.append(message[champ])
+
+    champs_optionnels = ['routage', 'origine', 'dechiffrage']
+    for champ in champs_optionnels:
+        if message.get(champ) is not None:  # Note : le champ peut etre present avec la valeur None, on doit l'ignorer
             message_hachage.append(message[champ])
 
     # Premiere passe, converti les dates. Les nombre floats sont incorrects.
