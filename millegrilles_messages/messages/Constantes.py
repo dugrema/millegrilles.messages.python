@@ -67,6 +67,7 @@ DOMAINE_FICHIERS = 'fichiers'
 DOMAINE_BACKUP = 'backup'
 DOMAINE_MAITRE_DES_CLES = 'MaitreDesCles'
 DOMAINE_GROS_FICHIERS = 'GrosFichiers'
+DOMAINE_MESSAGERIE = 'Messagerie'
 
 
 # Champs messages
