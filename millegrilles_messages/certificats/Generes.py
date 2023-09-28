@@ -1,4 +1,5 @@
 # Elements generes
+import binascii
 import base64
 import datetime
 import secrets
@@ -65,6 +66,9 @@ class EnveloppeCsr:
     @property
     def cle_publique(self) -> bytes:
         return self.__csr_request.public_key().public_bytes(serialization.Encoding.Raw, format=serialization.PublicFormat.Raw)
+
+    def get_fingerprint_pk(self) -> str:
+        return binascii.hexlify(self.cle_publique).decode('utf-8')
 
     def signer(self, cle_signature: CleCertificat, role: str,
                builder: Optional[CertificateBuilder] = None, duree=DUREE_CERT_DEFAUT):
