@@ -318,7 +318,10 @@ class CorrelationReponse:
         #except TimeoutError:
         finally:
             # Effacer la correlation immediatement
-            await self.consumer.retirer_correlation(self.correlation_id)
+            try:
+                await self.consumer.retirer_correlation(self.correlation_id)
+            except AttributeError:
+                pass  # OK - le consumer n'a jamais ete associe (e.g. correlation doublon)
 
         self.__reponse_consommee = True
         return self.__reponse
@@ -394,8 +397,16 @@ class MessageProducer:
         if reply_to is None:
             reply_to = await self.get_reply_q()
 
+        # Bug - si un message avec meme contenu est emis plusieurs fois durant la meme seconde,
+        #       la correlation echoue (reponses des duplications sont perdues).
+        #       Ajouter le compteur de messages pour rendre unique pour ce producer.
         if correlation_id is None:
-            correlation_id = str(uuid4())
+            # correlation_id = str(uuid4())
+            correlation_id = '%d/%s' % (self._message_number, str(uuid4()))
+        else:
+            correlation_id = '%d/%s' % (self._message_number, correlation_id)
+
+        self._message_number += 1  # Incrementer compteur
 
         # Conserver reference a la correlation
         correlation_reponse = CorrelationReponse(correlation_id)
@@ -764,8 +775,14 @@ class MessageConsumer:
             if len(self._correlation_reponse) > self.__NB_ATTENTE_MAX:
                 raise Exception('Nombre de correlations maximal atteint')
 
-        correlation_reponse.consumer = self
-        self._correlation_reponse[correlation_reponse.correlation_id] = correlation_reponse
+        try:
+            correlation_existante = self._correlation_reponse[correlation_reponse.correlation_id]
+            self.__logger.warning("Annuler doublon du message avec correlation %s" % correlation_reponse.correlation_id)
+            await correlation_reponse.annulee()
+        except KeyError:
+            # Aucun doublon pour meme correlation
+            correlation_reponse.consumer = self
+            self._correlation_reponse[correlation_reponse.correlation_id] = correlation_reponse
 
     async def retirer_correlation(self, correlation_id: str):
         try:
