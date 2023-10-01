@@ -121,14 +121,14 @@ class MessagesModule:
         self.__event_attente = Event()
 
         while not self.__event_attente.is_set():
-            await self.entretien()
+            await self.entretien(self.__event_attente)
 
             try:
                 await asyncio.wait_for(self.__event_attente.wait(), 30)
             except TimeoutError:
                 pass
 
-    async def entretien(self):
+    async def entretien(self, event_stop: asyncio.Event):
         est_connecte = self.est_connecte()
         self.__logger.debug("entretien Etat connexion MQ : Connecte = %s" % est_connecte)
 
@@ -149,10 +149,11 @@ class MessagesModule:
             tasks.append(asyncio.create_task(consumer.run_async()))
 
         # Execution de la loop avec toutes les tasks
-        pending = set(tasks)
-        while len(pending) > 0:
-            done, pending = await asyncio.tasks.wait(pending, return_when=asyncio.tasks.FIRST_COMPLETED)
-            self.__logger.info("run_async %d Consumers done, %d remaining" % (len(done), len(pending)))
+        await asyncio.gather(*tasks)
+        # pending = set(tasks)
+        # while len(pending) > 0:
+        #     done, pending = await asyncio.tasks.wait(pending, return_when=asyncio.tasks.FIRST_COMPLETED)
+        #     self.__logger.info("run_async %d Consumers done, %d remaining" % (len(done), len(pending)))
 
         self.__logger.info("run_async thread completee")
 
@@ -633,6 +634,12 @@ class MessageConsumer:
 
         # [correlation_id] = CorrelationReponse()
         self._correlation_reponse: Optional[dict] = None
+
+        self._erreur_channel = False
+
+    @property
+    def erreur_channel(self) -> bool:
+        return self._erreur_channel
 
     async def fermer(self):
         # Liberer boucles

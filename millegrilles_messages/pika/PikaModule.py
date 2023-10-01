@@ -86,13 +86,25 @@ class PikaModule(MessagesModule):
                 consumer = PikaModuleConsumer(self, consumer_res)
                 self.ajouter_consumer(consumer)
 
-    async def entretien(self):
-        await super().entretien()
+    async def entretien(self, event_stop: asyncio.Event):
+        await super().entretien(event_stop)
+
+        if self.__connexion is not None:
+            if self.__connexion is not None and self.__connexion.is_closing or self.__connexion.is_closed:
+                self.__logger.info("entretien Connexion fermee - on ferme l'application")
+                await self._close()
+                raise Exception('connexion fermee')
+
+            if self.__channel_main is None:
+                self.__logger.info("entretien Channel main ferme - on ferme l'application")
+                await self._close()
+                raise Exception('channel main ferme')
+
+            for consumer in self.get_consumers():
+                if consumer.erreur_channel is True:
+                    raise Exception('consumer avec channel en erreur')
 
         await self._validateur_certificats.entretien()
-
-        if self.__channel_main is None:
-            self.__logger.info("Connecter channel main")
 
     def open_channel(self, on_open_callback):
         self.__connexion.channel(on_open_callback=on_open_callback)
@@ -276,6 +288,7 @@ class PikaModuleConsumer(MessageConsumerVerificateur):
 
     def clear_channel(self, _channel=None, reason='clear channel'):
         if self.__channel is not None:
+            self._erreur_channel = True
             try:
                 self.__channel.close(reply_text=reason)
             except pika.exceptions.ChannelWrongStateError:
@@ -337,6 +350,7 @@ class PikaModuleConsumer(MessageConsumerVerificateur):
 
     def on_channel_open(self, channel: Channel):
         self.set_channel(channel)
+        channel.add_on_close_callback(self.clear_channel)
         self.enregistrer_q()
 
     def on_basic_qos_ok(self, _unused_frame):

@@ -459,6 +459,9 @@ class MilleGrillesConnecteur:
             self.__etat_instance.set_producer(None)  # Cleanup hook producer globalement
 
         self.__logger.info("Fin thread MessagesThread")
+        if self.__event_stop.is_set() is False:
+            # Forcer l'arret de l'application (si exception non geree)
+            raise Exception('MessagesThread stopped')
 
     async def creer_compte_mq(self):
         """
