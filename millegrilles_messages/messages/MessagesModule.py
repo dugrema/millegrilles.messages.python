@@ -617,7 +617,7 @@ class MessageConsumer:
         self._module_messages = module_messages
         self._ressources = ressources
 
-        self.__NB_ATTENTE_MAX = 10  # Nombre maximal de reponses en attente
+        self.__NB_ATTENTE_MAX = 100  # Nombre maximal de reponses en attente
 
         # self._consuming = False
         self.__loop = None
@@ -777,7 +777,7 @@ class MessageConsumer:
 
         if len(self._correlation_reponse) > self.__NB_ATTENTE_MAX:
             self._event_correlation_pret.clear()
-            await asyncio.wait_for(self._event_correlation_pret.wait(), 15)
+            await asyncio.wait_for(self._event_correlation_pret.wait(), 30)
 
             if len(self._correlation_reponse) > self.__NB_ATTENTE_MAX:
                 raise Exception('Nombre de correlations maximal atteint')
