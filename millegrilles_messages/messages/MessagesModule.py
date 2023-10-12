@@ -47,6 +47,7 @@ class RessourcesConsommation:
         self.auto_delete = auto_delete
         self.arguments: Optional[dict] = None
         self.actif = actif
+        self.nb_max_attente = 10
 
     def ajouter_rk(self, exchange: str, rk: str):
         if self.rk is None:
@@ -411,13 +412,16 @@ class MessageProducer:
 
         # Conserver reference a la correlation
         correlation_reponse = CorrelationReponse(correlation_id)
-        await self._module_messages.get_reply_consumer().ajouter_attendre_reponse(correlation_reponse)
+        semaphore = self._module_messages.get_reply_consumer().semaphore_correlations
+        # Utiliser semaphore pour limiter le nombre de requetes en attente simultanement
+        async with semaphore:
+            await self._module_messages.get_reply_consumer().ajouter_attendre_reponse(correlation_reponse)
 
-        # Emettre le message
-        await self.emettre(message, routing_key, exchange, correlation_id, reply_to)
+            # Emettre le message
+            await self.emettre(message, routing_key, exchange, correlation_id, reply_to)
 
-        # Attendre la reponse. raises TimeoutError
-        reponse = await correlation_reponse.attendre_reponse(timeout)
+            # Attendre la reponse. raises TimeoutError
+            reponse = await correlation_reponse.attendre_reponse(timeout)
 
         return reponse
 
@@ -617,14 +621,12 @@ class MessageConsumer:
         self._module_messages = module_messages
         self._ressources = ressources
 
-        self.__NB_ATTENTE_MAX = 100  # Nombre maximal de reponses en attente
-
         # self._consuming = False
         self.__loop = None
         self._event_channel: Optional[Event] = None
         self._event_consumer: Optional[Event] = None
         self._event_message: Optional[Event] = None
-        self._event_correlation_pret: Optional[Event] = None
+        # self._event_correlation_recu: Optional[Event] = None
         self._stop_event: Optional[Event] = None
 
         # Q de messages en memoire
@@ -633,9 +635,15 @@ class MessageConsumer:
         self._consumer_pret = Event()
 
         # [correlation_id] = CorrelationReponse()
-        self._correlation_reponse: Optional[dict] = None
+        self._correlation_reponse = dict()
+        # Nombre maximal de reponses en attente
+        self._semaphore_correlations = asyncio.BoundedSemaphore(value=ressources.nb_max_attente)
 
         self._erreur_channel = False
+
+    @property
+    def semaphore_correlations(self) -> asyncio.BoundedSemaphore:
+        return self._semaphore_correlations
 
     @property
     def erreur_channel(self) -> bool:
@@ -657,7 +665,7 @@ class MessageConsumer:
         self._event_consumer = Event()
         self._event_message = Event()
         self._stop_event = Event()
-        self._event_correlation_pret = Event()
+        # self._event_correlation_recu = Event()
 
         # # Attente ressources
         # await self._event_channel.wait()
@@ -668,6 +676,7 @@ class MessageConsumer:
             asyncio.create_task(self.__traiter_messages()),
             asyncio.create_task(self.__entretien())
         ]
+
         # Execution de la loop avec toutes les tasks
         await asyncio.tasks.wait(tasks, return_when=asyncio.tasks.FIRST_COMPLETED)
 
@@ -744,8 +753,8 @@ class MessageConsumer:
                 try:
                     corr_reponse = self._correlation_reponse[correlation_id]
                     del self._correlation_reponse[correlation_id]  # Cleanup
-                    if not self._event_correlation_pret.is_set():
-                        self._event_correlation_pret.set()
+                    # if not self._event_correlation_recu.is_set():
+                    #     self._event_correlation_recu.set()
                     await corr_reponse.recevoir_reponse(message)
                     return  # Termine
                 except KeyError:
@@ -772,16 +781,6 @@ class MessageConsumer:
         return self._consumer_pret
 
     async def ajouter_attendre_reponse(self, correlation_reponse: CorrelationReponse):
-        if self._correlation_reponse is None:
-            self._correlation_reponse = dict()
-
-        if len(self._correlation_reponse) > self.__NB_ATTENTE_MAX:
-            self._event_correlation_pret.clear()
-            await asyncio.wait_for(self._event_correlation_pret.wait(), 30)
-
-            if len(self._correlation_reponse) > self.__NB_ATTENTE_MAX:
-                raise Exception('Nombre de correlations maximal atteint')
-
         try:
             correlation_existante = self._correlation_reponse[correlation_reponse.correlation_id]
             self.__logger.warning("Annuler doublon du message avec correlation %s" % correlation_reponse.correlation_id)
@@ -795,8 +794,8 @@ class MessageConsumer:
         try:
             correlation = self._correlation_reponse[correlation_id]
             del self._correlation_reponse[correlation_id]
-            if not self._event_correlation_pret.is_set():
-                self._event_correlation_pret.set()
+            # if not self._event_correlation_recu.is_set():
+            #     self._event_correlation_recu.set()
             await correlation.annulee()
         except KeyError:
             pass

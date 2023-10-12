@@ -346,8 +346,9 @@ class MqThread:
         self.__mq_port: Optional[str] = None
         self.__messages_thread: Optional[MessagesThread] = None
         self.__event_producer: Optional[Event] = None
+        self.nb_reply_correlation_max = 10
 
-    async def configurer(self):
+    async def configurer(self, nb_reply_correlation_max = 10):
         self.__mq_host = self.__etat_instance.mq_host
         self.__mq_port = self.__etat_instance.mq_port
 
@@ -367,6 +368,7 @@ class MqThread:
         messages_thread.set_env_configuration(env_configuration)
 
         reply_res = RessourcesConsommation(self.callback_reply_q)
+        reply_res.nb_max_attente = self.nb_reply_correlation_max
 
         # RK Public pour toutes les instances
         for rk in self.__routing_key_consumers:
@@ -429,6 +431,8 @@ class MilleGrillesConnecteur:
         self.__producer: Optional[MessageProducerFormatteur] = None
         self.__mq_thread: Optional[MqThread] = None
 
+        self.nb_reply_correlation_max = 20
+
     async def __creer_thread(self):
         routing_keys = self.__command_handler.get_routing_keys()
         return MqThread(self.__event_stop, self.__etat_instance, self.__command_handler, routing_keys)
@@ -446,6 +450,7 @@ class MilleGrillesConnecteur:
 
             # coroutine principale d'execution MQ
             self.__mq_thread = await self.__creer_thread()
+            self.__mq_thread.nb_reply_correlation_max = self.nb_reply_correlation_max
             await self.__mq_thread.configurer()
             self.__producer = self.__mq_thread.get_producer()
             self.__etat_instance.set_producer(self.__producer)  # Hook producer globalement
