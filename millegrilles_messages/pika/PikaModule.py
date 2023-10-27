@@ -21,6 +21,8 @@ from millegrilles_messages.messages.ParamsEnvironnement import ConfigurationPika
 from millegrilles_messages.messages.ValidateurMessage import ValidateurMessage
 from millegrilles_messages.messages.ValidateurCertificats import ValidateurCertificatRedis, ValidateurCertificatCache
 
+CONSTANT_Q_TTL_ARGNAME = 'x-message-ttl'
+
 
 class PikaModule(MessagesModule):
 
@@ -99,6 +101,11 @@ class PikaModule(MessagesModule):
                 self.__logger.info("entretien Channel main ferme - on ferme l'application")
                 await self._close()
                 raise Exception('channel main ferme')
+            else:
+                if len(self.__channel_main.consumer_tags) == 0:
+                    self.__logger.error("Channel main sans consumer tags - on ferme l'application")
+                    await self._close()
+                    raise Exception('entretien Channel main sans consumer tags')
 
             for consumer in self.get_consumers():
                 if consumer.erreur_channel is True:
@@ -319,6 +326,12 @@ class PikaModuleConsumer(MessageConsumerVerificateur):
             durable = self._ressources.durable
             auto_delete = self._ressources.auto_delete
             arguments = self._ressources.arguments
+            try:
+                if arguments.get(CONSTANT_Q_TTL_ARGNAME) is None:
+                    arguments = arguments.copy()
+                    arguments[CONSTANT_Q_TTL_ARGNAME] = 3_600_000  # 1 heure par defaut
+            except AttributeError:
+                arguments = {CONSTANT_Q_TTL_ARGNAME: 3_600_000}
             self.__channel.queue_declare(nom_q, exclusive=exclusive, callback=self.on_queue_declare,
                                          durable=durable, auto_delete=auto_delete, arguments=arguments)
         elif reply_q is False:
