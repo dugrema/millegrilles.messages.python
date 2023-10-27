@@ -326,12 +326,14 @@ class PikaModuleConsumer(MessageConsumerVerificateur):
             durable = self._ressources.durable
             auto_delete = self._ressources.auto_delete
             arguments = self._ressources.arguments
-            try:
-                if arguments.get(CONSTANT_Q_TTL_ARGNAME) is None:
-                    arguments = arguments.copy()
-                    arguments[CONSTANT_Q_TTL_ARGNAME] = 3_600_000  # 1 heure par defaut
-            except AttributeError:
-                arguments = {CONSTANT_Q_TTL_ARGNAME: 3_600_000}
+            if exclusive:
+                # TTL 1 heure par defaut sur Q exclusive
+                try:
+                    if arguments.get(CONSTANT_Q_TTL_ARGNAME) is None:
+                        arguments = arguments.copy()
+                        arguments[CONSTANT_Q_TTL_ARGNAME] = 3_600_000
+                except AttributeError:
+                    arguments = {CONSTANT_Q_TTL_ARGNAME: 3_600_000}
             self.__channel.queue_declare(nom_q, exclusive=exclusive, callback=self.on_queue_declare,
                                          durable=durable, auto_delete=auto_delete, arguments=arguments)
         elif reply_q is False:
