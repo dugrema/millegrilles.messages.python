@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import getpass
+import gzip
 import logging
 import json
 import lzma
@@ -547,7 +548,11 @@ class RestaurateurTransactions:
 
         liste_transactions = list()
         if len(data) > 0:
-            data: bytes = lzma.decompress(data)   # Decompresser en bytes (jsonl)
+            try:
+                data: bytes = gzip.decompress(data)  # Decompresser en bytes (jsonl)
+            except:
+                self.__logger.info("extraire_transactions Decrompression GZIP echec, essayer lzma")
+                data: bytes = lzma.decompress(data)   # Decompresser en bytes (jsonl)
 
             for ligne in data.splitlines():
                 transaction = json.loads(ligne.decode('utf-8'))
