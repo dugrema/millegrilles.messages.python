@@ -1,13 +1,15 @@
 import datetime
 import pathlib
 
+DEFAULT_TIMEOUT = 1800
+
 
 class FileLock:
     """
     Utilise un lock file pour empecher plusieurs processus d'operer en meme temps.
     """
 
-    def __init__(self, path_lock, lock_timeout=1800):
+    def __init__(self, path_lock, lock_timeout=DEFAULT_TIMEOUT):
         """
 
         :param path_lock: Path du fichier lock
@@ -37,3 +39,13 @@ class FileLock:
 class FileLockedException(Exception):
     pass
 
+
+def is_locked(path_lock, timeout=DEFAULT_TIMEOUT):
+    path_lock = pathlib.Path(path_lock)
+
+    if path_lock.exists():
+        stat = path_lock.stat()
+        if stat.st_mtime > datetime.datetime.now().timestamp() - timeout:
+            return True
+
+    return False
