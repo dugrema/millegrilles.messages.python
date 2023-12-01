@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-__VERSION__ = "2023.11.0"
+__VERSION__ = "2023.11.2"
 
 
 setup(
