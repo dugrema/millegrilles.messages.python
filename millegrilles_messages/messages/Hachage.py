@@ -4,6 +4,7 @@ Module avec les fonctions de hachage utilisees dans MilleGrilles.
 Inclus les conversions avec multihash et multibase
 """
 import base64
+import binascii
 
 import multibase
 import multihash
@@ -198,3 +199,10 @@ def map_code_to_hashes(code: int) -> hashes.HashAlgorithm:
 
 class ErreurHachage(Exception):
     pass
+
+
+def convertir_hachage_mb_hex(hachage: str):
+    mb = multibase.decode(hachage)
+    mh = multihash.decode(mb)
+    return binascii.hexlify(mh.digest).decode('utf-8')
+
