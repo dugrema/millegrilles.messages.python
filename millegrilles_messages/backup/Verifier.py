@@ -106,12 +106,13 @@ class VerifierRepertoire:
 
         try:
             verificateur.verify()
-            self.__compteur = self.__compteur + 1
             return True
         except ErreurHachage:
             # self.__logger.error("INVALIDE : %s" % hachage)
             self.marquer_invalide(bucket, path_fichier)
             return False
+        finally:
+            self.__compteur = self.__compteur + 1
 
     def marquer_invalide(self, bucket: str, path_fichier: pathlib.Path):
         sub_bucket = path_fichier.parent.name
