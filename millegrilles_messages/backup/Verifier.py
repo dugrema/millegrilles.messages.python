@@ -81,7 +81,7 @@ class VerifierRepertoire:
         if self.__compteur_err == 0:
             print("Aucunes erreurs")
         else:
-            print("%d erreurs de validation" % self.__compteur_err)
+            print("%d erreurs de verification, les fichiers sont deplaces sous %s" % (self.__compteur_err, self.__path_invalides))
 
     def verifier_fichiers(self, path_bucket: pathlib.Path):
         nom_bucket = path_bucket.name
@@ -109,7 +109,7 @@ class VerifierRepertoire:
             self.__compteur = self.__compteur + 1
             return True
         except ErreurHachage:
-            self.__logger.error("INVALIDE : %s" % hachage)
+            # self.__logger.error("INVALIDE : %s" % hachage)
             self.marquer_invalide(bucket, path_fichier)
             return False
 
