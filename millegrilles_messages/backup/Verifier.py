@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import pathlib
+import time
 
 from os import listdir, path, rename
 
@@ -49,28 +50,32 @@ class VerifierRepertoire:
 
     async def afficher_progres(self):
         while self.__stop_event.is_set() is False:
-            pct_progres = int(self.__compteur_bytes / self.__taille_fichiers * 100)
-            print('\rProgres {:3d}%: {:d}/{:d} fichiers ({:d}/{:d} bytes) traites, {:d} erreurs'.format(
-                pct_progres, self.__compteur, self.__nombre_fichiers, self.__compteur_bytes, self.__taille_fichiers, self.__compteur_err),
-                end=''
-            )
+            self.afficher_progres_ligne()
             try:
                 await asyncio.wait_for(self.__stop_event.wait(), 1)
             except asyncio.TimeoutError:
                 pass  # OK
-        print('')
+
+    def afficher_progres_ligne(self):
+        pct_progres = int(self.__compteur_bytes / self.__taille_fichiers * 100)
+        print('\rProgres {:3d}%: {:d}/{:d} fichiers ({:d}/{:d} bytes) traites, {:d} erreurs'.format(
+            pct_progres, self.__compteur, self.__nombre_fichiers, self.__compteur_bytes, self.__taille_fichiers,
+            self.__compteur_err),
+            end=''
+        )
 
     def verifier_buckets(self):
         for bucket in self.__repertoire_buckets.iterdir():
             self.verifier_fichiers(bucket)
 
-        print("Verification completee sur %d fichiers" % self.__compteur)
+        self.__stop_event.set()  # Termine
+        time.sleep(0.1)
+        self.afficher_progres_ligne()
+        print("\nVerification completee sur %d fichiers" % self.__compteur)
         if self.__compteur_err == 0:
             print("Aucunes erreurs")
         else:
             print("%d erreurs de validation" % self.__compteur_err)
-
-        self.__stop_event.set()  # Termine
 
     def verifier_fichiers(self, path_bucket: pathlib.Path):
         nom_bucket = path_bucket.name
