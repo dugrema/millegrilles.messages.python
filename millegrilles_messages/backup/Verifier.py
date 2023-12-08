@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import logging
 import pathlib
 import time
@@ -26,11 +27,16 @@ class VerifierRepertoire:
 
     async def run(self):
         await self.calculer_nombre_fichiers()
+        debut = datetime.datetime.now()
+        print("Debut verification : %s" % debut)
         coros = [
             asyncio.to_thread(self.verifier_buckets),
             self.afficher_progres(),
         ]
         await asyncio.gather(*coros)
+        fin = datetime.datetime.now()
+        duree = fin - debut
+        print("Fin de la verification a %s (duree: %s)" % (fin, duree))
 
     async def calculer_nombre_fichiers(self):
         nombre_fichiers = 0
