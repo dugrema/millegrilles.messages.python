@@ -8,6 +8,30 @@ def get_hostname(fqdn=True):
     return socket.gethostname()
 
 
+def get_hostnames(fqdn=True):
+    if fqdn is True:
+        hostname = socket.getfqdn()
+    else:
+        hostname = socket.gethostname()
+
+    hostname_short = socket.gethostname()
+    hostnames_ip = socket.gethostbyaddr(hostname_short)
+
+    hostnames_list = list()
+    hostnames_list.append(hostnames_ip[0])
+    hostnames_list.extend(hostnames_ip[1])
+
+    hostnames_fqdn = list()
+    for h in hostnames_list:
+        try:
+            h.index('.')
+            hostnames_fqdn.append(h)
+        except ValueError:
+            pass
+
+    return hostname, hostnames_fqdn
+
+
 def get_ip(hostname: Optional[str] = None):
     if hostname is None or hostname == '':
         hostname = 'localhost'
