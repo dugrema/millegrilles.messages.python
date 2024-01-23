@@ -10,9 +10,15 @@ COPY . $BUILD_FOLDER
 WORKDIR /opt/millegrilles/build
 ENTRYPOINT ["python3"]
 
+# Pour offline build
+#ENV PIP_FIND_LINKS=$BUILD_FOLDER/pip \
+#    PIP_RETRIES=0 \
+#    PIP_NO_INDEX=true
+
 RUN pip3 install --no-cache-dir -r $BUILD_FOLDER/requirements.txt && \
     python3 ./setup.py install && \
-    pip3 install --force-reinstall https://github.com/wbond/oscrypto/archive/d5f3437ed24257895ae1edd9e503cfb352e635a8.zip
+    pip3 install --force-reinstall ./fixes/oscrypto_130_fix_d5f3437ed24257895ae1edd9e503cfb352e635a8.zip && \
+    rm -r $BUILD_FOLDER/pip
 
 # Note : bug oscrypto
 # https://community.snowflake.com/s/article/Python-Connector-fails-to-connect-with-LibraryNotFoundError-Error-detecting-the-version-of-libcrypto
