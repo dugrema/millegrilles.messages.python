@@ -65,6 +65,8 @@ def parse() -> argparse.Namespace:
     subparser_demarrer = subparsers.add_parser('verifier', help='Verifier fichiers')
     subparser_demarrer.add_argument('--repertoire', type=str, required=False,
                                     help='Repertoire avec les fichiers a verifier')
+    subparser_demarrer.add_argument('--threads', type=int, required=False, default=4,
+                                    help='Repertoire avec les fichiers a verifier')
 
     subparser_grosfichiers = subparsers.add_parser('grosfichiers', help='Dechiffrer fichiers')
     subparser_grosfichiers.add_argument('--ca', default='/var/opt/millegrilles/configuration/pki.millegrille.cert',
@@ -105,7 +107,7 @@ async def demarrer(args: argparse.Namespace):
     elif command == 'migrer':
         await migrer_main(args.archive, args.source, args.destination, args.cleca, domaine=args.domaine, path_cle_ca_dest=args.cledestca)
     elif command == 'verifier':
-        await verifier_main(args.repertoire)
+        await verifier_main(args.repertoire, threads=args.threads)
     elif command == 'grosfichiers':
         await grosfichiers_main(args.ca, args.extraction, args.consignation)
     else:
