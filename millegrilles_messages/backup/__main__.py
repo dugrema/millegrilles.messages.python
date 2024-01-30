@@ -65,7 +65,7 @@ def parse() -> argparse.Namespace:
     subparser_demarrer = subparsers.add_parser('verifier', help='Verifier fichiers')
     subparser_demarrer.add_argument('--repertoire', type=str, required=False,
                                     help='Repertoire avec les fichiers a verifier')
-    subparser_demarrer.add_argument('--threads', type=int, required=False, default=4,
+    subparser_demarrer.add_argument('--threads', type=int, required=False, default=1,
                                     help='Repertoire avec les fichiers a verifier')
 
     subparser_grosfichiers = subparsers.add_parser('grosfichiers', help='Dechiffrer fichiers')
