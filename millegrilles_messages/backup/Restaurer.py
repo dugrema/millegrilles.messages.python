@@ -168,6 +168,10 @@ class RestaurateurTransactions:
         self.__catalogues_queue: Optional[asyncio.Queue] = None
         self.__regeneration_event: Optional[asyncio.Event] = None
 
+    @property
+    def validateur_messages(self):
+        return self.__messages_thread.get_validateur_messages()
+
     async def preparer(self):
         makedirs(self.__work_path, mode=0o755, exist_ok=True)
 
@@ -338,15 +342,28 @@ class RestaurateurTransactions:
             catalogue = done.pop().result()
 
             contenu = catalogue.parsed
-            nom_domaine = contenu['domaine']
-            catalogue_id = contenu['__original']['id']
+            catalogue = contenu['catalogue']
+
+            validateur_messages = self.validateur_messages
+            enveloppe = await validateur_messages.verifier(catalogue, utiliser_date_message=True)
+
+            # Parser le catalogue
+            contenu_catalogue = json.loads(catalogue['contenu'])
+
+            catalogue_id = catalogue['id']
+            nom_domaine = contenu_catalogue['domaine']
+
+            # Verifier que le domaine du certificat correspond au domaine du catalogue
+            if nom_domaine not in enveloppe.get_domaines:
+                self.__logger.error("Signature avec certificat du mauvais domaine - skip transactions %s" % catalogue_id)
+                continue
 
             self.touch_activite_transactions("traiter_catalogues_thread debut %s / %s" % (nom_domaine, catalogue_id))
 
             # Verifier
             try:
                 self.__logger.info("Dechiffrage catalogue %s/%s" % (nom_domaine, catalogue_id))
-                meta_traitement = await self.traiter_transactions_fichier(contenu)
+                meta_traitement = await self.traiter_transactions_fichier(contenu_catalogue)
             except ValueError:
                 self.__logger.exception("Erreur dechiffrage catalogue %s/%s" % (nom_domaine, catalogue_id))
 
@@ -465,16 +482,16 @@ class RestaurateurTransactions:
             sync_traitement = compteur_transactions % RESTAURATION_BATCH_SIZE == 0
 
             bypass_transaction = False
-            try:
-                # action = transaction['en-tete']['action']
-                action = transaction['routage']['action']
-            except KeyError:
-                pass  # OK, pas d'action
-            else:
-                if self.__certificats_rechiffrage is not None and domaine == 'MaitreDesCles' and action == 'cle':
-                    # self.__logger.info("Rechiffrer cle")
-                    bypass_transaction = True
-                    await self.rechiffrer_transaction_maitredescles(producer, transaction, not sync_traitement)
+            # try:
+            #     # action = transaction['en-tete']['action']
+            #     action = transaction['routage']['action']
+            # except KeyError:
+            #     pass  # OK, pas d'action
+            # else:
+            #     if self.__certificats_rechiffrage is not None and domaine == 'MaitreDesCles' and action == 'cle':
+            #         # self.__logger.info("Rechiffrer cle")
+            #         bypass_transaction = True
+            #         await self.rechiffrer_transaction_maitredescles(producer, transaction, not sync_traitement)
 
             if bypass_transaction is False:
                 #certificat = certificats[fingerprint]
@@ -514,32 +531,32 @@ class RestaurateurTransactions:
 
         return info_meta
 
-    async def rechiffrer_transaction_maitredescles(self, producer, transaction: dict, nowait: False):
-        contenu_transaction = json.loads(transaction['contenu'])
-        cle_originale = contenu_transaction['cle']
-        cle_dechiffree = self.__clecert_ca.dechiffrage_asymmetrique(cle_originale)
-        cles_rechiffrees = {
-            self.__clecert_ca.fingerprint: cle_originale  # Injecter cle CA
-        }
-        partition = None
-        for cert in self.__certificats_rechiffrage:
-            cle_rechiffree, fp = cert.chiffrage_asymmetrique(cle_dechiffree)
-            cles_rechiffrees[fp] = cle_rechiffree
-            partition = fp
-
-        champs = ['header', 'iv', 'format', 'tag', 'hachage_bytes', 'domaine', 'identificateurs_document', 'signature_identite']
-        commande_rechiffree = {
-            'cles': cles_rechiffrees,
-        }
-        for champ in champs:
-            try:
-                commande_rechiffree[champ] = contenu_transaction[champ]
-            except KeyError:
-                pass  # OK, champs optionnel
-
-        await producer.executer_commande(commande_rechiffree, domaine='MaitreDesCles', action='sauvegarderCle',
-                                         partition=partition, exchange=ConstantesMillegrilles.SECURITE_PRIVE, nowait=nowait,
-                                         timeout=120)
+    # async def rechiffrer_transaction_maitredescles(self, producer, transaction: dict, nowait: False):
+    #     contenu_transaction = json.loads(transaction['contenu'])
+    #     cle_originale = contenu_transaction['cle']
+    #     cle_dechiffree = self.__clecert_ca.dechiffrage_asymmetrique(cle_originale)
+    #     cles_rechiffrees = {
+    #         self.__clecert_ca.fingerprint: cle_originale  # Injecter cle CA
+    #     }
+    #     partition = None
+    #     for cert in self.__certificats_rechiffrage:
+    #         cle_rechiffree, fp = cert.chiffrage_asymmetrique(cle_dechiffree)
+    #         cles_rechiffrees[fp] = cle_rechiffree
+    #         partition = fp
+    #
+    #     champs = ['header', 'iv', 'format', 'tag', 'hachage_bytes', 'domaine', 'identificateurs_document', 'signature_identite']
+    #     commande_rechiffree = {
+    #         'cles': cles_rechiffrees,
+    #     }
+    #     for champ in champs:
+    #         try:
+    #             commande_rechiffree[champ] = contenu_transaction[champ]
+    #         except KeyError:
+    #             pass  # OK, champs optionnel
+    #
+    #     await producer.executer_commande(commande_rechiffree, domaine='MaitreDesCles', action='sauvegarderCle',
+    #                                      partition=partition, exchange=ConstantesMillegrilles.SECURITE_PRIVE, nowait=nowait,
+    #                                      timeout=120)
 
     def extraire_transactions(self, data: str, decipher: DecipherMgs4):
         data = multibase.decode(data)       # Base 64 decode
