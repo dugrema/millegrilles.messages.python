@@ -462,9 +462,15 @@ class RestaurateurTransactions:
         # Dechiffrer transactions
         try:
             self.touch_activite_transactions("traiter_transactions_fichier Dechiffrer transactions", desactiver_timeout=True)
-            cle_dechiffree = self.__clecert_ca.dechiffrage_asymmetrique(backup['cle'])
-            decipher = DecipherMgs4(cle_dechiffree, backup['header'])
-            data_transactions = await asyncio.to_thread(self.extraire_transactions, backup['data_transactions'], decipher)
+            dechiffrage = backup['dechiffrage']
+            for cle in dechiffrage['cles'].values():
+                break
+            else:
+                raise Exception("Aucunes cles")
+            cle_dechiffree = self.__clecert_ca.dechiffrage_asymmetrique(cle)
+            decipher = DecipherMgs4(cle_dechiffree, dechiffrage['nonce'])
+            data = backup['data_transactions']
+            data_transactions = await asyncio.to_thread(self.extraire_transactions, data, decipher)
         finally:
             self.touch_activite_transactions("traiter_transactions_fichier Transactions dechiffrees", desactiver_timeout=False)
 
