@@ -435,7 +435,7 @@ class MessageProducer:
             while self.__actif:
                 while len(self.__deliveries) > 0:
                     message = self.__deliveries.pop(0)
-                    self.__logger.debug("producer : send message %s" % message)
+                    self.__logger.debug("producer : send message")
                     await self.send(message)
 
                 self._event_q_prete.set()  # Debloque reception de messages
@@ -453,7 +453,7 @@ class MessageProducer:
         self.__actif = False
 
     async def send(self, message: MessagePending):
-        self.__logger.warning("NOT IMPLEMENTED - Emettre message %s", message)
+        self.__logger.warning("NOT IMPLEMENTED - Emettre message")
 
     def set_reply_consumer(self, consumer):
         self._reply_consumer = consumer

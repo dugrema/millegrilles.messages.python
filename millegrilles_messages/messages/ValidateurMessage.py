@@ -95,7 +95,8 @@ class ValidateurMessage:
             # Tenter de charger une version du certificat dans le cache
             enveloppe_certificat = await self.__validateur_certificats.valider_fingerprint(
                 pubkey, date_reference=date_reference, idmg=idmg_message, nofetch=True)
-            return enveloppe_certificat
+            if enveloppe_certificat:
+                return enveloppe_certificat
         except CertificatInconnu:
             pass
 
