@@ -352,9 +352,9 @@ class RestaurateurTransactions:
             # Parser le catalogue
             contenu_catalogue = json.loads(catalogue['contenu'])
             catalogue_id = catalogue['id']
+            nom_domaine = contenu_catalogue['domaine']
 
             if enveloppe is not None:
-                nom_domaine = contenu_catalogue['domaine']
 
                 # Verifier que le domaine du certificat correspond au domaine du catalogue
                 if nom_domaine in enveloppe.get_domaines:
@@ -372,6 +372,8 @@ class RestaurateurTransactions:
                     self.__logger.error("Signature avec certificat du mauvais domaine - skip transactions %s" % catalogue_id)
             else:
                 self.__logger.error("Aucun certificat trouve - skip transactions %s" % catalogue_id)
+
+            self.touch_activite_transactions("traiter_catalogues_thread fin %s / %s" % (nom_domaine, catalogue_id))
 
             # Confirmer le traitement du catalogue
             producer = self.__messages_thread.get_producer()
