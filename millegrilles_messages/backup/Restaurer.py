@@ -196,7 +196,7 @@ class RestaurateurTransactions:
         self.__messages_thread = messages_thread
 
     async def traiter_reponse(self, message: MessageWrapper, module_messages: MessagesThread):
-        self.__logger.debug("traiter_reponse Message recu : %s" % json.dumps(message.parsed, indent=2))
+        # self.__logger.debug("traiter_reponse Message recu : %s" % json.dumps(message.parsed, indent=2))
 
         try:
             action = message.routage.get('action')
@@ -341,41 +341,44 @@ class RestaurateurTransactions:
                 break  # Stopped
             catalogue = done.pop().result()
 
+            self.touch_activite_transactions("traiter_catalogues_thread Recu nouveau catalogue")
+
             contenu = catalogue.parsed
             catalogue = contenu['catalogue']
 
             validateur_messages = self.validateur_messages
             enveloppe = await validateur_messages.verifier(catalogue, utiliser_date_message=True)
 
-            if enveloppe is None:
-                self.__logger.error("Erreur chargement enveloppe catalogue, SKIP \n%s" % catalogue)
-                continue
-
             # Parser le catalogue
             contenu_catalogue = json.loads(catalogue['contenu'])
-
             catalogue_id = catalogue['id']
-            nom_domaine = contenu_catalogue['domaine']
 
-            # Verifier que le domaine du certificat correspond au domaine du catalogue
-            if nom_domaine not in enveloppe.get_domaines:
-                self.__logger.error("Signature avec certificat du mauvais domaine - skip transactions %s" % catalogue_id)
-                continue
+            if enveloppe is not None:
+                nom_domaine = contenu_catalogue['domaine']
 
-            self.touch_activite_transactions("traiter_catalogues_thread debut %s / %s" % (nom_domaine, catalogue_id))
+                # Verifier que le domaine du certificat correspond au domaine du catalogue
+                if nom_domaine in enveloppe.get_domaines:
 
-            # Verifier
-            try:
-                self.__logger.info("Dechiffrage catalogue %s/%s" % (nom_domaine, catalogue_id))
-                meta_traitement = await self.traiter_transactions_fichier(contenu_catalogue)
-            except ValueError:
-                self.__logger.exception("Erreur dechiffrage catalogue %s/%s" % (nom_domaine, catalogue_id))
+                    self.touch_activite_transactions("traiter_catalogues_thread debut %s / %s" % (nom_domaine, catalogue_id))
+
+                    # Verifier
+                    try:
+                        self.__logger.info("Dechiffrage catalogue %s/%s" % (nom_domaine, catalogue_id))
+                        meta_traitement = await self.traiter_transactions_fichier(contenu_catalogue)
+                    except ValueError:
+                        self.__logger.exception("Erreur dechiffrage catalogue %s/%s" % (nom_domaine, catalogue_id))
+
+                else:
+                    self.__logger.error("Signature avec certificat du mauvais domaine - skip transactions %s" % catalogue_id)
+            else:
+                self.__logger.error("Aucun certificat trouve - skip transactions %s" % catalogue_id)
 
             # Confirmer le traitement du catalogue
             producer = self.__messages_thread.get_producer()
             await producer.producer_pret().wait()
 
             commande = {'catalogue_id': catalogue_id}
+
             await producer.executer_commande(
                 commande, ConstantesMillegrilles.DOMAINE_BACKUP, 'catalogueTraite',
                 exchange=ConstantesMillegrilles.SECURITE_PRIVE, nowait=True
@@ -499,29 +502,13 @@ class RestaurateurTransactions:
         process_precedent = None
         for transaction in data_transactions:
             compteur_transactions = compteur_transactions + 1
-            # fingerprint = transaction['en-tete']['fingerprint_certificat']
-            #fingerprint = transaction['pubkey']
 
             sync_traitement = compteur_transactions % RESTAURATION_BATCH_SIZE == 0
 
             bypass_transaction = False
-            # try:
-            #     # action = transaction['en-tete']['action']
-            #     action = transaction['routage']['action']
-            # except KeyError:
-            #     pass  # OK, pas d'action
-            # else:
-            #     if self.__certificats_rechiffrage is not None and domaine == 'MaitreDesCles' and action == 'cle':
-            #         # self.__logger.info("Rechiffrer cle")
-            #         bypass_transaction = True
-            #         await self.rechiffrer_transaction_maitredescles(producer, transaction, not sync_traitement)
 
             if bypass_transaction is False:
-                #certificat = certificats[fingerprint]
-                #transaction['certificat'] = certificat
-
                 enveloppe_transaction = {'transaction': transaction, 'ack': sync_traitement}
-                # enveloppe_transaction = {'transaction': transaction}
 
                 commande_exec = producer.executer_commande(enveloppe_transaction,
                                                  domaine=domaine, action='restaurerTransaction',

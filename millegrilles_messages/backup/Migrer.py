@@ -196,7 +196,7 @@ class MigrateurTransactions:
         self.__messages_thread = messages_thread
 
     async def traiter_reponse(self, message, module_messages: MessagesThread):
-        self.__logger.debug("Message recu : %s" % json.dumps(message.parsed, indent=2))
+        # self.__logger.debug("Message recu : %s" % json.dumps(message.parsed, indent=2))
 
         message_parsed = message.parsed
 
@@ -274,7 +274,7 @@ class MigrateurTransactions:
         self.__logger.debug("Traiter fichier de backup %s" % nom_fichier)
         with lzma.open(nom_fichier) as fichier:
             contenu_catalogue = json.load(fichier)
-            self.__logger.debug("Traiter fichier %s" % contenu_catalogue)
+            # self.__logger.debug("Traiter fichier %s" % contenu_catalogue)
 
         try:
             domaine = contenu_catalogue['domaine']

@@ -413,7 +413,7 @@ class PikaModuleConsumer(MessageConsumerVerificateur):
         self.__consumer_tag = None
 
     def on_message(self, _unused_channel, basic_deliver, properties, body):
-        self.__logger.debug("Message recu : %s" % body)
+        self.__logger.debug("Message recu : %s" % properties)
 
         if self.__consumer_tag is None:
             self.__logger.warning("Message recu sur %s, pas mode consuming - NACK", self.q)

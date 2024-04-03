@@ -128,7 +128,7 @@ class ExtracteurGrosFichiers:
             reponse_grosfichiers = await producer.executer_requete(
                 requete_grosfichiers, "GrosFichiers", action='documentsParFuuid', exchange=Constantes.SECURITE_PRIVE)
             reponse_grosfichiers_parsed = reponse_grosfichiers.parsed
-            self.__logger.debug("Reponse GrosFichiers parsed : %s" % reponse_grosfichiers_parsed)
+            # self.__logger.debug("Reponse GrosFichiers parsed : %s" % reponse_grosfichiers_parsed)
             try:
                 fichier = reponse_grosfichiers_parsed['fichiers'][0]
                 fuuid_v_courante = fichier['fuuid_v_courante']
