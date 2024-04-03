@@ -347,6 +347,10 @@ class RestaurateurTransactions:
             validateur_messages = self.validateur_messages
             enveloppe = await validateur_messages.verifier(catalogue, utiliser_date_message=True)
 
+            if enveloppe is None:
+                self.__logger.error("Erreur chargement enveloppe catalogue, SKIP \n%s" % catalogue)
+                continue
+
             # Parser le catalogue
             contenu_catalogue = json.loads(catalogue['contenu'])
 
@@ -462,13 +466,26 @@ class RestaurateurTransactions:
         # Dechiffrer transactions
         try:
             self.touch_activite_transactions("traiter_transactions_fichier Dechiffrer transactions", desactiver_timeout=True)
-            dechiffrage = backup['dechiffrage']
-            for cle in dechiffrage['cles'].values():
-                break
+            try:
+                dechiffrage = backup['dechiffrage']
+            except KeyError:
+                # Ancien format
+                if backup['format'] != 'mgs4':
+                    raise Exception("Format de chiffrage non supporte")
+                cle = backup['cle']
+                nonce = backup['header']
             else:
-                raise Exception("Aucunes cles")
+                # Nouveau format
+                if dechiffrage['format'] != 'mgs4':
+                    raise Exception("Format de chiffrage non supporte")
+                nonce = dechiffrage['nonce']
+                for cle in dechiffrage['cles'].values():
+                    break
+                else:
+                    raise Exception("Aucunes cles")
+
             cle_dechiffree = self.__clecert_ca.dechiffrage_asymmetrique(cle)
-            decipher = DecipherMgs4(cle_dechiffree, dechiffrage['nonce'])
+            decipher = DecipherMgs4(cle_dechiffree, nonce)
             data = backup['data_transactions']
             data_transactions = await asyncio.to_thread(self.extraire_transactions, data, decipher)
         finally:
@@ -577,9 +594,12 @@ class RestaurateurTransactions:
                 self.__logger.info("extraire_transactions Decrompression GZIP echec, essayer lzma")
                 data: bytes = lzma.decompress(data)   # Decompresser en bytes (jsonl)
 
+            self.__logger.debug("Transactions\n----------------------------------")
             for ligne in data.splitlines():
+                self.__logger.debug(ligne.decode('utf-8'))
                 transaction = json.loads(ligne.decode('utf-8'))
                 liste_transactions.append(transaction)
+            self.__logger.debug("----------------------------------\nFin Transactions")
 
         return liste_transactions
 
