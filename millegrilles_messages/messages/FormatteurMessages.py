@@ -209,7 +209,7 @@ class FormatteurMessageMilleGrilles:
         message_bytes = bytes(message_hachage_json, 'utf-8')
 
         # Hacher le contenu
-        self.__logger.debug("Hacher \n%s", message_hachage_json)
+        # self.__logger.debug("Hacher \n%s", message_hachage_json)
         hash_fct = hashes.Hash(hashes.BLAKE2s(32))
         hash_fct.update(message_bytes)
         message_id = binascii.hexlify(hash_fct.finalize()).decode('utf-8')

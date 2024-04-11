@@ -319,7 +319,7 @@ class CommandHandler:
         raise NotImplementedError("Non implemente")
 
     async def callback_reply_q(self, message: MessageWrapper, module_messages: MessagesThread):
-        self.__logger.debug("RabbitMQ nessage recu : %s" % message)
+        # self.__logger.debug("RabbitMQ nessage recu : %s" % message)
         producer = module_messages.get_producer()
         reponse = await self.executer_commande(producer, message)
 
@@ -385,7 +385,7 @@ class MqThread:
         await self.__messages_thread.run_async()
 
     async def callback_reply_q(self, message: MessageWrapper, module_messages):
-        self.__logger.debug("RabbitMQ nessage recu : %s" % message)
+        # self.__logger.debug("RabbitMQ nessage recu : %s" % message)
         producer = self.__messages_thread.get_producer()
         reponse = await self.__command_handler.executer_commande(producer, message)
 

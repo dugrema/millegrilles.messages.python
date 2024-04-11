@@ -450,7 +450,7 @@ class MigrateurTransactions:
             'evenements': evenements,
         }
 
-        self.__logger.debug("Transaction migree %s", transaction_migree)
+        # self.__logger.debug("Transaction migree %s", transaction_migree)
         return transaction_migree
 
     async def migrer_courant(self, transaction: dict, ancien_nouveau_mapping_fingerprints: dict):

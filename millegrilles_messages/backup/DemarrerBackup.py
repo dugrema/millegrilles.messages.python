@@ -44,7 +44,7 @@ class DemarreurBackup:
         self.__messages_thread = messages_thread
 
     async def traiter_reponse(self, message, module_messages: MessagesThread):
-        self.__logger.info("Message recu : %s" % json.dumps(message.parsed, indent=2))
+        # self.__logger.info("Message recu : %s" % json.dumps(message.parsed, indent=2))
 
         message_parsed = message.parsed
         if message_parsed.get('ok') == True:

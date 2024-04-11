@@ -288,7 +288,7 @@ class RestaurateurTransactions:
             commande_demarrer, domaine='backup', action='restaurerTransactions',
             exchange=ConstantesMillegrilles.SECURITE_PRIVE)
 
-        self.__logger.info("restaurer Reponse demarrage restauration : %s", reponse_demarrage.parsed)
+        # self.__logger.info("restaurer Reponse demarrage restauration : %s", reponse_demarrage.parsed)
         if reponse_demarrage.parsed['ok'] is not True:
             raise Exception('restaurer Erreur demarrage restauration (service backup) : %s' % reponse_demarrage.parsed.get('err'))
 
@@ -437,7 +437,7 @@ class RestaurateurTransactions:
         self.__logger.info(" ** INFO RESTAURATION DOMAINES ** ")
         for nom_domaine, meta_domaine in domaines.items():
             # Rapport restauration pour domaine
-            self.__logger.info("Domaine %s : %s transactions" % (nom_domaine, meta_domaine['transactions']))
+            # self.__logger.info("Domaine %s : %s transactions" % (nom_domaine, meta_domaine['transactions']))
 
             self.__logger.info("Regenerer domaine %s" % domaine)
             commande = {'domaine': nom_domaine}
