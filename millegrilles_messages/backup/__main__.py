@@ -58,7 +58,7 @@ def parse() -> argparse.Namespace:
     subparser_restaurer.add_argument('--source', required=True, help='Path/URL de source pour les archives a migrer')
     subparser_restaurer.add_argument('--destination', default='/tmp/millegrilles_migrer',
                                      help='Path/URL de destination pour les archives migrees')
-    subparser_restaurer.add_argument('--archive', required=False, help='Path/URL de fichier d''archive')
+    # subparser_restaurer.add_argument('--archive', required=False, help='Path/URL de fichier d''archive')
     subparser_restaurer.add_argument('--domaine', type=str, required=False,
                                      help='Migrer le domaine specifie (e.g. GrosFichiers)')
 
@@ -101,7 +101,7 @@ async def demarrer(args: argparse.Namespace):
     elif command == 'backup':
         await backup_main(args.source, args.dest, args.ca)
     elif command == 'restaurer':
-        await restaurer_main(args.archive, args.workpath, args.cleca,
+        await restaurer_main(args.workpath, args.cleca,
                              transactions=args.transactions, rechiffrer=args.rechiffrer,
                              domaine=args.domaine, delai=args.delai)
     elif command == 'migrer':
@@ -120,9 +120,9 @@ def main():
     :return:
     """
     logging.basicConfig()
-    logging.getLogger(__name__).setLevel(logging.DEBUG)
-    logging.getLogger('millegrilles').setLevel(logging.DEBUG)
-    logging.getLogger('millegrilles_messages').setLevel(logging.DEBUG)
+    logging.getLogger(__name__).setLevel(logging.INFO)
+    logging.getLogger('millegrilles').setLevel(logging.WARN)
+    logging.getLogger('millegrilles_messages').setLevel(logging.WARN)
 
     args = parse()
     asyncio.run(demarrer(args))
