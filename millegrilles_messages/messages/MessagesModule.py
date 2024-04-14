@@ -240,8 +240,10 @@ class MessageWrapper:
         self.__estampille: Optional[int] = None
         self.__routage: Optional[dict] = None
         self.__parsed: Optional[dict] = None
+        self.__contenu: Optional[str] = None
         self.__certificat_pem: Optional[list] = None
         self.__pubkey: Optional[str] = None
+        self.original: Optional[str] = None
         self.certificat: Optional[EnveloppeCertificat] = None
         self.est_valide = False
 
@@ -251,15 +253,18 @@ class MessageWrapper:
 
     @parsed.setter
     def parsed(self, val: dict):
+        self.original = val
         self.__pubkey = val['pubkey']
         self.__kind = val['kind']
         self.__estampille = val['estampille']
         self.__routage = val.get('routage')
+        self.__contenu = val['contenu']
         self.__certificat_pem = val.get('certificat')
-        # Extraire le contenu et donner acces a l'original parsed (val) via __original
-        parsed_contenu = json.loads(val['contenu'])
-        parsed_contenu['__original'] = val
-        self.__parsed = parsed_contenu
+        if self.__kind not in [6, 8]:
+            # Extraire le contenu et donner acces a l'original parsed (val) via __original
+            parsed_contenu = json.loads(val['contenu'])
+            parsed_contenu['__original'] = val
+            self.__parsed = parsed_contenu
 
     @property
     def pubkey(self) -> str:
