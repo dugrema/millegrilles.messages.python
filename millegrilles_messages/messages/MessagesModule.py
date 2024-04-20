@@ -266,6 +266,11 @@ class MessageWrapper:
             parsed_contenu['__original'] = val
             self.__parsed = parsed_contenu
 
+    def set_parsed_dechiffre(self, valeur_dechiffree: dict):
+        parsed_contenu = valeur_dechiffree
+        parsed_contenu['__original'] = self.original  # Devrait deja etre present
+        self.__parsed = parsed_contenu
+
     @property
     def pubkey(self) -> str:
         return self.__pubkey
@@ -816,13 +821,17 @@ class MessageConsumerVerificateur(MessageConsumer):
         parsed = json.loads(message.contenu)
         message.parsed = parsed
 
-        # parsed['corrompu'] = True
-
         # Verifier le message (certificat, signature)
         try:
             enveloppe_certificat = await self._module_messages.get_validateur_messages().verifier(parsed)
             message.certificat = enveloppe_certificat
             message.est_valide = True
+
+            if message.kind == 6:
+                # Reponse chiffre, on tente de la dechiffrer
+                parsed = self._module_messages.dechiffrer_reponse(parsed)
+                message.set_parsed_dechiffre(parsed)
+
             # Message OK
             await super()._traiter_message(message)
         except:

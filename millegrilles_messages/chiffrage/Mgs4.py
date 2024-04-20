@@ -162,7 +162,7 @@ class DecipherMgs4:
 
     @staticmethod
     def from_info(clecert, info_dechiffrage: dict):
-        header = info_dechiffrage['header']
+        nonce = info_dechiffrage.get('nonce') or info_dechiffrage['header']
 
         # Dechiffrer cle
         try:
@@ -172,7 +172,7 @@ class DecipherMgs4:
 
         cle_secrete = clecert.dechiffrage_asymmetrique(cle_chiffree)
 
-        return DecipherMgs4(cle_secrete, header)
+        return DecipherMgs4(cle_secrete, nonce)
 
     def update(self, data: bytes) -> bytes:
         data_out = bytes()

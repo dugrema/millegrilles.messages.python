@@ -11,6 +11,7 @@ from pika.adapters.utils.connection_workflow import AMQPConnectionWorkflowFailed
 from pika.channel import Channel
 from redis.exceptions import ConnectionError
 
+from millegrilles_messages.chiffrage.DechiffrageUtils import dechiffrer_reponse
 from millegrilles_messages.messages import Constantes
 from millegrilles_messages.messages.CleCertificat import CleCertificat
 from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
@@ -39,6 +40,7 @@ class PikaModule(MessagesModule):
         self.__sync_connect = asyncio.Event()
 
         self.__connexions = list()
+        self.__clecert: Optional[CleCertificat] = None
 
     def est_connecte(self) -> bool:
         return self.__connexion is not None
@@ -76,6 +78,9 @@ class PikaModule(MessagesModule):
         self._producer = PikaModuleProducer(self)
         validateur_certificats.set_producer_messages(self._producer)  # Wiring pour requete certificats
 
+        # Conserver clecert pour dechiffrage reponses
+        self.__clecert = CleCertificat.from_files(self.configuration.key_pem_path, self.configuration.cert_pem_path)
+
         # Creer reply-q, consumer
         if reply_res:
             reply_res.ajouter_rk(Constantes.SECURITE_PUBLIC, 'requete.certificat.%s' % fingerprint)
@@ -87,6 +92,9 @@ class PikaModule(MessagesModule):
             for consumer_res in consumers:
                 consumer = PikaModuleConsumer(self, consumer_res)
                 self.ajouter_consumer(consumer)
+
+    def dechiffrer_reponse(self, message: dict) -> dict:
+        return dechiffrer_reponse(self.__clecert, message)
 
     async def entretien(self, event_stop: asyncio.Event):
         await super().entretien(event_stop)

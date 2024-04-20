@@ -1,5 +1,6 @@
-import multibase
+import gzip
 import json
+import multibase
 
 from millegrilles_messages.messages.CleCertificat import CleCertificat
 from millegrilles_messages.chiffrage.Mgs4 import DecipherMgs4
@@ -21,8 +22,8 @@ def dechiffrer_document(clecert: CleCertificat, cle_secrete: str, document_chiff
 
 
 def get_decipher(clecert: CleCertificat, cle_secrete: str, document_chiffre: dict):
-    doc_chiffre_info = {'cle': cle_secrete}
-    doc_chiffre_info.update(document_chiffre)
+    doc_chiffre_info = document_chiffre.copy()
+    doc_chiffre_info['cle'] = cle_secrete
 
     format_chiffrage = document_chiffre['format']
     if format_chiffrage == 'mgs4':
@@ -31,3 +32,31 @@ def get_decipher(clecert: CleCertificat, cle_secrete: str, document_chiffre: dic
         raise Exception("Format de chiffrage %s non supporte" % format_chiffrage)
 
     return decipher
+
+
+def get_decipher_cle_secrete(cle_secrete: bytes, info_dechiffrage):
+    format_chiffrage = info_dechiffrage['format']
+    if format_chiffrage == 'mgs4':
+        nonce = info_dechiffrage['nonce']
+        decipher = DecipherMgs4(cle_secrete, nonce)
+    else:
+        raise Exception("Format de chiffrage %s non supporte" % format_chiffrage)
+
+    return decipher
+
+
+def dechiffrer_reponse(clecert: CleCertificat, message: dict) -> dict:
+    dechiffrage = message['dechiffrage']
+    format_chiffrage = dechiffrage['format']
+    if format_chiffrage == 'mgs4':
+        decipher = DecipherMgs4.from_info(clecert, dechiffrage)
+    else:
+        raise Exception("Format de chiffrage %s non supporte" % format_chiffrage)
+
+    output_bytes = multibase.decode('m' + message['contenu'])
+    output_bytes = decipher.update(output_bytes)
+    output_bytes += decipher.finalize()
+    output_bytes = gzip.decompress(output_bytes).decode('utf-8')
+
+    message_dict = json.loads(output_bytes)
+    return message_dict
