@@ -829,8 +829,12 @@ class MessageConsumerVerificateur(MessageConsumer):
 
             if message.kind == 6:
                 # Reponse chiffre, on tente de la dechiffrer
-                parsed = self._module_messages.dechiffrer_reponse(parsed)
-                message.set_parsed_dechiffre(parsed)
+                try:
+                    parsed = self._module_messages.dechiffrer_reponse(parsed)
+                    message.set_parsed_dechiffre(parsed)
+                except KeyError:
+                    # Le message n'est pas dechiffrable localement. Agir comme passthrough (e.g. pour client web)
+                    pass
 
             # Message OK
             await super()._traiter_message(message)
