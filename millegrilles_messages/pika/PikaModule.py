@@ -41,6 +41,7 @@ class PikaModule(MessagesModule):
 
         self.__connexions = list()
         self.__clecert: Optional[CleCertificat] = None
+        self._enveloppe_ca: Optional[EnveloppeCertificat] = None
 
     def est_connecte(self) -> bool:
         return self.__connexion is not None
@@ -55,16 +56,16 @@ class PikaModule(MessagesModule):
 
         self._exchanges = exchanges
 
-        enveloppe_ca = EnveloppeCertificat.from_file(self.__pika_configuration.ca_pem_path)
+        self._enveloppe_ca = EnveloppeCertificat.from_file(self.__pika_configuration.ca_pem_path)
 
         try:
-            validateur_certificats = ValidateurCertificatRedis(enveloppe_ca, configuration=env_configuration)
+            validateur_certificats = ValidateurCertificatRedis(self._enveloppe_ca, configuration=env_configuration)
             await validateur_certificats.entretien()  # Connecter redis
         except (FileNotFoundError, ConnectionError, KeyError) as e:
             self.__logger.warning("Erreur configuraiton ou connexion a redis - fallback sur validateur avec cache memoire")
             if self.__logger.isEnabledFor(logging.INFO):
                 self.__logger.exception("Erreur configuration redis")
-            validateur_certificats = ValidateurCertificatCache(enveloppe_ca)
+            validateur_certificats = ValidateurCertificatCache(self._enveloppe_ca)
 
         validateur_messages = ValidateurMessage(validateur_certificats)
 
@@ -75,7 +76,7 @@ class PikaModule(MessagesModule):
         fingerprint = enveloppe_cert.fingerprint
 
         # Creer producer
-        self._producer = PikaModuleProducer(self)
+        self._producer = PikaModuleProducer(self, self._enveloppe_ca)
         validateur_certificats.set_producer_messages(self._producer)  # Wiring pour requete certificats
 
         # Conserver clecert pour dechiffrage reponses
@@ -473,11 +474,11 @@ class PikaModuleConsumer(MessageConsumerVerificateur):
 
 class PikaModuleProducer(MessageProducerFormatteur):
 
-    def __init__(self, pika_module: PikaModule):
+    def __init__(self, pika_module: PikaModule, enveloppe_ca: EnveloppeCertificat):
         configuration = pika_module.configuration
         clecert = CleCertificat.from_files(configuration.key_pem_path, configuration.cert_pem_path)
 
-        super().__init__(pika_module, clecert)
+        super().__init__(pika_module, clecert, enveloppe_ca)
 
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__channel: Optional[Channel] = None

@@ -1,20 +1,19 @@
 import binascii
 import datetime
+import gzip
 import json
 import logging
 import multibase
 import uuid
 import pytz
 
-from typing import Union
+from typing import Union, Optional
 
 from cryptography.hazmat.primitives import hashes
 
 from millegrilles_messages.messages import Constantes
-from millegrilles_messages.messages.Hachage import hacher
 from millegrilles_messages.messages.CleCertificat import CleCertificat
-from millegrilles_messages.messages.Encoders import DateFormatEncoder
-from millegrilles_messages.messages.EnveloppeCertificat import CertificatExpire
+from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
 
 VERSION_SIGNATURE = 2
 
@@ -25,6 +24,10 @@ class SignateurTransactionSimple:
     def __init__(self, clecert: CleCertificat):
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__clecert = clecert
+
+    @property
+    def clecert(self) -> CleCertificat:
+        return self.__clecert
 
     def signer(self, message: dict):
         """
@@ -110,14 +113,19 @@ class FormatteurMessageMilleGrilles:
     Supporte aussi une contre-signature pour emission vers une MilleGrille tierce.
     """
 
-    def __init__(self, idmg: str, signateur_transactions: SignateurTransactionSimple):
+    def __init__(self, idmg: str, signateur_transactions: SignateurTransactionSimple, ca: Optional[EnveloppeCertificat]):
         """
         :param idmg: MilleGrille correspondant au signateur de transactions
         :param signateur_transactions: Signateur de transactions pour la MilleGrille
         """
         self.__idmg = idmg
         self.__signateur_transactions = signateur_transactions
+        self.__enveloppe_ca = ca
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
+
+    @property
+    def clecert(self) -> CleCertificat:
+        return self.__signateur_transactions.clecert
 
     def signer_message(self,
                        kind: int,
@@ -222,6 +230,45 @@ class FormatteurMessageMilleGrilles:
             message_signe[Constantes.MESSAGE_CERTIFICAT_INCLUS] = self.__signateur_transactions.chaine_certs
 
         return message_signe, message_id
+
+    async def chiffrer_message(
+            self, cles_chiffrage: list[EnveloppeCertificat], kind: int, message: dict, domaine: str = None,
+            action: str = None, partition: str = None) -> (dict, str):
+
+        if self.__enveloppe_ca is None:
+            raise Exception("Enveloppe CA non chargee")
+
+        # Importer CipherMgs4 ici pour eviter une reference circulaire
+        from millegrilles_messages.chiffrage.Mgs4 import CipherMgs4
+
+        origine = self.__idmg
+
+        contenu = json.dumps(message).encode('utf-8')
+        contenu = gzip.compress(contenu)
+
+        # Chiffrer et compresser le contenu
+        public_x25519 = self.__enveloppe_ca.get_public_x25519()
+        cipher = CipherMgs4(public_x25519)
+        contenu = cipher.update(contenu)
+        contenu += cipher.finalize()
+        meta_dechiffrage = cipher.get_info_dechiffrage(cles_chiffrage)
+
+        contenu = multibase.encode('base64', contenu)[1:]  # Retirer 'm' multibase, on veut juste base64 no pad
+
+        dechiffrage = {
+            'cles': meta_dechiffrage['cles'],
+            'nonce': meta_dechiffrage['header'],
+        }
+
+        payload = {
+            'dechiffrage': dechiffrage,
+            'origine': origine,
+            'contenu': contenu,
+        }
+
+        message = self.signer_message(kind, payload, domaine, True, action, partition)
+
+        return message
 
     @property
     def chaine_certificat(self):

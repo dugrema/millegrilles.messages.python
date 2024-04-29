@@ -483,16 +483,17 @@ class MessageProducerFormatteur(MessageProducer):
     Produceur qui formatte le message a emettre.
     """
 
-    def __init__(self, module_messages: MessagesModule, clecert: CleCertificat):
+    def __init__(self, module_messages: MessagesModule, clecert: CleCertificat, ca: EnveloppeCertificat):
         super().__init__(module_messages)
         self.__formatteur_messages: FormatteurMessageMilleGrilles = \
-            MessageProducerFormatteur.__preparer_formatteur(clecert)
+            MessageProducerFormatteur.__preparer_formatteur(clecert, ca)
+        self.__enveloppe_ca = ca
 
     @staticmethod
-    def __preparer_formatteur(clecert: CleCertificat) -> FormatteurMessageMilleGrilles:
-        idmg = clecert.enveloppe.idmg
+    def __preparer_formatteur(clecert: CleCertificat, enveloppe_ca: EnveloppeCertificat) -> FormatteurMessageMilleGrilles:
+        idmg = enveloppe_ca.idmg
         signateur = SignateurTransactionSimple(clecert)
-        formatteur = FormatteurMessageMilleGrilles(idmg, signateur)
+        formatteur = FormatteurMessageMilleGrilles(idmg, signateur, enveloppe_ca)
         return formatteur
 
     async def signer(self, message: dict, kind: Constantes.KIND_DOCUMENT, domaine: Optional[str] = None, action: Optional[str] = None, partition: Optional[str] = None, version=1) -> dict:
@@ -620,6 +621,9 @@ class MessageProducerFormatteur(MessageProducer):
         routing_key = reply_to
         await self.emettre(message_bytes, routing_key, correlation_id=correlation_id, reply_to=reply_to)
 
+    @property
+    def enveloppe_ca(self) -> EnveloppeCertificat:
+        return self.__enveloppe_ca
 
 class MessageConsumer:
     """
