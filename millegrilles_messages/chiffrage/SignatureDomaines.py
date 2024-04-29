@@ -43,7 +43,9 @@ class SignatureDomaines:
         return signature
 
     def verifier(self, cle_secrete: bytes):
-        if self.version != 1:
+        if self.version == 0:
+            return  # Aucune verification possible sur version 0
+        elif self.version != 1:
             raise ValueError("Version non supportee")
 
         domaines_bytes = json.dumps(self.domaines).encode('utf-8')
@@ -59,6 +61,6 @@ class SignatureDomaines:
         hachage_domaines = hacher_to_digest(signature_bytes, hashing_code='blake2s-256')
 
         # Encoder eb base64 no pad
-        hachage_str = multibase.encode('base64', hachage_domaines).decode('utf-8')
+        hachage_str = multibase.encode('base58btc', hachage_domaines).decode('utf-8')
 
         return hachage_str
