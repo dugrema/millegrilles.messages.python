@@ -11,6 +11,7 @@ from typing import Union, Optional
 
 from cryptography.hazmat.primitives import hashes
 
+from millegrilles_messages.chiffrage.SignatureDomaines import SignatureDomaines
 from millegrilles_messages.messages import Constantes
 from millegrilles_messages.messages.CleCertificat import CleCertificat
 from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
@@ -253,11 +254,16 @@ class FormatteurMessageMilleGrilles:
         contenu += cipher.finalize()
         meta_dechiffrage = cipher.get_info_dechiffrage(cles_chiffrage)
 
-        contenu = multibase.encode('base64', contenu)[1:]  # Retirer 'm' multibase, on veut juste base64 no pad
+        cle_secrete = cipher.cle_secrete
+        domaines_signature = SignatureDomaines.signer_domaines(cle_secrete,
+                                                               [domaine], meta_dechiffrage['cle'][1:])
+
+        contenu = multibase.encode('base64', contenu).decode('utf-8')[1:]  # Retirer 'm' multibase, on veut juste base64 no pad
 
         dechiffrage = {
             'cles': meta_dechiffrage['cles'],
             'nonce': meta_dechiffrage['header'],
+            'signature': domaines_signature.to_dict()
         }
 
         payload = {

@@ -64,3 +64,15 @@ class SignatureDomaines:
         hachage_str = multibase.encode('base58btc', hachage_domaines).decode('utf-8')
 
         return hachage_str
+
+    def to_dict(self):
+        value = {
+            'domaines': self.domaines,
+            'signature': self.signature,
+            'version': self.version,
+        }
+        if self.ca is not None:
+            value['ca'] = self.ca
+
+        return value
+

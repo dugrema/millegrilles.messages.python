@@ -58,6 +58,10 @@ class CipherMgs4WithSecret:
         self.__state, self.__header = CipherMgs4WithSecret.__generer_cipher(self.__cle_secrete)
         self.__hacheur = Hacheur('blake2b-512', 'base58btc')
 
+    @property
+    def cle_secrete(self) -> bytes:
+        return self.__cle_secrete
+
     @staticmethod
     def __generer_cipher(cle_secrete: bytes):
         """
