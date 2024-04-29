@@ -6,6 +6,8 @@ import os
 from asyncio import Event, TimeoutError
 from typing import Optional
 
+from millegrilles_messages.docker.Entretien import TacheEntretien
+
 from millegrilles_messages.messages import Constantes
 from millegrilles_messages.messages.MessagesModule import RessourcesConsommation, MessageWrapper
 from millegrilles_messages.messages.MessagesThread import MessagesThread
@@ -15,7 +17,6 @@ from millegrilles_messages.messages.FormatteurMessages import SignateurTransacti
 from millegrilles_messages.messages.ValidateurCertificats import ValidateurCertificatCache, CertificatInconnu
 from millegrilles_messages.messages.ValidateurMessage import ValidateurMessage
 from millegrilles_messages.messages.MessagesModule import MessageProducerFormatteur
-
 from millegrilles_messages.messages import Constantes as ConstantesMessages
 
 CONST_PARAMS = [
@@ -111,6 +112,8 @@ class EtatInstance:
 
         self.__backup_inhibe = False
 
+        self._taches_entretien: list[TacheEntretien] = list()
+
     async def reload_configuration(self):
         self.__logger.info("Reload configuration sur disque ou dans docker")
 
@@ -149,12 +152,19 @@ class EtatInstance:
             await self.entretien(rabbitmq_dao)
 
             try:
-                await asyncio.wait_for(stop_event.wait(), timeout=30)
+                await asyncio.wait_for(stop_event.wait(), timeout=10)
             except asyncio.TimeoutError:
                 pass  # OK
 
     async def entretien(self, rabbitmq_dao):
-        pass
+        for tache in self._taches_entretien:
+            try:
+                await tache.run()
+            except Exception:
+                self.__logger.exception("Erreur execution tache entretien")
+
+    def ajouter_tache_entretien(self, tache: TacheEntretien):
+        self._taches_entretien.append(tache)
 
     def ajouter_listener(self, listener):
         self.__listeners_actions.append(listener)
