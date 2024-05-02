@@ -37,26 +37,26 @@ def generer_info_chiffrage(cle_secrete: bytes, iv: Optional[bytes], tag: Optiona
         raise ValueError("Aucuns certificats/public_peer fournis")
 
     if iv is not None:
-        iv_str = multibase.encode('base64', iv).decode('utf-8')
+        iv_str = multibase.encode('base64', iv).decode('utf-8')[1:]
     else:
         iv_str = None
     if tag is not None:
-        tag_str = multibase.encode('base64', tag).decode('utf-8')
+        tag_str = multibase.encode('base64', tag).decode('utf-8')[1:]
     else:
         tag_str = None
     if header is not None:
-        header_str = multibase.encode('base64', header).decode('utf-8')
+        header_str = multibase.encode('base64', header).decode('utf-8')[1:]
     else:
         header_str = None
 
     if public_peer is not None:
-        cle = multibase.encode('base64', public_peer).decode('utf-8')
+        cle = multibase.encode('base64', public_peer).decode('utf-8')[1:]
     else:
         cle = None
 
     if hachage is not None:
         if isinstance(hachage, bytes):
-            hachage = multibase.encode('base64', hachage).decode('utf-8')
+            hachage = multibase.encode('base64', hachage).decode('utf-8')[1:]
         elif isinstance(hachage, str):
             pass
         else:
@@ -131,7 +131,7 @@ def generer_signature_identite_cle(password: bytes, domaine: str, identificateur
     signature = list(signature)
     signature.insert(0, VERSION_SIGNATURE)
     signature = bytes(signature)
-    signature = multibase.encode('base64', signature).decode('utf-8')
+    signature = multibase.encode('base64', signature).decode('utf-8')[1:]
 
     return signature
 

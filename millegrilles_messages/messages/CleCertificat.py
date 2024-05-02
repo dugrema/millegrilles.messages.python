@@ -80,7 +80,7 @@ class CleCertificat:
 
     def dechiffrage_asymmetrique(self, cle_chiffree: Union[bytes, str]):
         if isinstance(cle_chiffree, str):
-            cle_chiffree = multibase.decode(cle_chiffree)
+            cle_chiffree = multibase.decode('m' + cle_chiffree)
         return dechiffrer_cle_ed25519(self, cle_chiffree)
 
     def signer(self, message_bytes: bytes):

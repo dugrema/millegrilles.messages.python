@@ -255,15 +255,19 @@ class FormatteurMessageMilleGrilles:
         meta_dechiffrage = cipher.get_info_dechiffrage(cles_chiffrage)
 
         cle_secrete = cipher.cle_secrete
-        domaines_signature = SignatureDomaines.signer_domaines(cle_secrete,
-                                                               [domaine], meta_dechiffrage['cle'][1:])
+        domaines_signature = SignatureDomaines.signer_domaines(
+            cle_secrete, [domaine], meta_dechiffrage['cle'][1:])
 
         contenu = multibase.encode('base64', contenu).decode('utf-8')[1:]  # Retirer 'm' multibase, on veut juste base64 no pad
 
+        cles_chiffres = dict()
+        for k,v in meta_dechiffrage['cles'].items():
+            cles_chiffres[k] = v[1:]  # Retirer m multibase
+
         dechiffrage = {
             'format': 'mgs4',
-            'cles': meta_dechiffrage['cles'],
-            'nonce': meta_dechiffrage['header'],
+            'cles': cles_chiffres,
+            'nonce': meta_dechiffrage['header'][1:],  # Retirer m multibase
             'signature': domaines_signature.to_dict()
         }
 

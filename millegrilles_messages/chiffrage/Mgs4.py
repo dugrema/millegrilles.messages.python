@@ -153,7 +153,7 @@ class DecipherMgs4:
 
         if header is not None:
             if isinstance(header, str):
-                header = multibase.decode(header)
+                header = multibase.decode('m' + header)
             elif isinstance(header, bytes):
                 pass  # Ok
             else:

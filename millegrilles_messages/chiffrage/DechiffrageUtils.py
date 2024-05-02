@@ -56,10 +56,10 @@ def get_decipher_cle_secrete(cle_secrete: bytes, info_dechiffrage):
     format_chiffrage = info_dechiffrage['format']
     if format_chiffrage == 'mgs4':
         try:
-            nonce = 'm' + info_dechiffrage['nonce']
+            nonce = multibase.decode('m' + info_dechiffrage['nonce'])
         except KeyError:
             # Ancien format
-            nonce = info_dechiffrage['header']
+            nonce = multibase.decode(info_dechiffrage['header'])
         decipher = DecipherMgs4(cle_secrete, nonce)
     else:
         raise Exception("Format de chiffrage %s non supporte" % format_chiffrage)

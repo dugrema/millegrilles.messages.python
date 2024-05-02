@@ -29,7 +29,7 @@ def chiffrer_cle_ed25519(enveloppe, cle_secrete: bytes) -> str:
     cyphertext_tag = chacha.encrypt(nonce, cle_secrete, None)
 
     cle_complete = key_x25519_public_bytes + cyphertext_tag
-    cle_str = multibase.encode('base64', cle_complete).decode('utf-8')
+    cle_str = multibase.encode('base64', cle_complete).decode('utf-8')[1:]  # Retirer 'm' multibase
 
     return cle_str
 
