@@ -260,14 +260,16 @@ class FormatteurMessageMilleGrilles:
 
         contenu = multibase.encode('base64', contenu).decode('utf-8')[1:]  # Retirer 'm' multibase, on veut juste base64 no pad
 
-        cles_chiffres = dict()
-        for k,v in meta_dechiffrage['cles'].items():
-            cles_chiffres[k] = v[1:]  # Retirer m multibase
+        cles_chiffres = meta_dechiffrage['cles']
+        #cles_chiffres = dict()
+        #for k,v in meta_dechiffrage['cles'].items():
+        #    cles_chiffres[k] = v[1:]  # Retirer m multibase
 
         dechiffrage = {
             'format': 'mgs4',
             'cles': cles_chiffres,
-            'nonce': meta_dechiffrage['header'][1:],  # Retirer m multibase
+            # 'nonce': meta_dechiffrage['header'][1:],  # Retirer m multibase
+            'nonce': meta_dechiffrage['header'],
             'signature': domaines_signature.to_dict()
         }
 
