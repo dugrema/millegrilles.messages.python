@@ -208,6 +208,10 @@ class EtatInstance:
         return self.__clecertificat
 
     @property
+    def certificat_millegrille(self) -> EnveloppeCertificat:
+        return self.__certificat_millegrille
+
+    @property
     def instance_id(self):
         return self.__instance_id
 
