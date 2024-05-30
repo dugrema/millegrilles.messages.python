@@ -114,6 +114,8 @@ class EtatInstance:
 
         self._taches_entretien: list[TacheEntretien] = list()
 
+        self.__stop_event: Optional[Event] = None
+
     async def reload_configuration(self):
         self.__logger.info("Reload configuration sur disque ou dans docker")
 
@@ -146,6 +148,7 @@ class EtatInstance:
             await listener()
 
     async def run(self, stop_event, rabbitmq_dao):
+        self.__stop_event = stop_event
         while stop_event.is_set() is False:
 
             # Taches entretien
@@ -158,6 +161,9 @@ class EtatInstance:
 
     async def entretien(self, rabbitmq_dao):
         for tache in self._taches_entretien:
+            if self.__stop_event.is_set() is True:
+                return  # Done
+
             try:
                 await tache.run()
             except Exception:
@@ -435,7 +441,7 @@ class MilleGrillesConnecteur:
     Creer une instance de cette classe pour obtenir une connexion a la MilleGrille.
     """
 
-    def __init__(self, event_stop: Event, etat_instance: EtatInstance, command_handler: CommandHandler):
+    def __init__(self, event_stop: Event, etat_instance: EtatInstance, command_handler: CommandHandler, disconnect_fatal=True):
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__event_stop = event_stop
         self.__etat_instance = etat_instance
@@ -446,6 +452,7 @@ class MilleGrillesConnecteur:
         self.__mq_thread: Optional[MqThread] = None
 
         self.nb_reply_correlation_max = 20
+        self.__disconnect_fatal = disconnect_fatal
 
     async def __creer_thread(self):
         routing_keys = self.__command_handler.get_routing_keys()
@@ -456,6 +463,7 @@ class MilleGrillesConnecteur:
 
     async def run(self):
         self.__logger.info("Debut thread asyncio MessagesThread")
+        self.__event_stop.clear()
 
         try:
             # Toujours tenter de creer le compte sur MQ - la detection n'est pas au point a l'interne
@@ -472,6 +480,9 @@ class MilleGrillesConnecteur:
             await self.__mq_thread.run()
         except Exception as e:
             self.__logger.exception("Erreur connexion MQ")
+            if self.__disconnect_fatal:
+                self.__logger.warning("Forcer arret application via event_stop.set()")
+                self.__event_stop.set()
         finally:
             self.__mq_thread = None
             self.__producer = None

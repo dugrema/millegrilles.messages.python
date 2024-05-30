@@ -98,8 +98,6 @@ class PikaModule(MessagesModule):
         return dechiffrer_reponse(self.__clecert, message)
 
     async def entretien(self, event_stop: asyncio.Event):
-        await super().entretien(event_stop)
-
         if self.__connexion is not None:
             if self.__connexion is not None and self.__connexion.is_closing or self.__connexion.is_closed:
                 self.__logger.info("entretien Connexion fermee - on ferme l'application")
@@ -119,6 +117,8 @@ class PikaModule(MessagesModule):
             for consumer in self.get_consumers():
                 if consumer.erreur_channel is True:
                     raise Exception('consumer avec channel en erreur')
+
+        await super().entretien(event_stop)
 
         await self._validateur_certificats.entretien()
 
@@ -180,7 +180,7 @@ class PikaModule(MessagesModule):
             self.__logger.info('Closing connection %s' % self.__connexion)
             self.__connexion.close(reply_text='PikaModule._close()')
 
-        # self.__connexion = None
+        self.__connexion = None
 
     def on_connect_done(self, connexion: Union[AsyncioConnection, AMQPConnectionWorkflowFailed] = None):
         if isinstance(connexion, AMQPConnectionWorkflowFailed):
