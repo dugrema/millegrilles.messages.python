@@ -70,7 +70,7 @@ DOMAINE_MAITRE_DES_CLES = 'MaitreDesCles'
 DOMAINE_GROS_FICHIERS = 'GrosFichiers'
 DOMAINE_MESSAGERIE = 'Messagerie'
 DOMAINE_MESSAGES = 'Messages'
-
+DOMAINE_HEBERGEMENT = 'Hebergement'
 
 # Champs messages
 # MESSAGE_ENTETE='en-tete'
