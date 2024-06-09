@@ -404,3 +404,16 @@ class ValidateurCertificatRedis(ValidateurCertificatCache):
 
         return enveloppe
 
+
+def valider_certificat_tiers(
+        certificat_ca: Union[EnveloppeCertificat, str],
+        certificat: Union[bytes, str, list],
+        date_reference: datetime.datetime = None,
+        idmg: str = None,
+        usages: set = {'digital_signature'}):
+
+    if isinstance(certificat_ca, str):
+        certificat_ca = EnveloppeCertificat.from_pem(certificat_ca)
+
+    validateur = ValidateurCertificat(certificat_ca)
+    return validateur.valider(certificat, date_reference, idmg, usages)
