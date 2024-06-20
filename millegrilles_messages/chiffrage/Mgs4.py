@@ -220,3 +220,18 @@ def chiffrer_document(cle_secrete: bytes, cle_id: str, doc: dict):
         'cle_id': cle_id,
         'format': 'mgs4',
     }
+
+
+def chiffrer_document_nouveau(ca: EnveloppeCertificat, doc: dict) -> (CipherMgs4, dict):
+    cipher = CipherMgs4(ca.get_public_x25519())
+    doc_str = json.dumps(doc)
+    doc_chiffre = cipher.update(doc_str.encode('utf-8'))
+    doc_chiffre += cipher.finalize()
+    doc_chiffre = multibase.encode('base64', doc_chiffre)[1:]
+    nonce = multibase.encode('base64', cipher.header)[1:]
+
+    return cipher, {
+        'data_chiffre': doc_chiffre.decode('utf-8'),
+        'nonce': nonce.decode('utf-8'),
+        'format': 'mgs4',
+    }
