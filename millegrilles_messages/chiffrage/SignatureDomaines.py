@@ -1,3 +1,4 @@
+import binascii
 import json
 import multibase
 
@@ -25,9 +26,9 @@ class SignatureDomaines:
 
         private_key = ed25519.Ed25519PrivateKey.from_private_bytes(cle_secrete)
         signature_value = private_key.sign(hachage_domaines)
-        signature_str = multibase.encode('base64', signature_value).decode('utf-8')[1:]  # Encoder, retirer 'm' multibase pour format base64 no pad
+        signature_str = multibase.encode('base64', signature_value).decode('utf-8')
 
-        signature.signature = signature_str
+        signature.signature = signature_str[1:]  # Encoder, retirer 'm' multibase pour format base64 no pad
         signature.version = 1
 
         return signature
@@ -59,9 +60,15 @@ class SignatureDomaines:
     def get_cle_ref(self) -> str:
         signature_bytes = multibase.decode('m' + self.signature)
         hachage_domaines = hacher_to_digest(signature_bytes, hashing_code='blake2s-256')
+        print("Hachages domaines hex\n%s" % binascii.hexlify(hachage_domaines).decode('utf-8'))
 
-        # Encoder eb base64 no pad
+        # Encoder en base58btc
         hachage_str = multibase.encode('base58btc', hachage_domaines).decode('utf-8')
+
+        if hachage_domaines[0] == 0x0:
+            # Hack - en Rust et Javascript, multibase base58btc insere la valeur '1' pour
+            # un hachage qui commence par 0x0.
+            hachage_str = 'z1' + hachage_str[1:]
 
         return hachage_str
 

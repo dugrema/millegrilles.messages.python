@@ -1,3 +1,4 @@
+import binascii
 import unittest
 
 from cryptography.exceptions import InvalidSignature
@@ -14,6 +15,15 @@ class SignatureDomainesTestCase(unittest.TestCase):
         'version': 1,
         'ca': '++W4t8wFP7Y31598yO/D25o8is6fnijE+wAFO1DN8G8',
         'signature': 'aGwfIQR7o2aHXEqkTO04cpXyszwKObigBTDc90G7B80ciTgs1Ir49BxbR588Iae51pzBFKhYPvY2wWKLfS6+CA'
+    }
+
+    SIGNATURE_HACHAGE_0x0 = {
+        'ca': '5VqzX1kQkmxk7CNKVGiEngYLbz1w+dKNeK1WvJqIdXs',
+        'domaines': [
+            'GrosFichiers'
+        ],
+        'signature': 'h2nb4aqjhaU77mAWeowBcc+mRuNOautugmE6ciqo4zyxvz0rEM0yuclQ8k1AlQ9185cL0HXkvFpG0Q+18TM4Dw',
+        'version': 1
     }
 
     def test_signer_domaines(self):
@@ -50,6 +60,14 @@ class SignatureDomainesTestCase(unittest.TestCase):
         cle_ref = signature.get_cle_ref()
 
         self.assertEqual('z27EKL3EpJgvf64jkkm5oajuczHgaBTKg4V1YydBJSwFV', cle_ref)
+
+    def test_signature_hachage_0x0(self):
+        signature = SignatureDomaines.from_dict(SignatureDomainesTestCase.SIGNATURE_HACHAGE_0x0)
+        cle_ref = signature.get_cle_ref()
+
+        # Verifier qu'on a la valeur '1' inseree apres le z
+        # C'est le comportement de multibase sur Rust et Javascript quand le premier byte est 0x0
+        self.assertEqual('z13yXNnBiBJLKmyqsUZS9bydXroW7ziQ2krYjZXEdHw7E', cle_ref)
 
 
 if __name__ == '__main__':
