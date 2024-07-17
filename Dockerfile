@@ -1,5 +1,7 @@
 FROM python:3.12
 
+ARG VBUILD=2024.0.0
+
 ENV BUILD_FOLDER=/opt/millegrilles/build \
     BUNDLE_FOLDER=/opt/millegrilles/dist \
     PYTHONPATH=/opt/millegrilles/dist \

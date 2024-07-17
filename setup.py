@@ -1,6 +1,7 @@
 from setuptools import setup, find_packages
+from os import environ
 
-__VERSION__ = "2024.0.4"
+__VERSION__ = environ.get("VBUILD") or "2024.0.0"
 
 
 setup(
