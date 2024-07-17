@@ -1,4 +1,4 @@
-FROM python:3.10
+FROM python:3.12
 
 ENV BUILD_FOLDER=/opt/millegrilles/build \
     BUNDLE_FOLDER=/opt/millegrilles/dist \
