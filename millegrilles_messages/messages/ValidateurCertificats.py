@@ -83,7 +83,7 @@ class ValidateurCertificat:
             self,
             certificat: Union[bytes, str, list],
             date_reference: datetime.datetime = None,
-            idmg: str = None,
+            ca_cert_pem: str = None,
             usages: set = {'digital_signature'}
     ) -> EnveloppeCertificat:
         """
@@ -91,7 +91,7 @@ class ValidateurCertificat:
 
         :param certificat: Un certificat ou une liste de certificats a valider.
         :param date_reference: Date de reference pour valider le certificat si autre que date courante.
-        :param idmg: IDMG de la millegrille a valider (si autre que la millegrille locale).
+        :param ca_cert_pem: Certificat CA de la millegrille a valider (si autre que la millegrille locale).
         :param usages: Usages du certificat
 
         :return: Enveloppe avec le certificat valide.
@@ -99,7 +99,7 @@ class ValidateurCertificat:
         """
         enveloppe = self._charger_certificat(certificat)
 
-        valide = self._valider(enveloppe, date_reference, idmg, usages)
+        valide = self._valider(enveloppe, date_reference, ca_cert_pem, usages)
 
         if valide:
             return enveloppe
@@ -107,20 +107,17 @@ class ValidateurCertificat:
         raise Exception('Erreur validation')  # Note : ne devrait pas arrive
 
     def _valider(self, enveloppe: EnveloppeCertificat, date_reference: datetime.datetime = None,
-                  idmg: str = None, usages: set = {'digital_signature'}) -> bool:
-
-        if idmg is not None and idmg != enveloppe.idmg:
-            raise IdmgInvalide('IDMG invalide')
+                  ca_cert_pem: Optional[str] = None, usages: set = {'digital_signature'}) -> bool:
 
         try:
-            if enveloppe.est_verifie and date_reference is None and (idmg is None or idmg == self.__idmg):
+            if enveloppe.est_verifie and date_reference is None:
                 # Raccourci, l'enveloppe a deja ete validee (e.g. cache) et on n'a aucune
                 # validation conditionnelle par date ou idmg
                 return True
         except AttributeError:
             pass  # Ok, le certificat n'est pas connu ou dans le cache
 
-        store = self.__preparer_store(date_reference)
+        store = self.__preparer_store(date_reference, ca_cert_pem)
 
         chaine_pem = enveloppe.chaine_pem()
 
@@ -133,19 +130,24 @@ class ValidateurCertificat:
         except OpenSSL.crypto.X509StoreContextError as ce:
             raise ce
 
-        if date_reference is None and (idmg is None or idmg == self.__idmg):
+        if date_reference is None and ca_cert_pem is None:
             # Validation completee, certificat est valide (sinon OpenSSL.crypto.X509StoreContextError est lancee)
+            # On ne marque pas comme verifie un certificat tiers (avec ca_cert_pem)
             enveloppe.set_est_verifie(True)
 
         return True
 
-    def __preparer_store(self, date_reference: datetime.datetime = None) -> OpenSSL.crypto.X509Store:
+    def __preparer_store(self, date_reference: datetime.datetime = None, ca_cert_pem: str = None) -> OpenSSL.crypto.X509Store:
         if date_reference is None:
             return self.__store
         else:
             # Creer store avec date de validation differente
             store = OpenSSL.crypto.X509Store()
-            store.add_cert(self.__root_cert_openssl)
+            if ca_cert_pem:
+                ca_cert = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM, ca_cert_pem.encode('utf-8'))
+            else:
+                ca_cert = self.__root_cert_openssl
+            store.add_cert(ca_cert)
             store.set_time(date_reference)
             return store
 
@@ -202,11 +204,11 @@ class ValidateurCertificatCache(ValidateurCertificat):
             self,
             certificat: Union[bytes, str, list],
             date_reference: datetime.datetime = None,
-            idmg: str = None,
+            ca_cert_pem: str = None,
             usages: set = {'digital_signature'}
     ) -> EnveloppeCertificat:
 
-        enveloppe = super().valider(certificat, date_reference, idmg, usages)
+        enveloppe = super().valider(certificat, date_reference, ca_cert_pem, usages)
 
         fingerprint = enveloppe.fingerprint
         try:
@@ -217,9 +219,11 @@ class ValidateurCertificatCache(ValidateurCertificat):
                 return enveloppe
             else:
                 cache_entry = EnveloppeCache(enveloppe)
-                self.__cache_enveloppes[fingerprint] = cache_entry
+                if ca_cert_pem is None:
+                    # Ne pas mettre en cache un certificat tiers
+                    self.__cache_enveloppes[fingerprint] = cache_entry
 
-        if idmg is None and date_reference is None:
+        if ca_cert_pem is None and date_reference is None:
             # Valide pour date courante
             cache_entry.touch(presentement_valide=True)
         else:
@@ -228,7 +232,7 @@ class ValidateurCertificatCache(ValidateurCertificat):
         return enveloppe
 
     async def valider_fingerprint(self, fingerprint: str, date_reference: datetime.datetime = None,
-                                  idmg: str = None, usages: set = frozenset({'digital_signature'}),
+                                  ca_cert_pem: str = None, usages: set = frozenset({'digital_signature'}),
                                   nofetch=False) -> EnveloppeCertificat:
         """
         Charge un certificat a partir du cache
@@ -239,10 +243,6 @@ class ValidateurCertificatCache(ValidateurCertificat):
         except KeyError:
             raise CertificatInconnu('CACHE MISS', fingerprint=fingerprint)
 
-        if idmg is not None:
-            if cache_entry.idmg != idmg:
-                raise IdmgInvalide('IDMG invalide')
-
         enveloppe = cache_entry.enveloppe
 
         if cache_entry.valide is True and date_reference is None:
@@ -250,7 +250,7 @@ class ValidateurCertificatCache(ValidateurCertificat):
             return enveloppe
 
         # Valider le certificat
-        super()._valider(enveloppe, date_reference, idmg, usages)
+        super()._valider(enveloppe, date_reference, ca_cert_pem, usages)
 
     async def entretien(self):
         # Shallow copy pour eviter erreurs concurrence
@@ -366,16 +366,16 @@ class ValidateurCertificatRedis(ValidateurCertificatCache):
         return pems
 
     async def valider_fingerprint(self, fingerprint: str, date_reference: datetime.datetime = None,
-                                  idmg: str = None, usages: set = frozenset({'digital_signature'}),
+                                  ca_cert_pem: str = None, usages: set = frozenset({'digital_signature'}),
                                   nofetch=False) -> EnveloppeCertificat:
 
         try:
-            return await super().valider_fingerprint(fingerprint, date_reference, idmg, usages, nofetch)
+            return await super().valider_fingerprint(fingerprint, date_reference, ca_cert_pem, usages, nofetch)
         except CertificatInconnu as ci:
             pass
 
         pems = await self.__get_certficat(fingerprint, nofetch)
-        return await self.valider(pems, date_reference, idmg, usages)
+        return await self.valider(pems, date_reference, ca_cert_pem, usages)
 
     async def valider(self, certificat: Union[bytes, str, list], date_reference: datetime.datetime = None,
                       idmg: str = None, usages: set = {'digital_signature'}) -> EnveloppeCertificat:

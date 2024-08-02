@@ -76,9 +76,9 @@ class ValidateurMessage:
 
     async def __valider_certificat_message(self, message, utiliser_date_message: bool, utiliser_idmg_message: bool):
         if utiliser_idmg_message:
-            idmg_message = message[Constantes.MESSAGE_IDMG]
+            certificat_ca_pem = message['millegrille']
         else:
-            idmg_message = None
+            certificat_ca_pem = None
 
         if utiliser_date_message:
             estampille = message[Constantes.MESSAGE_ESTAMPILLE]
@@ -94,7 +94,7 @@ class ValidateurMessage:
         try:
             # Tenter de charger une version du certificat dans le cache
             enveloppe_certificat = await self.__validateur_certificats.valider_fingerprint(
-                pubkey, date_reference=date_reference, idmg=idmg_message, nofetch=True)
+                pubkey, date_reference=date_reference, ca_cert_pem=certificat_ca_pem, nofetch=True)
             if enveloppe_certificat:
                 return enveloppe_certificat
         except CertificatInconnu:
@@ -107,7 +107,7 @@ class ValidateurMessage:
                 certificats_inline = certificats_inline.replace(';', '\n')
 
             enveloppe_certificat = await self.__validateur_certificats.valider(
-                certificats_inline, date_reference=date_reference, idmg=idmg_message)
+                certificats_inline, date_reference=date_reference, ca_cert_pem=certificat_ca_pem)
 
             # S'assurer que le certificat correspond au fingerprint
             fingerprint_charge = binascii.hexlify(enveloppe_certificat.get_public_key_bytes()).decode('utf-8')
