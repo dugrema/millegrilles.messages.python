@@ -206,3 +206,25 @@ def convertir_hachage_mb_hex(hachage: str):
     mh = multihash.decode(mb)
     return binascii.hexlify(mh.digest).decode('utf-8')
 
+
+def hacher_fichier(path: str, algo='blake2s-256', encoding='base64') -> str:
+    """
+    Methode pour hacher un fichier
+    :param path: Path du fichier
+    :param algo: Algorithme de hachage
+    :param encoding: Encoding pour le digest
+    :return:
+    """
+
+    from pathlib import Path
+    hacheur = Hacheur(algo, encoding)
+    path_fichier = Path(path)
+    chunk_size = 1024 * 64
+    with open(path_fichier, 'rb') as fichier:
+        chunk = fichier.read(chunk_size)
+        while chunk:
+            hacheur.update(chunk)
+            chunk = fichier.read(chunk_size)
+    resultat = hacheur.finalize()
+
+    return resultat
