@@ -6,6 +6,14 @@ from docker.types import NetworkAttachmentConfig, Resources, RestartPolicy, Serv
     SecretReference, ConfigReference
 
 
+class Archive:
+
+    def __init__(self, element: dict):
+        self.location = element['location']
+        self.digest = element['digest']
+        self.src = element['src']
+
+
 class ConfigurationService:
     """
     Converti format config MilleGrilles en format du module docker
@@ -32,6 +40,11 @@ class ConfigurationService:
         self.__resources: Optional[Resources] = None
         self.__mode: Optional[ServiceMode] = None
         self.__restart_policy: Optional[RestartPolicy] = None
+        self.__archives: Optional[list[Archive]] = None
+
+    @property
+    def archives(self) -> Optional[list[Archive]]:
+        return self.__archives
 
     def parse(self):
         self.__name = self.__configuration['name']
@@ -67,6 +80,7 @@ class ConfigurationService:
         self._parse_container_labels()
         self._parse_networks()
         self._parse_endpoint_specs()
+        self._parse_archives()
 
     def _mapping_valeur(self, value: Any):
 
@@ -301,6 +315,14 @@ class ConfigurationService:
 
         self.__endpoint_spec = EndpointSpec(mode=mode, ports=ports)
 
+    def _parse_archives(self) -> Optional[list[Archive]]:
+        try:
+            archives_elements: list = self.__configuration['archives']
+        except KeyError:
+            return
+
+        self.__archives = [Archive(a) for a in archives_elements]
+
     def generer_docker_config(self) -> dict:
         config = {
             'name': self.__name,
@@ -368,3 +390,4 @@ class ConfigurationContainer:
 
 class CertificatAbsent(Exception):
     pass
+
