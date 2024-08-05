@@ -377,10 +377,15 @@ class ValidateurCertificatRedis(ValidateurCertificatCache):
         pems = await self.__get_certficat(fingerprint, nofetch)
         return await self.valider(pems, date_reference, ca_cert_pem, usages)
 
-    async def valider(self, certificat: Union[bytes, str, list], date_reference: datetime.datetime = None,
-                      idmg: str = None, usages: set = {'digital_signature'}) -> EnveloppeCertificat:
+    # async def valider(self, certificat: Union[bytes, str, list], date_reference: datetime.datetime = None,
+    #                   idmg: str = None, usages: set = {'digital_signature'}) -> EnveloppeCertificat:
+    async def valider(self,
+                      certificat: Union[bytes, str, list],
+                      date_reference: datetime.datetime = None,
+                      ca_cert_pem: str = None,
+                      usages: set = {'digital_signature'}) -> EnveloppeCertificat:
 
-        enveloppe = await super().valider(certificat, date_reference, idmg, usages)
+        enveloppe = await super().valider(certificat, date_reference, ca_cert_pem, usages)
         fingerprint = enveloppe.fingerprint
 
         self.__logger.debug("Verifier si on conserve certificat %s dans redis" % fingerprint)
