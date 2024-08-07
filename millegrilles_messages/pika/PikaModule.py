@@ -357,12 +357,15 @@ class PikaModuleConsumer(MessageConsumerVerificateur):
             self._ressources.actif = True
             if self.__channel is None:
                 # Le channel n'a pas ete cree (thread = False)
+                self.__logger.debug("Channel pas cree pour %s (thread=False)", self.q)
                 # Creer channel et attendre callback
                 self.__pika_module.open_channel(self.on_channel_open)
                 return  # On va avoir un callback via set_qos
 
             self.__consumer_tag = self.__channel.basic_consume(self._ressources.q, self.on_message)
             self._event_consumer.set()
+
+            self.__logger.debug('start_consuming Pret %s' % self.q)
             self._consumer_pret.set()
         else:
             self.__logger.debug('start_consuming Consuming deja actif')
@@ -373,6 +376,7 @@ class PikaModuleConsumer(MessageConsumerVerificateur):
             self.__channel.basic_cancel(self.__consumer_tag, self.on_cancel_ok)
 
     def on_channel_open(self, channel: Channel):
+        self.__logger.debug("Channel open pour %s" % self.q)
         self.set_channel(channel)
         channel.add_on_close_callback(self.clear_channel)
         self.enregistrer_q()

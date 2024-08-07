@@ -270,6 +270,13 @@ class EtatInstance:
         return self.__validateur_message
 
 
+class RoutingKey:
+
+    def __init__(self, key: str, securite=Constantes.SECURITE_PRIVE):
+        self.key = key
+        self.securite = securite
+
+
 class CommandHandler:
     """
     Implementer la methode traiter_commande de cette classe pour recevoir les messages d'une Q.
@@ -392,7 +399,15 @@ class MqThread:
 
         # RK Public pour toutes les instances
         for rk in self.__routing_key_consumers:
-            reply_res.ajouter_rk(Constantes.SECURITE_PRIVE, rk)
+            if isinstance(rk, str):
+                key = rk
+                securite = Constantes.SECURITE_PRIVE
+            elif isinstance(rk, RoutingKey):
+                key = rk.key
+                securite = rk.securite
+            else:
+                raise TypeError('Routing key must be str or RoutingKey')
+            reply_res.ajouter_rk(securite, key)
 
         messages_thread.set_reply_ressources(reply_res)
 
