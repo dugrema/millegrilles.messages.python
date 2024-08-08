@@ -505,6 +505,21 @@ class MessageProducerFormatteur(MessageProducer):
     async def signer(self, message: dict, kind=Constantes.KIND_DOCUMENT, domaine: Optional[str] = None, action: Optional[str] = None, partition: Optional[str] = None, version=1) -> dict:
         return self.__formatteur_messages.signer_message(kind, message, domaine, action=action, partition=partition)
 
+    async def chiffrer(self, cles_chiffrage: list[EnveloppeCertificat], kind: int, message: dict, domaine: str = None,
+                       action: str = None, partition: str = None) -> (dict, str):
+        """
+        Chiffre et signe un message.
+        :param cles_chiffrage:
+        :param kind:
+        :param message:
+        :param domaine:
+        :param action:
+        :param partition:
+        :return:
+        """
+        message_signe, message_id = await self.__formatteur_messages.chiffrer_message(cles_chiffrage, kind, message, domaine, action, partition)
+        return message_signe, message_id
+
     async def emettre_evenement(self, evenement: dict, domaine: str, action: str,
                                 partition: Optional[str] = None, exchanges: Union[str, list] = None, version=1,
                                 reply_to=None, noformat=False):
@@ -630,6 +645,7 @@ class MessageProducerFormatteur(MessageProducer):
     @property
     def enveloppe_ca(self) -> EnveloppeCertificat:
         return self.__enveloppe_ca
+
 
 class MessageConsumer:
     """

@@ -162,17 +162,24 @@ class FormatteurMessageMilleGrilles:
         dechiffrage = None
         origine = None
 
-        if kind != Constantes.KIND_COMMANDE_INTER_MILLEGRILLE:
+        if kind == Constantes.KIND_REPONSE_CHIFFREE:
+            message_contenu = message['contenu']  # Copier directement contenu chiffre
+            dechiffrage = message['dechiffrage']
+            try:
+                del message['origine']
+            except KeyError:
+                pass
+        elif kind == Constantes.KIND_COMMANDE_INTER_MILLEGRILLE:
+            message_contenu = message['contenu']  # Copier directement contenu chiffre
+            dechiffrage = message['dechiffrage']
+            origine = message['origine']
+        else:
             message_contenu = json.dumps(
                 message,
                 ensure_ascii=False,  # S'assurer de supporter tous le range UTF-8
                 sort_keys=True,
                 separators=(',', ':')
             )
-        elif kind == Constantes.KIND_COMMANDE_INTER_MILLEGRILLE:
-            message_contenu = message['contenu']  # Copier directement contenu chiffre
-            dechiffrage = message['dechiffrage']
-            origine = message['origine']
 
         pubkey = binascii.hexlify(self.__signateur_transactions.pubkey).decode('utf-8')
 
@@ -199,6 +206,9 @@ class FormatteurMessageMilleGrilles:
                 routage['partition'] = partition
             enveloppe_message['routage'] = routage
             message_hachage.append(routage)
+        if kind in [6]:
+            enveloppe_message['dechiffrage'] = dechiffrage
+            message_hachage.append(dechiffrage)
         if kind in [7]:
             enveloppe_message['pre-migration'] = pre_migration
             message_hachage.append(pre_migration)
@@ -279,9 +289,9 @@ class FormatteurMessageMilleGrilles:
             'contenu': contenu,
         }
 
-        message = self.signer_message(kind, payload, domaine, True, action, partition)
+        message_signe, message_id = self.signer_message(kind, payload, domaine, True, action, partition)
 
-        return message
+        return message_signe, message_id
 
     @property
     def chaine_certificat(self):
