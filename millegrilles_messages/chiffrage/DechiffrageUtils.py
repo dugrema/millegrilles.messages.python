@@ -2,6 +2,8 @@ import gzip
 import json
 import multibase
 
+from typing import Union
+
 from millegrilles_messages.messages.CleCertificat import CleCertificat
 from millegrilles_messages.chiffrage.Mgs4 import DecipherMgs4
 
@@ -67,11 +69,16 @@ def get_decipher_cle_secrete(cle_secrete: bytes, info_dechiffrage):
     return decipher
 
 
-def dechiffrer_reponse(clecert: CleCertificat, message: dict) -> dict:
+def dechiffrer_reponse(cle: Union[CleCertificat, bytes], message: dict) -> dict:
     dechiffrage = message['dechiffrage']
     format_chiffrage = dechiffrage['format']
     if format_chiffrage == 'mgs4':
-        decipher = DecipherMgs4.from_info(clecert, dechiffrage)
+        if isinstance(cle, CleCertificat):
+            decipher = DecipherMgs4.from_info(cle, dechiffrage)
+        elif isinstance(cle, bytes):
+            decipher = DecipherMgs4.from_info_with_key(cle, dechiffrage)
+        else:
+            raise TypeError('Mayvais type pour la cle')
     else:
         raise Exception("Format de chiffrage %s non supporte" % format_chiffrage)
 
