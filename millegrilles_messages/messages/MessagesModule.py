@@ -243,6 +243,7 @@ class MessageWrapper:
         self.__contenu: Optional[str] = None
         self.__certificat_pem: Optional[list] = None
         self.__pubkey: Optional[str] = None
+        self.__id: Optional[str] = None
         self.original: Optional[str] = None
         self.certificat: Optional[EnveloppeCertificat] = None
         self.est_valide = False
@@ -254,6 +255,7 @@ class MessageWrapper:
     @parsed.setter
     def parsed(self, val: dict):
         self.original = val
+        self.__id = val['id']
         self.__pubkey = val['pubkey']
         self.__kind = val['kind']
         self.__estampille = val['estampille']
@@ -270,6 +272,10 @@ class MessageWrapper:
         parsed_contenu = valeur_dechiffree
         parsed_contenu['__original'] = self.original  # Devrait deja etre present
         self.__parsed = parsed_contenu
+
+    @property
+    def id(self) -> str:
+        return self.__id
 
     @property
     def pubkey(self) -> str:
@@ -496,7 +502,7 @@ class MessageProducerFormatteur(MessageProducer):
         formatteur = FormatteurMessageMilleGrilles(idmg, signateur, enveloppe_ca)
         return formatteur
 
-    async def signer(self, message: dict, kind: Constantes.KIND_DOCUMENT, domaine: Optional[str] = None, action: Optional[str] = None, partition: Optional[str] = None, version=1) -> dict:
+    async def signer(self, message: dict, kind=Constantes.KIND_DOCUMENT, domaine: Optional[str] = None, action: Optional[str] = None, partition: Optional[str] = None, version=1) -> dict:
         return self.__formatteur_messages.signer_message(kind, message, domaine, action=action, partition=partition)
 
     async def emettre_evenement(self, evenement: dict, domaine: str, action: str,
