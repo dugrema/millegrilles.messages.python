@@ -314,7 +314,7 @@ class MessagePending:
 
 class CorrelationReponse:
 
-    def __init__(self, correlation_id: str):
+    def __init__(self, correlation_id: str, stream=False):
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.correlation_id = correlation_id
 
@@ -323,9 +323,13 @@ class CorrelationReponse:
 
         self.consumer = None  # MessageConsumer
         self.__event_attente = Event()
+        self.__stream_queue: Optional[asyncio.Queue] = None
         self.__reponse: Optional[MessageWrapper] = None
         self.__reponse_consommee = False
         self.__reponse_annulee = False
+
+        if stream:
+            self.__stream_queue = asyncio.Queue(maxsize=2)
 
     async def attendre_reponse(self, timeout=ATTENTE_MESSAGE_DUREE) -> MessageWrapper:
         self.__duree_attente = timeout
@@ -344,9 +348,40 @@ class CorrelationReponse:
         self.__reponse_consommee = True
         return self.__reponse
 
+    async def stream_reponse(self, timeout=ATTENTE_MESSAGE_DUREE):
+        self.__duree_attente = timeout
+        try:
+            while self.__event_attente.is_set() is False:
+                valeur = await asyncio.wait_for(self.__stream_queue.get(), timeout)
+                if self.__reponse_annulee:
+                    raise Exception('Annulee')
+                if valeur is None:
+                    break
+                yield valeur
+        finally:
+            # Effacer la correlation immediatement
+            try:
+                await self.consumer.retirer_correlation(self.correlation_id)
+            except AttributeError:
+                pass  # OK - le consumer n'a jamais ete associe (e.g. correlation doublon)
+
+        self.__reponse_consommee = True
+
     async def recevoir_reponse(self, message: MessageWrapper):
         self.__reponse = message
-        self.__event_attente.set()
+        if self.__stream_queue is not None:
+            # Verifier si on a l'attachement "streaming=True", indique que le stream n'est pas termine
+            try:
+                await self.__stream_queue.put(message)
+                self.__creation = datetime.datetime.utcnow()  # Reset expiration
+                if message.parsed['__original']['attachements']['streaming'] is True:
+                    pass  # Ok, continuer le streaming
+            except (AttributeError, KeyError):
+                # Streaming done
+                self.__event_attente.set()
+                await self.__stream_queue.put(message)
+        else:
+            self.__event_attente.set()
 
     def est_expire(self):
         duree_message = datetime.timedelta(seconds=self.__duree_attente)
@@ -440,6 +475,38 @@ class MessageProducer:
             reponse = await correlation_reponse.attendre_reponse(timeout)
 
         return reponse
+
+    async def emettre_stream(self, message: Union[str, bytes], routing_key: str,
+                             exchange: Optional[str] = None, correlation_id: str = None,
+                             reply_to: str = None, timeout=ATTENTE_MESSAGE_DUREE):
+
+        if reply_to is None:
+            reply_to = await self.get_reply_q()
+
+        # Bug - si un message avec meme contenu est emis plusieurs fois durant la meme seconde,
+        #       la correlation echoue (reponses des duplications sont perdues).
+        #       Ajouter le compteur de messages pour rendre unique pour ce producer.
+        if correlation_id is None:
+            # correlation_id = str(uuid4())
+            correlation_id = '%d/%s' % (self._message_number, str(uuid4()))
+        else:
+            correlation_id = '%d/%s' % (self._message_number, correlation_id)
+
+        self._message_number += 1  # Incrementer compteur
+
+        # Conserver reference a la correlation
+        correlation_reponse = CorrelationReponse(correlation_id, stream=True)
+        semaphore = self._module_messages.get_reply_consumer().semaphore_correlations
+        # Utiliser semaphore pour limiter le nombre de requetes en attente simultanement
+        async with semaphore:
+            await self._module_messages.get_reply_consumer().ajouter_attendre_reponse(correlation_reponse)
+
+            # Emettre le message
+            await self.emettre(message, routing_key, exchange, correlation_id, reply_to)
+
+            # Attendre la reponse. raises TimeoutError
+            async for chunk in correlation_reponse.stream_reponse(timeout):
+                yield chunk
 
     async def run_async(self):
         self.__logger.info("Demarrage run_async producer")
@@ -574,6 +641,39 @@ class MessageProducerFormatteur(MessageProducer):
                                                   exchange=exchange, correlation_id=correlation_id, reply_to=reply_to,
                                                   timeout=timeout)
             return reponse
+
+    async def executer_commande_stream(self, commande: dict, domaine: str, action: str, exchange: str,
+                                       partition: Optional[str] = None,
+                                       reply_to=None, noformat=False, timeout=30,
+                                       attachements: Optional[dict] = None, kind=Constantes.KIND_COMMANDE) -> Optional[MessageWrapper]:
+
+        if noformat is True:
+            message = commande
+            uuid_message = commande['id']
+        else:
+            # Signer le message
+            message, uuid_message = self.__formatteur_messages.signer_message(
+                kind, commande, domaine, action=action, partition=partition)
+
+        if attachements is not None:
+            message['attachements'] = attachements
+
+        correlation_id = str(uuid_message)
+
+        rk = ['commande', domaine]
+        if partition is not None:
+            rk.append(partition)
+        rk.append(action)
+
+        message_bytes = json.dumps(message)
+
+        async for chunk in self.emettre_stream(
+                message_bytes, '.'.join(rk),
+                exchange=exchange, correlation_id=correlation_id, reply_to=reply_to,
+                timeout=timeout):
+            yield chunk
+
+        pass  # Done
 
     async def executer_requete(self, requete: dict, domaine: str, action: str, exchange: str,
                                partition: Optional[str] = None, version=1,
@@ -788,9 +888,7 @@ class MessageConsumer:
             if correlation_id is not None:
                 try:
                     corr_reponse = self._correlation_reponse[correlation_id]
-                    del self._correlation_reponse[correlation_id]  # Cleanup
-                    # if not self._event_correlation_recu.is_set():
-                    #     self._event_correlation_recu.set()
+                    #del self._correlation_reponse[correlation_id]  # Cleanup
                     await corr_reponse.recevoir_reponse(message)
                     return  # Termine
                 except KeyError:
