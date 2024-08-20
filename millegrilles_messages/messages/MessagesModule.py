@@ -314,9 +314,10 @@ class MessagePending:
 
 class CorrelationReponse:
 
-    def __init__(self, correlation_id: str, stream=False):
+    def __init__(self, correlation_id: str, stream=False, callback=None):
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.correlation_id = correlation_id
+        self.__callback = callback
 
         self.__creation = datetime.datetime.utcnow()
         self.__duree_attente = ATTENTE_MESSAGE_DUREE
@@ -380,6 +381,15 @@ class CorrelationReponse:
                 # Streaming done
                 self.__event_attente.set()
                 await self.__stream_queue.put(message)
+        elif self.__callback is not None:
+            try:
+                await self.__callback(self.correlation_id, message)
+                self.__creation = datetime.datetime.utcnow()  # Reset expiration
+                if message.original['attachements']['streaming'] is True:
+                    pass  # Ok, continuer le streaming
+            except (AttributeError, KeyError, TypeError):
+                # Streaming done
+                self.__event_attente.set()
         else:
             self.__event_attente.set()
 
@@ -475,6 +485,13 @@ class MessageProducer:
             reponse = await correlation_reponse.attendre_reponse(timeout)
 
         return reponse
+
+    async def ajouter_correlation_callback(self, correlation_id: str, callback):
+        correlation_reponse = CorrelationReponse(correlation_id, callback=callback)
+        semaphore = self._module_messages.get_reply_consumer().semaphore_correlations
+        # Utiliser semaphore pour limiter le nombre de requetes en attente simultanement
+        async with semaphore:
+            await self._module_messages.get_reply_consumer().ajouter_attendre_reponse(correlation_reponse)
 
     async def emettre_stream(self, message: Union[str, bytes], routing_key: str,
                              exchange: Optional[str] = None, correlation_id: str = None,
