@@ -244,13 +244,13 @@ class FormatteurMessageMilleGrilles:
 
     async def chiffrer_message(
             self, cles_chiffrage: list[EnveloppeCertificat], kind: int, message: dict, domaine: str = None,
-            action: str = None, partition: str = None) -> (dict, str):
+            action: str = None, partition: str = None, cle_secrete: bytes = None) -> (dict, str):
 
         if self.__enveloppe_ca is None:
             raise Exception("Enveloppe CA non chargee")
 
         # Importer CipherMgs4 ici pour eviter une reference circulaire
-        from millegrilles_messages.chiffrage.Mgs4 import CipherMgs4
+        from millegrilles_messages.chiffrage.Mgs4 import CipherMgs4, CipherMgs4WithSecret
 
         origine = self.__idmg
 
@@ -258,30 +258,37 @@ class FormatteurMessageMilleGrilles:
         contenu = gzip.compress(contenu)
 
         # Chiffrer et compresser le contenu
-        public_x25519 = self.__enveloppe_ca.get_public_x25519()
-        cipher = CipherMgs4(public_x25519)
+        nouvelle_cle = cle_secrete is None
+        if nouvelle_cle:
+            public_x25519 = self.__enveloppe_ca.get_public_x25519()
+            cipher = CipherMgs4(public_x25519)
+            cle_secrete = cipher.cle_secrete
+        else:
+            cipher = CipherMgs4WithSecret(cle_secrete)
+
         contenu = cipher.update(contenu)
         contenu += cipher.finalize()
-        meta_dechiffrage = cipher.get_info_dechiffrage(cles_chiffrage)
-
-        cle_secrete = cipher.cle_secrete
-        domaines_signature = SignatureDomaines.signer_domaines(
-            cle_secrete, [domaine], meta_dechiffrage['cle'][1:])
+        if nouvelle_cle:
+            meta_dechiffrage = cipher.get_info_dechiffrage(cles_chiffrage)
+            domaines_signature = SignatureDomaines.signer_domaines(
+                cle_secrete, [domaine], meta_dechiffrage['cle'][1:])
+            domaines_signature_dict = domaines_signature.to_dict()
+        else:
+            domaines_signature_dict = None
+            meta_dechiffrage = None
 
         contenu = multibase.encode('base64', contenu).decode('utf-8')[1:]  # Retirer 'm' multibase, on veut juste base64 no pad
 
-        cles_chiffres = meta_dechiffrage['cles']
-        #cles_chiffres = dict()
-        #for k,v in meta_dechiffrage['cles'].items():
-        #    cles_chiffres[k] = v[1:]  # Retirer m multibase
-
         dechiffrage = {
             'format': 'mgs4',
-            'cles': cles_chiffres,
-            # 'nonce': meta_dechiffrage['header'][1:],  # Retirer m multibase
-            'nonce': meta_dechiffrage['header'],
-            'signature': domaines_signature.to_dict()
+            'nonce': multibase.encode('base64', cipher.header).decode('utf-8')[1:],
+            'compression': 'gzip',
         }
+
+        if meta_dechiffrage:
+            dechiffrage['cles'] = meta_dechiffrage['cles']
+        if domaines_signature_dict:
+            dechiffrage['signature']: domaines_signature_dict
 
         payload = {
             'dechiffrage': dechiffrage,

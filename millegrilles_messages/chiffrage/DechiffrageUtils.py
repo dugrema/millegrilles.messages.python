@@ -1,5 +1,8 @@
+import binascii
 import gzip
 import json
+import zlib
+
 import multibase
 
 from typing import Union
@@ -23,21 +26,38 @@ def dechiffrer_document(clecert: CleCertificat, cle_secrete: str, document_chiff
     return contenu_json
 
 
-def dechiffrer_document_secrete(cle_secrete: bytes, document_chiffre: dict):
+def dechiffrer_bytes_secrete(cle_secrete: bytes, document_chiffre: dict) -> bytes:
     decipher = get_decipher_cle_secrete(cle_secrete, document_chiffre)
 
-    contenu_chiffre = document_chiffre['data_chiffre']
+    contenu_chiffre = document_chiffre.get('ciphertext') or document_chiffre['data_chiffre']
     if isinstance(contenu_chiffre, str):
         if document_chiffre.get('nonce'):
-            # Nouveau format, ajouter 'm' pour multibase
-            contenu_chiffre = 'm' + contenu_chiffre
-        contenu_chiffre = multibase.decode(contenu_chiffre)
+            if contenu_chiffre.endswith('='):
+                contenu_chiffre = binascii.a2b_base64(contenu_chiffre)
+            else:
+                # Nouveau format, ajouter 'm' pour multibase
+                contenu_chiffre = 'm' + contenu_chiffre
+                contenu_chiffre = multibase.decode(contenu_chiffre)
+        else:
+            contenu_chiffre = multibase.decode(contenu_chiffre)
+
 
     contenu_dechiffre = decipher.update(contenu_chiffre)
     contenu_dechiffre += decipher.finalize()
 
-    contenu_json = json.loads(contenu_dechiffre)
+    try:
+        compression = document_chiffre['compression']
+        if compression == 'deflate':
+            contenu_dechiffre = zlib.decompress(contenu_dechiffre)
+    except KeyError:
+        pass
 
+    return contenu_dechiffre
+
+
+def dechiffrer_document_secrete(cle_secrete: bytes, document_chiffre: dict):
+    contenu_dechiffre = dechiffrer_bytes_secrete(cle_secrete, document_chiffre)
+    contenu_json = json.loads(contenu_dechiffre)
     return contenu_json
 
 
