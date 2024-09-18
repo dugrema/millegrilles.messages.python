@@ -29,18 +29,22 @@ def dechiffrer_document(clecert: CleCertificat, cle_secrete: str, document_chiff
 def dechiffrer_bytes_secrete(cle_secrete: bytes, document_chiffre: dict) -> bytes:
     decipher = get_decipher_cle_secrete(cle_secrete, document_chiffre)
 
-    contenu_chiffre = document_chiffre.get('ciphertext') or document_chiffre['data_chiffre']
-    if isinstance(contenu_chiffre, str):
-        if document_chiffre.get('nonce'):
-            if contenu_chiffre.endswith('='):
-                contenu_chiffre = binascii.a2b_base64(contenu_chiffre)
+    try:
+        # Try to get explicit base64 (with padding) field
+        contenu_chiffre = binascii.a2b_base64(document_chiffre['ciphertext_base64'])
+    except KeyError:
+        # Detect format
+        contenu_chiffre = document_chiffre['data_chiffre']
+        if isinstance(contenu_chiffre, str):
+            if document_chiffre.get('nonce'):
+                if contenu_chiffre.endswith('='):
+                    contenu_chiffre = binascii.a2b_base64(contenu_chiffre)
+                else:
+                    # Nouveau format, ajouter 'm' pour multibase
+                    contenu_chiffre = 'm' + contenu_chiffre
+                    contenu_chiffre = multibase.decode(contenu_chiffre)
             else:
-                # Nouveau format, ajouter 'm' pour multibase
-                contenu_chiffre = 'm' + contenu_chiffre
                 contenu_chiffre = multibase.decode(contenu_chiffre)
-        else:
-            contenu_chiffre = multibase.decode(contenu_chiffre)
-
 
     contenu_dechiffre = decipher.update(contenu_chiffre)
     contenu_dechiffre += decipher.finalize()

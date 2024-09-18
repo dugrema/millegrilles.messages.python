@@ -1,5 +1,8 @@
+import binascii
+
 import multibase
 import json
+import zlib
 
 from typing import Optional, Union
 
@@ -242,3 +245,32 @@ def chiffrer_document_nouveau(ca: EnveloppeCertificat, doc: dict) -> (CipherMgs4
         'nonce': nonce.decode('utf-8'),
         'format': 'mgs4',
     }
+
+
+def chiffrer_mgs4_bytes_secrete(cle_secrete: bytes, cleartext: Union[bytes, str]) -> (CipherMgs4, dict):
+    cipher = CipherMgs4WithSecret(cle_secrete)
+
+    if isinstance(cleartext, str):
+        # Convert to bytes
+        cleartext = cleartext.encode('utf-8')
+
+    compression = None
+
+    if len(cleartext) > 200:
+        # Compress with deflate
+        compression = 'deflate'
+        cleartext = zlib.compress(cleartext)
+
+    ciphertext = cipher.update(cleartext)
+    ciphertext += cipher.finalize()
+    nonce = cipher.header
+
+    cipherinfo = {
+        'ciphertext_base64': binascii.b2a_base64(ciphertext, newline=False).decode('utf-8'),
+        'nonce': binascii.b2a_base64(nonce, newline=False).decode('utf-8'),
+        'format': 'mgs4',
+    }
+    if compression:
+        cipherinfo['compression'] = compression
+
+    return cipher, cipherinfo
