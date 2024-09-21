@@ -65,10 +65,12 @@ class RestaurateurArchives:
             self.__logger.warning("Chiffrage annule, CA introuvable (path %s)", path_ca)
             return
 
+        if self.__config.key_pem_path is None:
+            raise Exception("The key PEM must be configurer with env variable KEY_PEM")
         clecert = CleCertificat.from_files(self.__config.key_pem_path, self.__config.cert_pem_path)
 
         signateur = SignateurTransactionSimple(clecert)
-        self.__formatteur = FormatteurMessageMilleGrilles(self.__enveloppe_ca.idmg, signateur)
+        self.__formatteur = FormatteurMessageMilleGrilles(self.__enveloppe_ca.idmg, signateur, self.__enveloppe_ca)
         self.__validateur_certificats = ValidateurCertificatCache(self.__enveloppe_ca)
         self.__validateur_messages = ValidateurMessage(self.__validateur_certificats)
 
