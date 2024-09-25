@@ -1,4 +1,5 @@
 # Template pour intake de jobs via Q
+import asyncio
 import logging
 
 from typing import Optional
@@ -35,8 +36,12 @@ class IntakeHandler:
         while not self._stop_event.is_set():
             try:
                 if self.__event_intake.is_set() is False:
+
                     await wait(
-                        [self._stop_event.wait(), self.__event_intake.wait()],
+                        [
+                            asyncio.create_task(self._stop_event.wait()),
+                            asyncio.create_task(self.__event_intake.wait())
+                        ],
                         timeout=self._timeout_cycle, return_when=FIRST_COMPLETED
                     )
                     self.__event_intake.set()
