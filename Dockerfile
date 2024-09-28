@@ -18,7 +18,8 @@ ENTRYPOINT ["python3"]
 #    PIP_NO_INDEX=true
 # Note: faire rm -r $BUILD_FOLDER/pip a la fin du RUN
 
-RUN pip3 install --no-cache-dir -r $BUILD_FOLDER/requirements.txt && \
+RUN pip3 install setuptools && \
+    pip3 install --no-cache-dir -r $BUILD_FOLDER/requirements.txt && \
     python3 ./setup.py install && \
     pip3 install --force-reinstall ./fixes/oscrypto_130_fix_d5f3437ed24257895ae1edd9e503cfb352e635a8.zip
 
