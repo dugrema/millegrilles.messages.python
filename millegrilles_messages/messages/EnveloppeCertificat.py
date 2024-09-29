@@ -18,7 +18,7 @@ import multihash
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.x509 import load_pem_x509_certificate, ObjectIdentifier, NameOID, SubjectKeyIdentifier, \
-    AuthorityKeyIdentifier, BasicConstraints
+    AuthorityKeyIdentifier, BasicConstraints, load_der_x509_certificate
 from cryptography.x509.base import Certificate
 from cryptography.x509.extensions import ExtensionNotFound
 from multihash.constants import HASH_CODES
@@ -60,6 +60,13 @@ class EnveloppeCertificat:
         elif isinstance(pem, list):
             pem = '\n'.join(pem).encode('utf-8')
         certificat = load_pem_x509_certificate(pem, backend=default_backend())
+        enveloppe = EnveloppeCertificat(certificat, pem)
+        return enveloppe
+
+    @staticmethod
+    def from_der(der: bytes):
+        certificat = load_der_x509_certificate(der, backend=default_backend())
+        pem = str(certificat.public_bytes(serialization.Encoding.PEM), 'utf-8')
         enveloppe = EnveloppeCertificat(certificat, pem)
         return enveloppe
 
