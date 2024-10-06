@@ -7,6 +7,7 @@ from typing import Optional, Union
 
 from docker import DockerClient
 from docker.errors import APIError, NotFound
+from docker.models.services import Service
 from docker.types import ServiceMode
 
 
@@ -39,7 +40,7 @@ class CommandeListerServices(CommandeDocker):
         liste = docker_client.services.list(filters=self.__filters)
         self.callback(liste)
 
-    async def get_liste(self) -> list:
+    async def get_liste(self) -> list[Service]:
         resultat = await self.attendre()
         liste = resultat['args'][0]
         return liste
