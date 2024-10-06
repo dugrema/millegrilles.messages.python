@@ -1,17 +1,35 @@
 # Parsing de la configuration d'un service/container
 import logging
+import urllib.parse
 from typing import Optional, Any
+from urllib.parse import urlparse
 
 from docker.types import NetworkAttachmentConfig, Resources, RestartPolicy, ServiceMode, EndpointSpec, Mount, \
     SecretReference, ConfigReference
 
 
-class Archive:
+class WebApplicationConfiguration:
 
     def __init__(self, element: dict):
         self.location = element['location']
         self.digest = element['digest']
         self.src = element['src']
+
+    @property
+    def module(self):
+        return self.location.split(':')[0]
+
+    @property
+    def path(self):
+        return self.location.split(':')[1]
+
+    @property
+    def app_url(self) -> urllib.parse.ParseResult:
+        return urlparse(self.src)
+
+    @property
+    def filename(self):
+        return self.app_url.path.split('/')[-1]
 
 
 class ConfigurationService:
@@ -40,10 +58,10 @@ class ConfigurationService:
         self.__resources: Optional[Resources] = None
         self.__mode: Optional[ServiceMode] = None
         self.__restart_policy: Optional[RestartPolicy] = None
-        self.__archives: Optional[list[Archive]] = None
+        self.__archives: Optional[list[WebApplicationConfiguration]] = None
 
     @property
-    def archives(self) -> Optional[list[Archive]]:
+    def archives(self) -> Optional[list[WebApplicationConfiguration]]:
         return self.__archives
 
     def parse(self):
@@ -315,13 +333,13 @@ class ConfigurationService:
 
         self.__endpoint_spec = EndpointSpec(mode=mode, ports=ports)
 
-    def _parse_archives(self) -> Optional[list[Archive]]:
+    def _parse_archives(self) -> Optional[list[WebApplicationConfiguration]]:
         try:
             archives_elements: list = self.__configuration['archives']
         except KeyError:
             return
 
-        self.__archives = [Archive(a) for a in archives_elements]
+        self.__archives = [WebApplicationConfiguration(a) for a in archives_elements]
 
     def generer_docker_config(self) -> dict:
         config = {
