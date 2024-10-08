@@ -761,6 +761,10 @@ class MessageProducerFormatteur(MessageProducer):
         routing_key = reply_to
         await self.emettre(message_bytes, routing_key, correlation_id=correlation_id, reply_to=reply_to)
 
+    async def repondre_chiffre(self, enveloppe: EnveloppeCertificat, reponse: dict, reply_to, correlation_id, attachements: Optional[dict] = None):
+        reponse_chiffree, message_id = await self.chiffrer([enveloppe], Constantes.KIND_REPONSE_CHIFFREE, reponse)
+        await self.repondre(reponse_chiffree, reply_to, correlation_id, noformat=True, attachements=attachements)
+
     @property
     def enveloppe_ca(self) -> EnveloppeCertificat:
         return self.__enveloppe_ca
