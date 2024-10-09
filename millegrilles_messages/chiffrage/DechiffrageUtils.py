@@ -53,6 +53,10 @@ def dechiffrer_bytes_secrete(cle_secrete: bytes, document_chiffre: dict) -> byte
         compression = document_chiffre['compression']
         if compression == 'deflate':
             contenu_dechiffre = zlib.decompress(contenu_dechiffre)
+        elif compression in ['gz', 'gzip']:
+            contenu_dechiffre = gzip.decompress(contenu_dechiffre)
+        else:
+            raise Exception('Unsupported compression %s' % compression)
     except KeyError:
         pass
 
