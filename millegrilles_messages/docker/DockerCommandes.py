@@ -486,6 +486,7 @@ class CommandeGetImage(CommandeDocker):
                 await asyncio.wait_for(self._event_asyncio.wait(), 15)
             except asyncio.TimeoutError:
                 pass
+        print("Downloading %s status: Done" % self.__nom_image)
 
 class PullStatus:
 
