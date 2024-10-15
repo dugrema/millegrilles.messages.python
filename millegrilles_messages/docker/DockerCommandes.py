@@ -1,7 +1,9 @@
+import asyncio
 import base64
 import docker
 import json
 import logging
+import math
 
 from typing import Optional, Union
 
@@ -393,6 +395,7 @@ class CommandeGetImage(CommandeDocker):
         super().__init__(callback, aio)
         self.__nom_image = nom_image
         self.__pull = pull
+        self.pull_status = PullStatus()
 
         if pull is True:
             self.facteur_throttle = 1.0
@@ -429,7 +432,9 @@ class CommandeGetImage(CommandeDocker):
                 image_repository = nom_image
 
             try:
-                reponse = docker_client.images.pull(image_repository, tag)
+                # reponse = docker_client.images.pull(image_repository, tag)
+                self.download_package(docker_client, image_repository, tag)
+                reponse = docker_client.images.get(self.__nom_image)
                 self.callback({'id': reponse.id, 'tags': reponse.tags})
                 return
             except NotFound:
@@ -440,6 +445,84 @@ class CommandeGetImage(CommandeDocker):
     async def get_resultat(self) -> dict:
         resultat = await self.attendre()
         return resultat['args'][0]
+
+    def download_package(self, client: docker.client.DockerClient, repository: str, tag: Optional[str] = None):
+        pull_generator = client.api.pull(repository, tag, stream=True)
+        layers = dict()
+        for line in pull_generator:
+            value = json.loads(line)
+
+            try:
+                status = value['status']
+                layer_id = value['id']
+            except KeyError:
+                # Other status, like digest (all done)
+                continue
+
+            try:
+                progress_detail = value['progressDetail']
+            except KeyError:
+                progress_detail = None
+
+            if status == 'Downloading':
+                try:
+                    layers[layer_id].update(progress_detail)
+                except KeyError:
+                    layers[layer_id] = progress_detail
+            elif status == 'Pull complete':
+                layers[layer_id]['complete'] = True
+            elif status == 'Already exists':
+                layers[layer_id] = {'complete': True}
+            elif status == 'Pulling fs layer':
+                layers[layer_id] = {'complete': False, 'current': 0}
+
+            self.pull_status.update(layers)
+
+    async def progress_coro(self):
+        while self._event_asyncio.is_set() is False:
+            status = self.pull_status.status_str()
+            print("Downloading %s status: %s" % (self.__nom_image, status))
+            try:
+                await asyncio.wait_for(self._event_asyncio.wait(), 15)
+            except asyncio.TimeoutError:
+                pass
+
+class PullStatus:
+
+    def __init__(self):
+        self.total_size = 0
+        self.current_size = 0
+        self.incomplete = 0
+        self.all_totals_known = False
+        self.pct = 0
+
+    def update(self, layers: dict[str, dict]):
+        self.all_totals_known = True
+        self.current_size = 0
+        self.total_size = 0
+        self.incomplete = 0
+        for key, value in layers.items():
+            if value.get('complete') is not True:
+                self.incomplete = self.incomplete + 1
+            try:
+                self.total_size = self.total_size + value['total']
+            except KeyError:
+                if value.get('complete') is not True:
+                    self.all_totals_known = False
+            try:
+                self.current_size = self.current_size + value['current']
+            except KeyError:
+                pass
+
+        if self.all_totals_known and self.total_size > 0:
+            # Calculer pct
+            self.pct = math.floor(self.current_size / self.total_size * 100)
+
+    def status_str(self) -> str:
+        if self.pct:
+            return "Downloading: %d%% (%d/%d bytes), left to process: %d" % (self.pct, self.current_size, self.total_size, self.incomplete)
+        else:
+            return "Downloading: %d/%d+ bytes, left to process: %d" % (self.current_size, self.total_size, self.incomplete)
 
 
 class CommandeEnsureNodeLabels(CommandeDocker):

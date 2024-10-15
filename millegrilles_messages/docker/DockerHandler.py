@@ -76,7 +76,7 @@ class CommandeDocker:
         self.callback = callback
 
         self.__event_loop: Optional[AbstractEventLoop] = None
-        self.__event_asyncio: Optional[EventAsyncio] = None
+        self._event_asyncio: Optional[EventAsyncio] = None
         self.__resultat = None
         self.__is_error = False
         self.__exception = None
@@ -98,16 +98,16 @@ class CommandeDocker:
 
     def __callback_asyncio(self, *args, **argv):
         self.__resultat = {'args': args, 'argv': argv}
-        self.__event_loop.call_soon_threadsafe(self.__event_asyncio.set)
+        self.__event_loop.call_soon_threadsafe(self._event_asyncio.set)
 
     def __initasync(self):
         self.__event_loop = asyncio.get_event_loop()
-        self.__event_asyncio = EventAsyncio()
+        self._event_asyncio = EventAsyncio()
         self.callback = self.__callback_asyncio
 
     async def attendre(self):
-        if self.__event_asyncio is not None:
-            await self.__event_asyncio.wait()
+        if self._event_asyncio is not None:
+            await self._event_asyncio.wait()
 
         if self.__is_error:
             raise self.__exception
