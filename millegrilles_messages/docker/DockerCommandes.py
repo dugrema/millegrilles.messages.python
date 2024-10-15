@@ -477,6 +477,7 @@ class CommandeGetImage(CommandeDocker):
                 layers[layer_id] = {'complete': False, 'current': 0}
 
             self.pull_status.update(layers)
+        self.pull_status.set_done()
 
     async def progress_coro(self):
         while self._event_asyncio.is_set() is False:
@@ -496,6 +497,17 @@ class PullStatus:
         self.incomplete = 0
         self.all_totals_known = False
         self.pct = 0
+        self.done = False
+
+    def __dict__(self) -> dict:
+        return {
+            'total_size': self.total_size,
+            'current_size': self.current_size,
+            'incomplete': self.incomplete,
+            'all_totals_known': self.all_totals_known,
+            'pct': self.pct,
+            'done': self.done,
+        }
 
     def update(self, layers: dict[str, dict]):
         self.all_totals_known = True
@@ -518,6 +530,13 @@ class PullStatus:
         if self.all_totals_known and self.total_size > 0:
             # Calculer pct
             self.pct = math.floor(self.current_size / self.total_size * 100)
+
+    def set_done(self):
+        self.current_size = self.total_size
+        self.incomplete = 0
+        self.all_totals_known = True
+        self.pct = 100
+        self.done = True
 
     def status_str(self) -> str:
         if self.pct:
