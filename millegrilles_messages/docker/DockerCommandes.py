@@ -5,7 +5,7 @@ import json
 import logging
 import math
 
-from typing import Optional, Union
+from typing import Optional, Union, Callable, Coroutine, Any
 
 from docker import DockerClient
 from docker.errors import APIError, NotFound
@@ -389,10 +389,69 @@ class CommandeCreerNetworkOverlay(CommandeDocker):
         self.callback()
 
 
+class PullStatus:
+
+    def __init__(self):
+        self.total_size = 0
+        self.current_size = 0
+        self.incomplete = 0
+        self.all_totals_known = False
+        self.pct = 0
+        self.done = False
+
+    def __dict__(self) -> dict:
+        return {
+            'total_size': self.total_size,
+            'current_size': self.current_size,
+            'incomplete': self.incomplete,
+            'all_totals_known': self.all_totals_known,
+            'pct': self.pct,
+            'done': self.done,
+        }
+
+    def update(self, layers: dict[str, dict]):
+        self.all_totals_known = True
+        self.current_size = 0
+        self.total_size = 0
+        self.incomplete = 0
+        for key, value in layers.items():
+            if value.get('complete') is not True:
+                self.incomplete = self.incomplete + 1
+            try:
+                self.total_size = self.total_size + value['total']
+            except KeyError:
+                if value.get('complete') is not True:
+                    self.all_totals_known = False
+            try:
+                self.current_size = self.current_size + value['current']
+            except KeyError:
+                pass
+
+        if self.all_totals_known and self.total_size > 0:
+            # Calculer pct
+            self.pct = math.floor(self.current_size / self.total_size * 100)
+
+    def set_done(self):
+        self.current_size = self.total_size
+        self.incomplete = 0
+        self.all_totals_known = True
+        self.pct = 100
+        self.done = True
+
+    def status_str(self) -> str:
+        if self.done:
+            return "Downloading: DONE"
+        if self.pct:
+            return "Downloading: %d%% (%d/%d bytes), left to process: %d" % (self.pct, self.current_size, self.total_size, self.incomplete)
+        else:
+            return "Downloading: %d/%d+ bytes, left to process: %d" % (self.current_size, self.total_size, self.incomplete)
+
+
 class CommandeGetImage(CommandeDocker):
 
     def __init__(self, nom_image: str, pull=False, callback=None, aio=False):
         super().__init__(callback, aio)
+        self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__nom_image = nom_image
         self.__pull = pull
         self.pull_status = PullStatus()
@@ -479,70 +538,25 @@ class CommandeGetImage(CommandeDocker):
             self.pull_status.update(layers)
         self.pull_status.set_done()
 
-    async def progress_coro(self):
+    async def progress_coro(self, cb: Callable[[PullStatus], Coroutine[Any, Any, None]]):
         while self._event_asyncio.is_set() is False:
             status = self.pull_status.status_str()
-            print("Downloading %s status: %s" % (self.__nom_image, status))
+            if cb:
+                try:
+                    await cb(self.pull_status)
+                except:
+                    self.__logger.exception("CommandeGetImage.progress_coro Error running callback")
+            self.__logger.info("Downloading %s status: %s" % (self.__nom_image, status))
             try:
-                await asyncio.wait_for(self._event_asyncio.wait(), 15)
+                await asyncio.wait_for(self._event_asyncio.wait(), 3)
             except asyncio.TimeoutError:
                 pass
-        print("Downloading %s status: Done" % self.__nom_image)
-
-class PullStatus:
-
-    def __init__(self):
-        self.total_size = 0
-        self.current_size = 0
-        self.incomplete = 0
-        self.all_totals_known = False
-        self.pct = 0
-        self.done = False
-
-    def __dict__(self) -> dict:
-        return {
-            'total_size': self.total_size,
-            'current_size': self.current_size,
-            'incomplete': self.incomplete,
-            'all_totals_known': self.all_totals_known,
-            'pct': self.pct,
-            'done': self.done,
-        }
-
-    def update(self, layers: dict[str, dict]):
-        self.all_totals_known = True
-        self.current_size = 0
-        self.total_size = 0
-        self.incomplete = 0
-        for key, value in layers.items():
-            if value.get('complete') is not True:
-                self.incomplete = self.incomplete + 1
+        self.__logger.info("Downloading %s status: Done" % self.__nom_image)
+        if cb:
             try:
-                self.total_size = self.total_size + value['total']
-            except KeyError:
-                if value.get('complete') is not True:
-                    self.all_totals_known = False
-            try:
-                self.current_size = self.current_size + value['current']
-            except KeyError:
-                pass
-
-        if self.all_totals_known and self.total_size > 0:
-            # Calculer pct
-            self.pct = math.floor(self.current_size / self.total_size * 100)
-
-    def set_done(self):
-        self.current_size = self.total_size
-        self.incomplete = 0
-        self.all_totals_known = True
-        self.pct = 100
-        self.done = True
-
-    def status_str(self) -> str:
-        if self.pct:
-            return "Downloading: %d%% (%d/%d bytes), left to process: %d" % (self.pct, self.current_size, self.total_size, self.incomplete)
-        else:
-            return "Downloading: %d/%d+ bytes, left to process: %d" % (self.current_size, self.total_size, self.incomplete)
+                await cb(self.pull_status)
+            except:
+                self.__logger.exception("CommandeGetImage.progress_coro Error running callback")
 
 
 class CommandeEnsureNodeLabels(CommandeDocker):
