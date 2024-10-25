@@ -126,3 +126,13 @@ def stream_path_to_tar(in_path: pathlib.Path, out_fp) -> int:
         total_size += len(s)
 
     return total_size
+
+async def stream_path_to_tar_async(in_path: pathlib.Path, out_fp) -> int:
+    total_size = 0
+    streaming_fp = FileStream()
+    for i in stream_build_tar(in_path, streaming_fp):
+        s = streaming_fp.pop()
+        await out_fp.write(s)
+        total_size += len(s)
+
+    return total_size
