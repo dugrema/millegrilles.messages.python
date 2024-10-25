@@ -723,3 +723,26 @@ class CommandeRunContainer(CommandeDocker):
     async def get_resultat(self) -> dict:
         resultat = await self.attendre()
         return resultat['args'][0]
+
+
+class CommandeReloadNginx(CommandeDocker):
+    """
+    Run une image dans un nouveau container
+    """
+
+    def __init__(self):
+        super().__init__(callback=None, aio=True)
+        self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
+        self.facteur_throttle = 1.0
+
+    def executer(self, docker_client: DockerClient, attendre=True):
+        nginx_container = docker_client.containers.list(filters={"name": "nginx"})
+
+        for container in nginx_container:
+            container.exec_run("nginx -s reload")
+
+        self.callback(True)
+
+    async def get_resultat(self) -> dict:
+        resultat = await self.attendre()
+        return resultat['args'][0]
