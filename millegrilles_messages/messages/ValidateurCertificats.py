@@ -54,17 +54,21 @@ class ValidateurCertificat:
     Validateur de base. Supporte uniquement la validation de chaine de certificats completes (en parametre).
     """
 
-    def __init__(self, enveloppe_ca: EnveloppeCertificat):
+    def __init__(self, enveloppe_ca: Optional[EnveloppeCertificat]):
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__enveloppe_ca = enveloppe_ca
 
-        self.__idmg = enveloppe_ca.idmg
-        self.__store = OpenSSL.crypto.X509Store()
-
-        certificat_millegrille_pem = enveloppe_ca.certificat_pem
-        self.__root_cert_openssl = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM,
-                                                                   certificat_millegrille_pem)
-        self.__store.add_cert(self.__root_cert_openssl)
+        if enveloppe_ca:
+            self.__idmg = enveloppe_ca.idmg
+            certificat_millegrille_pem = enveloppe_ca.certificat_pem
+            self.__root_cert_openssl = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM,
+                                                                       certificat_millegrille_pem)
+            self.__store = OpenSSL.crypto.X509Store()
+            self.__store.add_cert(self.__root_cert_openssl)
+        else:
+            self.__idmg = None
+            self.__root_cert_openssl = None
+            self.__store = None
 
         # Producer, permet de faire des requetes pour certificats inconnus
         self.__producer_messages = None
@@ -138,17 +142,20 @@ class ValidateurCertificat:
         return True
 
     def __preparer_store(self, date_reference: datetime.datetime = None, ca_cert_pem: str = None) -> OpenSSL.crypto.X509Store:
-        if date_reference is None:
+        if date_reference is None and ca_cert_pem is None:
             return self.__store
         else:
             # Creer store avec date de validation differente
             store = OpenSSL.crypto.X509Store()
             if ca_cert_pem:
                 ca_cert = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM, ca_cert_pem.encode('utf-8'))
-            else:
+            elif self.__root_cert_openssl:
                 ca_cert = self.__root_cert_openssl
+            else:
+                raise Exception('No CA cert availabel')
             store.add_cert(ca_cert)
-            store.set_time(date_reference)
+            if date_reference:
+                store.set_time(date_reference)
             return store
 
     async def fetch_certificat(self, fingerprint: str):
@@ -192,7 +199,7 @@ class ValidateurCertificat:
 
 class ValidateurCertificatCache(ValidateurCertificat):
 
-    def __init__(self, enveloppe_ca: EnveloppeCertificat, cache_ttl_secs=CACHE_TTL_SECS):
+    def __init__(self, enveloppe_ca: Optional[EnveloppeCertificat], cache_ttl_secs=CACHE_TTL_SECS):
         super().__init__(enveloppe_ca)
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__cache_ttl_secs = cache_ttl_secs
