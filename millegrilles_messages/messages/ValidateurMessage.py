@@ -10,7 +10,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from typing import Union
 
 from millegrilles_messages.messages import Constantes
-from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
+from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat, verifier_idmg
 from millegrilles_messages.messages.Hachage import ErreurHachage
 from millegrilles_messages.messages.ValidateurCertificats import ValidateurCertificatCache, CertificatInconnu
 
@@ -96,6 +96,9 @@ class ValidateurMessage:
             enveloppe_certificat = await self.__validateur_certificats.valider_fingerprint(
                 pubkey, date_reference=date_reference, ca_cert_pem=certificat_ca_pem, nofetch=True)
             if enveloppe_certificat:
+                if certificat_ca_pem:
+                    # Valider que le IDMG du certificat correspond bien au CA
+                    verifier_idmg(enveloppe_certificat.idmg, certificat_ca_pem)  # Raises exception if mismatch
                 return enveloppe_certificat
         except CertificatInconnu:
             pass
@@ -108,6 +111,10 @@ class ValidateurMessage:
 
             enveloppe_certificat = await self.__validateur_certificats.valider(
                 certificats_inline, date_reference=date_reference, ca_cert_pem=certificat_ca_pem)
+
+            if certificat_ca_pem:
+                # Valider que le IDMG du certificat correspond bien au CA
+                verifier_idmg(enveloppe_certificat.idmg, certificat_ca_pem)  # Raises exception if mismatch
 
             # S'assurer que le certificat correspond au fingerprint
             fingerprint_charge = binascii.hexlify(enveloppe_certificat.get_public_key_bytes()).decode('utf-8')
