@@ -1,15 +1,9 @@
 import asyncio
 import logging
-import pika
-import ssl
 
-from typing import Optional
-
-from pika.adapters.asyncio_connection import AsyncioConnection
 from pika.exchange_type import ExchangeType
 
 from millegrilles_messages.bus.PikaBusConnection import MilleGrillesPikaBusConnection
-from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
 from millegrilles_messages.bus.BusContext import MilleGrillesBusContext
 
 CONST_CONNECTION_ATTEMTPS = 5

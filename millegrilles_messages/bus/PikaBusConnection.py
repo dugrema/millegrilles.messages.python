@@ -35,10 +35,6 @@ class MilleGrillesPikaBusConnection(StopListener):
     async def stop(self):
         self.__event_connection_stopping.set()
 
-    @property
-    def should_reconnect(self):
-        return self.__context.stopping is False
-
     async def run(self):
         self.__loop = asyncio.get_event_loop()
         await asyncio.gather(
