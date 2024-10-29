@@ -3,7 +3,7 @@ import logging
 import pika
 import ssl
 
-from typing import Optional
+from typing import Any, Awaitable, Optional, Callable
 
 from pika.adapters.asyncio_connection import AsyncioConnection
 from pika.channel import Channel
@@ -18,10 +18,13 @@ CONST_BLOCKED_CONNECTION_TIMEOUT = 20
 
 class MilleGrillesPikaBusConnection(StopListener):
 
-    def __init__(self, context: MilleGrillesBusContext):
+    def __init__(self, context: MilleGrillesBusContext,
+                 on_connect: Callable[[], Awaitable[None]], on_disconnect: Callable[[], Awaitable[None]]):
         super().__init__()
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__context = context
+        self.__on_connect_callback = on_connect
+        self.__on_disconnect_callback = on_disconnect
 
         self._connection: Optional[AsyncioConnection] = None
         self._channel: Optional[Channel] = None
@@ -31,6 +34,10 @@ class MilleGrillesPikaBusConnection(StopListener):
         self.__loop: Optional[asyncio.EventLoop] = None
 
         context.register_stop_listener(self)
+
+    @property
+    def connected(self):
+        return self._connection and self._connection.is_open
 
     async def stop(self):
         self.__event_connection_stopping.set()
@@ -71,13 +78,26 @@ class MilleGrillesPikaBusConnection(StopListener):
             heartbeat=CONST_HEARTBEAT,
             blocked_connection_timeout=CONST_BLOCKED_CONNECTION_TIMEOUT)
 
+        event = asyncio.Event()
         loop = asyncio.get_event_loop()
+        result = dict()
+        def on_connection_open(_unused_connection: AsyncioConnection):
+            loop.call_soon(event.set)
+
+        def on_connection_open_error(_unused_connection: AsyncioConnection, err: BaseException):
+            result['err'] = err
+            loop.call_soon(event.set)
+
         self._connection = AsyncioConnection(
             parameters,
             custom_ioloop=loop,
-            on_open_callback=self.on_connection_open,
-            on_open_error_callback=self.on_connection_open_error,
+            on_open_callback=on_connection_open,
+            on_open_error_callback=on_connection_open_error,
             on_close_callback=self.on_connection_closed)
+
+        await event.wait()
+        if result.get('err'):
+            raise result['err']
 
         self.__logger.debug("Connection adapter : %s", self._connection)
 
@@ -88,30 +108,6 @@ class MilleGrillesPikaBusConnection(StopListener):
             self.__logger.info('Closing connection')
             self._connection.close()
 
-    def on_connection_open(self, _unused_connection: AsyncioConnection):
-        """This method is called by pika once the connection to RabbitMQ has
-        been established. It passes the handle to the connection object in
-        case we need it, but in this case, we'll just mark it unused.
-
-        :param pika.adapters.asyncio_connection.AsyncioConnection _unused_connection:
-           The connection
-
-        """
-        self.__logger.info('Connection opened')
-        self.open_channel()
-
-    def on_connection_open_error(self, _unused_connection: AsyncioConnection, err: BaseException):
-        """This method is called by pika if the connection to RabbitMQ
-        can't be established.
-
-        :param pika.adapters.asyncio_connection.AsyncioConnection _unused_connection:
-           The connection
-        :param Exception err: The error
-
-        """
-        self.__logger.error('Connection open failed: %s', err)
-        self.reconnect()
-
     def on_connection_closed(self, _unused_connection: AsyncioConnection, reason: BaseException):
         """This method is invoked by pika when the connection to RabbitMQ is
         closed unexpectedly. Since it is unexpected, we will reconnect to
@@ -120,68 +116,65 @@ class MilleGrillesPikaBusConnection(StopListener):
         :param pika.adapters.asyncio_connection.AsyncioConnection _unused_connection: The closed connection obj
         :param Exception reason: exception representing reason for loss of
             connection.
-
         """
         self._channel = None
-        if self._closing:
-            self._connection.ioloop.stop()
-        else:
-            self.__logger.warning('Connection closed, reconnect necessary: %s', reason)
-            self.reconnect()
-
-    def reconnect(self):
-        """Will be invoked if the connection can't be opened or is
-        closed. Indicates that a reconnect is necessary then stops the
-        ioloop.
-
-        """
         self.__loop.call_soon(self.__event_connection_stopping.set())
 
-    def open_channel(self):
+    async def open_channel(self) -> Channel:
         """Open a new channel with RabbitMQ by issuing the Channel.Open RPC
         command. When RabbitMQ responds that the channel is open, the
         on_channel_open callback will be invoked by pika.
 
         """
         self.__logger.info('Creating a new channel')
-        self._connection.channel(on_open_callback=self.on_channel_open)
+        channel_dict = {}
+        event = asyncio.Event()
 
-    def on_channel_open(self, channel: Channel):
-        """This method is invoked by pika when the channel has been opened.
-        The channel object is passed in so we can make use of it.
+        loop = asyncio.get_event_loop()
+        def callback(new_channel: Channel):
+            channel_dict['channel'] = new_channel
+            loop.call_soon(event.set)
 
-        Since the channel is now open, we'll declare the exchange to use.
+        self._connection.channel(on_open_callback=callback)
+        await asyncio.wait_for(event.wait(), 10)
+        return channel_dict.get('channel')
 
-        :param pika.channel.Channel channel: The channel object
-
-        """
-        self.__logger.info('Channel opened')
-        self._channel = channel
-        self.add_on_channel_close_callback()
-
-    def add_on_channel_close_callback(self):
-        """This method tells pika to call the on_channel_closed method if
-        RabbitMQ unexpectedly closes the channel.
-
-        """
-        self.__logger.info('Adding channel close callback')
-        self._channel.add_on_close_callback(self.on_channel_closed)
-
-    def on_channel_closed(self, channel: Channel, reason: str):
-        """Invoked by pika when RabbitMQ unexpectedly closes the channel.
-        :param pika.channel.Channel channel: The closed channel
-        :param Exception reason: why the channel was closed
-        """
-        self.__logger.warning('Channel %i was closed: %s', channel, reason)
-        self.close_connection()
-
-    def close_channel(self):
-        """Call to close the channel with RabbitMQ cleanly by issuing the
-        Channel.Close RPC command.
-
-        """
-        self.__logger.info('Closing the channel')
-        self._channel.close()
+    # def on_channel_open(self, channel: Channel):
+    #     """This method is invoked by pika when the channel has been opened.
+    #     The channel object is passed in so we can make use of it.
+    #
+    #     Since the channel is now open, we'll declare the exchange to use.
+    #
+    #     :param pika.channel.Channel channel: The channel object
+    #
+    #     """
+    #     self.__logger.info('Channel opened')
+    #     self._channel = channel
+    #     self.add_on_channel_close_callback()
+    #
+    # def add_on_channel_close_callback(self):
+    #     """This method tells pika to call the on_channel_closed method if
+    #     RabbitMQ unexpectedly closes the channel.
+    #
+    #     """
+    #     self.__logger.info('Adding channel close callback')
+    #     self._channel.add_on_close_callback(self.on_channel_closed)
+    #
+    # def on_channel_closed(self, channel: Channel, reason: str):
+    #     """Invoked by pika when RabbitMQ unexpectedly closes the channel.
+    #     :param pika.channel.Channel channel: The closed channel
+    #     :param Exception reason: why the channel was closed
+    #     """
+    #     self.__logger.warning('Channel %i was closed: %s', channel, reason)
+    #     self.close_connection()
+    #
+    # def close_channel(self):
+    #     """Call to close the channel with RabbitMQ cleanly by issuing the
+    #     Channel.Close RPC command.
+    #
+    #     """
+    #     self.__logger.info('Closing the channel')
+    #     self._channel.close()
 
     async def run_ioloop(self):
         """Run the example consumer by connecting to RabbitMQ and then
@@ -190,8 +183,13 @@ class MilleGrillesPikaBusConnection(StopListener):
         """
         while self.__context.stopping is False:
             self.__logger.info("run_ioloop Connecting to MQ bus")
+
             await self.connect()
+            await self.__on_connect_callback()
+
             await self.__event_connection_stopping.wait()
+            await self.__on_disconnect_callback()
+
             self.__event_connection_stopping.clear()  # Reset flag for reconnect if applicable
             self.__logger.debug("run_ioloop Disconnecting from MQ bus")
 

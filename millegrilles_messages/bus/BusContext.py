@@ -10,6 +10,7 @@ from typing import Optional, Union
 from millegrilles_messages.bus.BusConfiguration import MilleGrillesBusConfiguration
 from millegrilles_messages.messages.CleCertificat import CleCertificat
 from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
+from millegrilles_messages.messages.FormatteurMessages import SignateurTransactionSimple, FormatteurMessageMilleGrilles
 
 LOGGER = logging.getLogger(__name__)
 
@@ -35,9 +36,14 @@ class MilleGrillesBusContext:
         self.__stop_event = asyncio.Event()
         self.__stop_listeners: list[StopListener] = list()
         self.__ssl_context = _load_ssl_context(configuration)
+
         clecert, ca = load_certificates(configuration.key_path, configuration.cert_path, configuration.ca_path)
         self.__clecert: CleCertificat = clecert
         self.__ca: EnveloppeCertificat = ca
+
+        signateur, formatteur = load_message_formatter(clecert, ca)
+        self.__signateur = signateur
+        self.__formatteur = formatteur
 
         signal.signal(signal.SIGINT, self.exit_gracefully)
         signal.signal(signal.SIGTERM, self.exit_gracefully)
@@ -107,6 +113,14 @@ class MilleGrillesBusContext:
     def ca(self) -> EnveloppeCertificat:
         return self.__ca
 
+    @property
+    def signateur(self):
+        return self.__signateur
+
+    @property
+    def formatteur(self):
+        return self.__formatteur
+
 
 def _load_ssl_context(configuration: MilleGrillesBusConfiguration) -> ssl.SSLContext:
     ssl_context = SSLContext()
@@ -129,3 +143,13 @@ def load_certificates(key_path: str, cert_path: str, ca_path: str) -> (CleCertif
         raise ValueError("CA and Cert mismatch on IDMG")
 
     return clecert, ca
+
+
+def load_message_formatter(clecert: CleCertificat, ca: EnveloppeCertificat) -> (SignateurTransactionSimple, FormatteurMessageMilleGrilles):
+    enveloppe = clecert.enveloppe
+    idmg = enveloppe.idmg
+
+    signateur = SignateurTransactionSimple(clecert)
+    formatteur = FormatteurMessageMilleGrilles(idmg, signateur, ca)
+
+    return signateur, formatteur
