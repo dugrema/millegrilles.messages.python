@@ -1,12 +1,10 @@
 import asyncio
 import logging
 
-from typing import Optional
-
 from millegrilles_messages.bus.PikaBusConnection import MilleGrillesPikaBusConnection
 from millegrilles_messages.bus.BusContext import MilleGrillesBusContext
 from millegrilles_messages.bus.PikaChannel import MilleGrillesPikaChannel, ConnectionProvider
-from millegrilles_messages.bus.PikaQueue import MilleGrillesPikaQueueConsumer
+from millegrilles_messages.bus.PikaMessageProducer import MilleGrillesPikaMessageProducer
 
 CONST_CONNECTION_ATTEMTPS = 5
 CONST_RETRY_DELAY = 5.0
@@ -21,11 +19,18 @@ class MilleGrillesPikaConnector(ConnectionProvider):
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__context = context
         self._connection = MilleGrillesPikaBusConnection(context, self.on_connect, self.on_disconnect)
-        self.__channels: list[MilleGrillesPikaChannel] = list()
+        self.__producer_channel = MilleGrillesPikaChannel(context)
+        self.__producer_channel.setup(self)
+        self.__channels: list[MilleGrillesPikaChannel] = [self.__producer_channel]
+        self.__producer = MilleGrillesPikaMessageProducer(context, self.__producer_channel)
 
     @property
     def connection(self):
         return self._connection
+
+    async def get_producer(self) -> MilleGrillesPikaMessageProducer:
+        await self.__producer.ready()
+        return self.__producer
 
     async def run(self):
         await asyncio.gather(
@@ -42,10 +47,6 @@ class MilleGrillesPikaConnector(ConnectionProvider):
             raise Exception('Already running, cannot configure')
         self.__channels.append(channel)
         channel.setup(self)
-
-    # async def remove_channel(self, channel: MilleGrillesPikaChannel):
-    #     self.__channels.remove(channel)
-    #     await channel.stop_consuming()
 
     async def on_connect(self):
         self.__logger.debug("Bus connected, starting channels")

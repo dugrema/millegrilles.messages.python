@@ -36,6 +36,8 @@ class MilleGrillesPikaChannel:
         self.__q_change_event = asyncio.Event()
         self.__running = False
 
+        self.ready = asyncio.Event()
+
     def setup(self, connector: ConnectionProvider):
         self.__connector = connector
 
@@ -76,12 +78,14 @@ class MilleGrillesPikaChannel:
         for q in self.__queues:
             await self.create_q(q)
             await q.start_consuming(self.__channel)
+        self.ready.set()
 
     def on_close(self, channel: Channel, reason: str):
         self.__channel = None
         self.__logger.debug("Channel %s closing" % channel)
 
     async def stop_consuming(self):
+        self.ready.clear()
         for q in self.__queues:
             await q.stop_consuming()
         if self.__channel:

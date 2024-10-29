@@ -64,9 +64,6 @@ class MilleGrillesPikaQueueConsumer:
         self.__channel: Optional[Channel] = None
         self.__consumer_tag: Optional[str] = None
 
-        # self.actif = actif
-        # self.nb_max_attente = 10
-
     @property
     def running(self):
         return self.__running
