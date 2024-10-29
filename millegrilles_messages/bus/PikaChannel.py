@@ -33,19 +33,40 @@ class MilleGrillesPikaChannel:
         self.__channel: Optional[Channel] = None
         self.__queues: list[MilleGrillesPikaQueueConsumer] = list()
 
+        self.__q_change_event = asyncio.Event()
+        self.__running = False
+
     def setup(self, connector: ConnectionProvider):
         self.__connector = connector
 
     async def run(self):
-        coros = [q.run() for q in self.__queues]
-        await asyncio.gather(*coros)
+        self.__q_change_event.clear()  # Avoids recycling watch thread
+        tasks = [asyncio.create_task(self.__change_watcher_thread())]
+
+        while len(tasks) > 0:
+            for q in self.__queues:
+                if q.running is False:
+                    tasks.append(asyncio.create_task(q.run()))
+
+            done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            tasks = list(pending)
+
+            if self.__context.stopping is False and self.__q_change_event.is_set() is True:
+                # Put change watcher back in list
+                self.__q_change_event.clear()
+                tasks.append(asyncio.create_task(self.__change_watcher_thread()))
+
+    async def __change_watcher_thread(self):
+        await self.__q_change_event.wait()
 
     def add_queue(self, queue: MilleGrillesPikaQueueConsumer):
         self.__queues.append(queue)
+        self.__q_change_event.set()
 
     def remove_queue(self, queue: MilleGrillesPikaQueueConsumer):
         queue.stop_consuming()
         self.__queues.remove(queue)
+        self.__q_change_event.set()
 
     async def start_consuming(self):
         # Connect new channel
@@ -66,6 +87,7 @@ class MilleGrillesPikaChannel:
         if self.__channel:
             self.__channel.close()
         self.__channel = None
+        self.__q_change_event.set()
 
     async def set_qos(self):
         loop = asyncio.get_event_loop()

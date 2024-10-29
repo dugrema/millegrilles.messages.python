@@ -38,14 +38,14 @@ class MilleGrillesPikaConnector(ConnectionProvider):
         await asyncio.gather(*coros)
 
     async def add_channel(self, channel: MilleGrillesPikaChannel):
+        if self._connection.connected:
+            raise Exception('Already running, cannot configure')
         self.__channels.append(channel)
         channel.setup(self)
-        if self._connection.connected:
-            await channel.start_consuming()
 
-    async def remove_channel(self, channel: MilleGrillesPikaChannel):
-        self.__channels.remove(channel)
-        await channel.stop_consuming()
+    # async def remove_channel(self, channel: MilleGrillesPikaChannel):
+    #     self.__channels.remove(channel)
+    #     await channel.stop_consuming()
 
     async def on_connect(self):
         self.__logger.debug("Bus connected, starting channels")
@@ -55,4 +55,7 @@ class MilleGrillesPikaConnector(ConnectionProvider):
     async def on_disconnect(self):
         self.__logger.debug("Bus disconnected, closing channels")
         for channel in self.__channels:
-            await channel.stop_consuming()
+            try:
+                await channel.stop_consuming()
+            except:
+                self.__logger.exception("Error closing channel %s" % channel)

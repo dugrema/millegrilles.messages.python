@@ -57,6 +57,7 @@ class MilleGrillesPikaQueueConsumer:
         self.routing_keys: list[RoutingKey] = list()
 
         self.__async_queue: asyncio.Queue[Union[RawMessageWrapper, None]] = asyncio.Queue(maxsize=prefetch_count)
+        self.__running = False
 
         # Dynamic values
         self.auto_name: Optional[str] = None
@@ -65,6 +66,10 @@ class MilleGrillesPikaQueueConsumer:
 
         # self.actif = actif
         # self.nb_max_attente = 10
+
+    @property
+    def running(self):
+        return self.__running
 
     async def start_consuming(self, channel: Channel):
         self.__channel = channel
@@ -82,6 +87,8 @@ class MilleGrillesPikaQueueConsumer:
         await self.__async_queue.put(None)  # Makes the async run exit if appropriate
 
     def add_routing_key(self, routing_key: RoutingKey):
+        if self.__running:
+            raise Exception('Already running, cannot configure')
         self.routing_keys.append(routing_key)
 
     def on_message(self, channel: Channel, deliver: Basic.Deliver, properties: BasicProperties, body: bytes):
@@ -89,6 +96,7 @@ class MilleGrillesPikaQueueConsumer:
         self.__async_queue.put_nowait(message)
 
     async def run(self):
+        self.__running = True
         while self.__context.stopping is False:
             message = await self.__async_queue.get()
             if message is None:
