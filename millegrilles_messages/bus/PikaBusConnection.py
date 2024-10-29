@@ -43,10 +43,15 @@ class MilleGrillesPikaBusConnection(StopListener):
 
     async def run(self):
         self.__loop = asyncio.get_event_loop()
-        await asyncio.gather(
-            self.run_ioloop(),
-            self.maintenance_thread(),
-        )
+        done, pending = await asyncio.wait([
+            asyncio.create_task(self.run_ioloop()),
+            asyncio.create_task(self.maintenance_thread()),
+        ], return_when=asyncio.FIRST_COMPLETED)
+        if self.__context.stopping is not True:
+            self.__logger.error("Thread quit unexpectedly: %s" % done)
+            self.__context.stop()
+        if len(pending) > 0:
+            await asyncio.gather(*pending)
 
     async def maintenance_thread(self):
         while self.__context.stopping is False:

@@ -39,10 +39,15 @@ class MilleGrillesPikaConnector(ConnectionProvider):
         return self.__producer
 
     async def run(self):
-        await asyncio.gather(
-            self._connection.run(),
-            self.__channel_thread()
-        )
+        done, pending = await asyncio.wait([
+            asyncio.create_task(self._connection.run()),
+            asyncio.create_task(self.__channel_thread())
+        ], return_when=asyncio.FIRST_COMPLETED)
+        if self.__context.stopping is not True:
+            self.__logger.exception("Thread quit unexpectedly: %s" % done)
+            self.__context.stop()
+        if len(pending) > 0:
+            await asyncio.gather(*pending)
 
     async def __channel_thread(self):
         coros = [c.run() for c in self.__channels]
