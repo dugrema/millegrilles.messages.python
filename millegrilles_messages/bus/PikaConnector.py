@@ -1,47 +1,42 @@
+import asyncio
 import logging
 import pika
 import ssl
 
-from pika.adapters.asyncio_connection import AsyncioConnection
+from typing import Optional
 
+from pika.adapters.asyncio_connection import AsyncioConnection
+from pika.exchange_type import ExchangeType
+
+from millegrilles_messages.bus.PikaBusConnection import MilleGrillesPikaBusConnection
 from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
 from millegrilles_messages.bus.BusContext import MilleGrillesBusContext
+
+CONST_CONNECTION_ATTEMTPS = 5
+CONST_RETRY_DELAY = 5.0
+CONST_HEARTBEAT = 30
+CONST_BLOCKED_CONNECTION_TIMEOUT = 20
 
 
 class MilleGrillesPikaConnector:
 
+    EXCHANGE = 'message'
+    EXCHANGE_TYPE = ExchangeType.topic
+    QUEUE = 'text'
+    ROUTING_KEY = 'example.text'
+
     def __init__(self, context: MilleGrillesBusContext):
-        self.__logger = logging.getLogger(__name__+'.'+self.__class__.__name__)
+        self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__context = context
+        self._connection = MilleGrillesPikaBusConnection(context)
 
     async def run(self):
-        pass
+        await asyncio.gather(
+            self._connection.run(),
+            self.maintenance_thread(),
+        )
 
-    async def connect(self):
-        hostname = self.__context.configuration.mq_hostname
-        port = self.__context.configuration.mq_port
+    async def maintenance_thread(self):
+        while self.__context.stopping is False:
+            await self.__context.wait(duration=30)
 
-        # Extraire IDMG du certificat. C'est le virtual host RabbitMQ.
-        enveloppe_cert = EnveloppeCertificat.from_file(self.__pika_configuration.cert_pem_path)
-        idmg = enveloppe_cert.idmg
-
-        tls_context = ssl.SSLContext(ssl.PROTOCOL_TLS)
-        tls_context.verify_mode = ssl.CERT_REQUIRED
-        tls_context.load_verify_locations(self.__pika_configuration.ca_pem_path)
-        tls_context.load_cert_chain(self.__pika_configuration.cert_pem_path, self.__pika_configuration.key_pem_path)
-        ssl_options = pika.SSLOptions(tls_context, hostname)
-
-        parameters = [
-            pika.ConnectionParameters(host=hostname,
-                                      port=port,
-                                      virtual_host=idmg,
-                                      credentials=pika.credentials.ExternalCredentials(),
-                                      ssl_options=ssl_options,
-                                      connection_attempts=self.__pika_configuration.connection_attempts,
-                                      retry_delay=self.__pika_configuration.retry_delay,
-                                      heartbeat=self.__pika_configuration.heartbeat,
-                                      blocked_connection_timeout=self.__pika_configuration.blocked_connection_timeout)]
-
-        connection_adapter = AsyncioConnection.create_connection(parameters, on_done=self.on_connect_done)
-
-        self.__logger.debug("Connection adapter : %s", connection_adapter)

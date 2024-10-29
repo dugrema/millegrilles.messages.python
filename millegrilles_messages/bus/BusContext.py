@@ -5,7 +5,7 @@ import signal
 
 from ssl import SSLContext, VerifyMode
 
-from typing import Optional
+from typing import Optional, Union
 
 from millegrilles_messages.bus.BusConfiguration import MilleGrillesBusConfiguration
 from millegrilles_messages.messages.CleCertificat import CleCertificat
@@ -65,7 +65,7 @@ class MilleGrillesBusContext:
             except Exception:
                 self.__logger.exception("Error stopping listener %s" % listener)
 
-    async def wait(self, duration: Optional[int] = None):
+    async def wait(self, duration: Optional[Union[int,float]] = None):
         """
         Utility for waiting on the stop event.
         :param duration:
