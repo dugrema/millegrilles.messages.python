@@ -1,10 +1,12 @@
 import asyncio
+import datetime
 import logging
 
 from typing import Optional
 
 from pika.channel import Channel
 from pika.frame import Method
+from pika.spec import BasicProperties, Basic
 
 from millegrilles_messages.bus.BusContext import MilleGrillesBusContext
 from millegrilles_messages.bus.PikaBusConnection import MilleGrillesPikaBusConnection
@@ -37,9 +39,26 @@ class MilleGrillesPikaChannel:
         self.__running = False
 
         self.ready = asyncio.Event()
+        self.__waiting_send: dict[int, dict] = dict()
+        self.__publish_count = 1
 
     def setup(self, connector: ConnectionProvider):
         self.__connector = connector
+
+    def on_delivery_confirmation(self, frame: Method):
+        delivery_tag = frame.method.delivery_tag
+        try:
+            item = self.__waiting_send[delivery_tag]
+        except KeyError:
+            return  # Mismatch
+
+        if isinstance(frame.method, Basic.Ack):
+            item['ok'] = True
+        else:
+            item['ok'] = False
+
+        loop = asyncio.get_event_loop()
+        loop.call_soon(item['event'].set)
 
     async def run(self):
         self.__q_change_event.clear()  # Avoids recycling watch thread
@@ -73,7 +92,9 @@ class MilleGrillesPikaChannel:
     async def start_consuming(self):
         # Connect new channel
         self.__channel = await self.__connector.connection.open_channel()
+        self.__publish_count = 1
         self.__channel.add_on_close_callback(self.on_close)
+        self.__channel.confirm_delivery(ack_nack_callback=self.on_delivery_confirmation)
         await self.set_qos()
         for q in self.__queues:
             await self.create_q(q)
@@ -126,3 +147,22 @@ class MilleGrillesPikaChannel:
 
         self.__channel.queue_bind(name, rk.exchange, rk.routing_key, callback=bind_callback)
         await asyncio.wait_for(event.wait(), 5)
+
+    async def publish(self, exchanges: list, routing_key: str, content: bytes, properties: Optional[BasicProperties] = None):
+        for exchange in exchanges:
+            event = asyncio.Event()
+            item_no = self.__publish_count
+            self.__publish_count += 1
+            wait_dict = {'event': event, 'created': datetime.datetime.now()}
+            try:
+                self.__waiting_send[item_no] = wait_dict
+                self.__channel.basic_publish(exchange=exchange, routing_key=routing_key, body=content,
+                                             properties=properties, mandatory=True)
+                # Wait for send confirmation
+                await asyncio.wait_for(event.wait(), 5)
+            finally:
+                # Cleanup
+                del self.__waiting_send[item_no]
+
+            if wait_dict.get('ok') is not True:
+                raise Exception("NACK on send")

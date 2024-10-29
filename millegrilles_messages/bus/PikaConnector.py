@@ -5,6 +5,7 @@ from millegrilles_messages.bus.PikaBusConnection import MilleGrillesPikaBusConne
 from millegrilles_messages.bus.BusContext import MilleGrillesBusContext
 from millegrilles_messages.bus.PikaChannel import MilleGrillesPikaChannel, ConnectionProvider
 from millegrilles_messages.bus.PikaMessageProducer import MilleGrillesPikaMessageProducer
+from millegrilles_messages.bus.PikaQueue import MilleGrillesPikaReplyQueueConsumer
 
 CONST_CONNECTION_ATTEMTPS = 5
 CONST_RETRY_DELAY = 5.0
@@ -19,10 +20,15 @@ class MilleGrillesPikaConnector(ConnectionProvider):
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__context = context
         self._connection = MilleGrillesPikaBusConnection(context, self.on_connect, self.on_disconnect)
+
+        # Wire producer and reply Q
+        self.__reply_queue = MilleGrillesPikaReplyQueueConsumer(context)
         self.__producer_channel = MilleGrillesPikaChannel(context)
         self.__producer_channel.setup(self)
+        self.__producer_channel.add_queue(self.__reply_queue)
+
         self.__channels: list[MilleGrillesPikaChannel] = [self.__producer_channel]
-        self.__producer = MilleGrillesPikaMessageProducer(context, self.__producer_channel)
+        self.__producer = MilleGrillesPikaMessageProducer(context, self.__producer_channel, self.__reply_queue)
 
     @property
     def connection(self):

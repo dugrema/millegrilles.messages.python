@@ -41,7 +41,7 @@ class MilleGrillesPikaQueueConsumer:
                  name: Optional[str] = None, exclusive=False, durable=False, auto_delete=False, arguments: Optional[dict] = None,
                  prefetch_count=1):
         self.__logger = logging.getLogger(__name__+'.'+self.__class__.__name__)
-        self.__context = context
+        self._context = context
         self.__callback = callback
 
         # Queue configuration
@@ -74,7 +74,7 @@ class MilleGrillesPikaQueueConsumer:
         event = asyncio.Event()
         def consume_callback(method: Method):
             loop.call_soon(event.set)
-        self.__consumer_tag = channel.basic_consume(self.auto_name, self.on_message, callback=consume_callback)
+        self.__consumer_tag = channel.basic_consume(self.auto_name, self.__on_message, callback=consume_callback)
         await asyncio.wait_for(event.wait(), 3)
 
     async def stop_consuming(self):
@@ -88,19 +88,34 @@ class MilleGrillesPikaQueueConsumer:
             raise Exception('Already running, cannot configure')
         self.routing_keys.append(routing_key)
 
-    def on_message(self, channel: Channel, deliver: Basic.Deliver, properties: BasicProperties, body: bytes):
+    def __on_message(self, channel: Channel, deliver: Basic.Deliver, properties: BasicProperties, body: bytes):
         message = RawMessageWrapper(channel, deliver, properties, body)
         self.__async_queue.put_nowait(message)
 
     async def run(self):
         self.__running = True
-        while self.__context.stopping is False:
+        while self._context.stopping is False:
             message = await self.__async_queue.get()
             if message is None:
                 break  # Done
+
+            # Parse and verify message
+
             try:
                 await self.__callback(message)
             except Exception as e:
                 self.__logger.exception('UNHANDLED ERROR: %s' % e)
             finally:
                 self.__channel.basic_ack(message.deliver.delivery_tag)
+
+
+class MilleGrillesPikaReplyQueueConsumer(MilleGrillesPikaQueueConsumer):
+
+    def __init__(self, context: MilleGrillesBusContext, prefetch_count=1):
+        super().__init__(context, self.__on_reply_message, exclusive=True, prefetch_count=prefetch_count)
+
+    async def __on_reply_message(self, message: RawMessageWrapper):
+        raise NotImplementedError('todo')
+
+    async def add_correlation(self):
+        raise NotImplementedError('todo')
