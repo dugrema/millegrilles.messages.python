@@ -123,7 +123,10 @@ class MilleGrillesPikaChannel:
     async def stop_consuming(self):
         self.ready.clear()
         for q in self.__queues:
-            await q.stop_consuming()
+            try:
+                await q.stop_consuming()
+            except Exception as e:
+                self.__logger.info("Error stop_consuming: %s" % e)
         if self.__channel:
             self.__channel.close()
         self.__channel = None
