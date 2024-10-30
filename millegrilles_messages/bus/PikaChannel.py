@@ -76,6 +76,12 @@ class MilleGrillesPikaChannel:
                 # Put change watcher back in list
                 self.__q_change_event.clear()
                 tasks.append(asyncio.create_task(self.__change_watcher_thread()))
+            else:
+                if self.ready.is_set():
+                    # Perform clean shutdown
+                    await self.stop_consuming()
+
+        self.__logger.info("Channel thread closed")
 
     async def __change_watcher_thread(self):
         await self.__q_change_event.wait()
@@ -96,14 +102,22 @@ class MilleGrillesPikaChannel:
         self.__channel.add_on_close_callback(self.on_close)
         self.__channel.confirm_delivery(ack_nack_callback=self.on_delivery_confirmation)
         await self.set_qos()
-        for q in self.__queues:
-            await self.create_q(q)
-            await q.start_consuming(self.__channel)
+        try:
+            for q in self.__queues:
+                await self.create_q(q)
+                await q.start_consuming(self.__channel)
+        except AttributeError:
+            self.__logger.info("Error in start_consuming, aborting")
+            return
         self.ready.set()
 
     def on_close(self, channel: Channel, reason: str):
         self.__channel = None
         self.__logger.debug("Channel %s closing" % channel)
+        if self.ready.is_set() is True:
+            # Try to force shutdown
+            loop = asyncio.get_event_loop()
+            loop.call_soon(self.__q_change_event.set)
 
     async def stop_consuming(self):
         self.ready.clear()

@@ -11,6 +11,8 @@ from millegrilles_messages.bus.BusConfiguration import MilleGrillesBusConfigurat
 from millegrilles_messages.messages.CleCertificat import CleCertificat
 from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
 from millegrilles_messages.messages.FormatteurMessages import SignateurTransactionSimple, FormatteurMessageMilleGrilles
+from millegrilles_messages.messages.ValidateurCertificats import ValidateurCertificatCache
+from millegrilles_messages.messages.ValidateurMessage import ValidateurMessage
 
 LOGGER = logging.getLogger(__name__)
 
@@ -45,6 +47,9 @@ class MilleGrillesBusContext:
         self.__signateur = signateur
         self.__formatteur = formatteur
 
+        self.__verificateur_certificats = ValidateurCertificatCache(ca)
+        self.__validateur_messages = ValidateurMessage(self.__verificateur_certificats)
+
         signal.signal(signal.SIGINT, self.exit_gracefully)
         signal.signal(signal.SIGTERM, self.exit_gracefully)
 
@@ -55,7 +60,7 @@ class MilleGrillesBusContext:
     def stop(self):
         loop = asyncio.get_event_loop()
         if loop is not None:
-            loop.call_soon_threadsafe(self.__stop_event.set)
+            loop.call_soon(self.__stop_event.set)
         else:
             self.__logger.warning("Stopping without asyncio loop, may take time")
             self.__stop_event.set()
@@ -120,6 +125,14 @@ class MilleGrillesBusContext:
     @property
     def formatteur(self):
         return self.__formatteur
+
+    @property
+    def verificateur_certificats(self):
+        return self.__verificateur_certificats
+
+    @property
+    def validateur_message(self):
+        return self.__validateur_messages
 
 
 def _load_ssl_context(configuration: MilleGrillesBusConfiguration) -> ssl.SSLContext:

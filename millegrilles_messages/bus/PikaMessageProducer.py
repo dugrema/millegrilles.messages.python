@@ -73,7 +73,8 @@ class MilleGrillesPikaMessageProducer:
 
     async def send_wait_reply(self, message: Union[str, bytes], routing_key: str,
                               exchange: Optional[str] = None, correlation_id: str = None,
-                              reply_to: str = None, timeout=CONST_WAIT_REPLY_DEFAULT):
+                              reply_to: str = None, timeout=CONST_WAIT_REPLY_DEFAULT,
+                              domain: Optional[str] = None, role: Optional[str] = None):
         if reply_to is None:
             reply_to = self.__reply_queue.auto_name
 
@@ -89,7 +90,7 @@ class MilleGrillesPikaMessageProducer:
         self.__message_counter += 1  # Incrementer compteur
 
         # Conserver reference a la correlation
-        correlation_reponse = MessageCorrelation(correlation_id)
+        correlation_reponse = MessageCorrelation(correlation_id, domain=domain, role=role)
 
         async with self.__semaphore_correlations:
             self.__reply_queue.add_correlation(correlation_reponse)
@@ -108,7 +109,8 @@ class MilleGrillesPikaMessageProducer:
     async def send_routed_message(
             self, message_in: dict, kind: int, domain: str, action: str, exchange: str, partition: Optional[str] = None,
             reply_to: Optional[str] = None, correlation_id: Optional[str] = None,
-            noformat=False, nowait=False, attachments: Optional[dict] = None, timeout=CONST_WAIT_REPLY_DEFAULT) -> [MessageWrapper, None]:
+            noformat=False, nowait=False, attachments: Optional[dict] = None, timeout=CONST_WAIT_REPLY_DEFAULT,
+            domain_check: Union[bool, str]=True, role_check: Optional[str] = None) -> [MessageWrapper, None]:
 
         if noformat is True:
             message_id = message_in['id']
@@ -146,8 +148,37 @@ class MilleGrillesPikaMessageProducer:
                 exchange=exchange, correlation_id=correlation_id, reply_to=reply_to)
             response = None
         else:
+            if domain_check is True:
+                domain_verification = domain
+            elif isinstance(domain_check, str):
+                domain_verification = domain_check
+            else:
+                domain_verification = None
+
             response = await self.send_wait_reply(
                 message_bytes, '.'.join(rk),
-                exchange=exchange, correlation_id=correlation_id, reply_to=reply_to, timeout=timeout)
+                exchange=exchange, correlation_id=correlation_id, reply_to=reply_to, timeout=timeout,
+                domain=domain_verification, role=role_check)
 
         return response
+
+    async def request(self, message_in: dict, domain: str, action: str, exchange: str, partition: Optional[str] = None,
+            reply_to: Optional[str] = None, correlation_id: Optional[str] = None,
+            noformat=False, attachments: Optional[dict] = None, timeout=CONST_WAIT_REPLY_DEFAULT):
+        return await self.send_routed_message(
+            message_in, Constantes.KIND_REQUETE, domain, action, exchange, partition, reply_to, correlation_id,
+            noformat, False, attachments, timeout)
+
+    async def command(self, message_in: dict, domain: str, action: str, exchange: str, partition: Optional[str] = None,
+            reply_to: Optional[str] = None, correlation_id: Optional[str] = None,
+            noformat=False, nowait=False, attachments: Optional[dict] = None, timeout=CONST_WAIT_REPLY_DEFAULT):
+        return await self.send_routed_message(
+            message_in, Constantes.KIND_COMMANDE, domain, action, exchange, partition, reply_to, correlation_id,
+            noformat, nowait, attachments, timeout)
+
+    async def event(self, message_in: dict, domain: str, action: str, exchange: str, partition: Optional[str] = None,
+            reply_to: Optional[str] = None, correlation_id: Optional[str] = None,
+            noformat=False, attachments: Optional[dict] = None, timeout=CONST_WAIT_REPLY_DEFAULT):
+        return await self.send_routed_message(
+            message_in, Constantes.KIND_EVENEMENT, domain, action, exchange, partition, reply_to, correlation_id,
+            noformat, True, attachments, timeout)

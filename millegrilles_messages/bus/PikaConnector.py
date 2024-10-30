@@ -46,12 +46,23 @@ class MilleGrillesPikaConnector(ConnectionProvider):
         if self.__context.stopping is not True:
             self.__logger.exception("Thread quit unexpectedly: %s" % done)
             self.__context.stop()
+
+        # Ensure all channels shut down
+        await self.__stop_consuming()
+
         if len(pending) > 0:
             await asyncio.gather(*pending)
+        self.__logger.info("MilleGrillesPikaConnector.run thread closed")
 
     async def __channel_thread(self):
-        coros = [c.run() for c in self.__channels]
-        await asyncio.gather(*coros)
+        tasks = [asyncio.create_task(c.run()) for c in self.__channels]
+        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        if self.__context.stopping is not True:
+            self.__logger.exception("Thread quit unexpectedly: %s" % done)
+            self.__context.stop()
+        if len(pending) > 0:
+            await asyncio.gather(*pending)
+        self.__logger.info("MilleGrillesPikaConnector.__channel_thread thread closed")
 
     async def add_channel(self, channel: MilleGrillesPikaChannel):
         if self._connection.connected:
@@ -64,10 +75,13 @@ class MilleGrillesPikaConnector(ConnectionProvider):
         for channel in self.__channels:
             await channel.start_consuming()
 
-    async def on_disconnect(self):
-        self.__logger.debug("Bus disconnected, closing channels")
+    async def __stop_consuming(self):
         for channel in self.__channels:
             try:
                 await channel.stop_consuming()
             except:
                 self.__logger.exception("Error closing channel %s" % channel)
+
+    async def on_disconnect(self):
+        self.__logger.debug("Bus disconnected, closing channels")
+        await self.__stop_consuming()

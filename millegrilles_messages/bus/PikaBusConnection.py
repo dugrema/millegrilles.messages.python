@@ -52,6 +52,7 @@ class MilleGrillesPikaBusConnection(StopListener):
             self.__context.stop()
         if len(pending) > 0:
             await asyncio.gather(*pending)
+        self.__logger.info("MilleGrillesPikaBusConnection thread closed")
 
     async def maintenance_thread(self):
         while self.__context.stopping is False:

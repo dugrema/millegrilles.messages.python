@@ -1,15 +1,19 @@
 import asyncio
 import datetime
 import logging
+import json
 
 from typing import Any, Callable, Optional, Coroutine, Union, Awaitable
 
 from pika.channel import Channel
 from pika.frame import Method
 from pika.spec import Basic, BasicProperties
+from certvalidator.errors import PathValidationError
+from cryptography.exceptions import InvalidSignature
 
-from millegrilles_messages.FileLocking import DEFAULT_TIMEOUT
 from millegrilles_messages.bus.BusContext import MilleGrillesBusContext
+from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
+from millegrilles_messages.messages.Hachage import ErreurHachage
 from millegrilles_messages.messages.MessagesModule import MessageWrapper
 
 CONST_WAIT_REPLY_DEFAULT = 15
@@ -33,16 +37,28 @@ class RoutingKey:
 
 class RawMessageWrapper:
 
-    def __init__(self, channel: Channel, deliver: Basic.Deliver, properties: BasicProperties, body: bytes):
+    def __init__(self, queue: str, channel: Channel, deliver: Basic.Deliver, properties: BasicProperties, body: bytes):
+        self.queue = queue
         self.channel = channel
         self.deliver = deliver
         self.properties = properties
         self.body = body
 
+    def to_message_wrapper(self) -> MessageWrapper:
+        properties = self.properties
+        basic_deliver = self.deliver
+        correlation_id = properties.correlation_id
+        reply_to = properties.reply_to
+        exchange = basic_deliver.exchange
+        routing_key = basic_deliver.routing_key
+        delivery_tag = basic_deliver.delivery_tag
+
+        return MessageWrapper(self.body, routing_key, self.queue, exchange, reply_to, correlation_id, delivery_tag)
+
 
 class MilleGrillesPikaQueueConsumer:
 
-    def __init__(self, context: MilleGrillesBusContext, callback: Callable[[RawMessageWrapper], Coroutine[Any, Any, None]],
+    def __init__(self, context: MilleGrillesBusContext, callback: Callable[[MessageWrapper], Coroutine[Any, Any, None]],
                  name: Optional[str] = None, exclusive=False, durable=False, auto_delete=False, arguments: Optional[dict] = None,
                  prefetch_count=1):
         self.__logger = logging.getLogger(__name__+'.'+self.__class__.__name__)
@@ -94,20 +110,48 @@ class MilleGrillesPikaQueueConsumer:
         self.routing_keys.append(routing_key)
 
     def __on_message(self, channel: Channel, deliver: Basic.Deliver, properties: BasicProperties, body: bytes):
-        message = RawMessageWrapper(channel, deliver, properties, body)
+        message = RawMessageWrapper(self.auto_name or self.name, channel, deliver, properties, body)
         self.__async_queue.put_nowait(message)
 
     async def run(self):
         self.__running = True
         while self._context.stopping is False:
             message = await self.__async_queue.get()
-            if message is None:
-                break  # Done
 
-            # Parse and verify message
+            if message is None:
+                break  # Exit condition
 
             try:
-                await self.__callback(message)
+                # Parse and verify message
+                message_wrapper = message.to_message_wrapper()
+                message_dict: dict = json.loads(message.body.decode('utf-8'))
+                message_wrapper.parsed = message_dict
+                validateur = self._context.validateur_message
+                enveloppe = await validateur.verifier(message_dict)
+                message_wrapper.certificat = enveloppe
+                message_wrapper.est_valide = True
+            except json.JSONDecodeError:
+                self.__logger.info("MESSAGE DROPPED: Invalid JSON message")
+                continue
+            except KeyError:
+                self.__logger.info("MESSAGE DROPPED: Invalid parsed JSON message")
+                continue
+            except PathValidationError:
+                self.__logger.info("MESSAGE DROPPED: Invalid certificate")
+                continue
+            except (ErreurHachage, InvalidSignature):
+                self.__logger.info("MESSAGE DROPPED: Invalid message id (digest) or signature")
+                continue
+            except:
+                self.__logger.exception("MESSAGE DROPPED: Error processing message")
+                continue
+
+            if message_wrapper.kind in [6, 8]:
+                self.__logger.error('PikaQueue TODO: Decrypt message')
+                raise NotImplementedError('todo')
+
+            try:
+                await self.__callback(message_wrapper)
             except Exception as e:
                 self.__logger.exception('**UNHANDLED ERROR**: %s' % e)
             finally:
@@ -120,12 +164,14 @@ class CancelledException(Exception):
 
 class MessageCorrelation:
 
-    def __init__(self, correlation_id: str, timeout=DEFAULT_TIMEOUT, callback=Callable[[int, MessageWrapper], Awaitable[None]]):
+    def __init__(self, correlation_id: str, timeout=CONST_WAIT_REPLY_DEFAULT, callback=Callable[[int, MessageWrapper], Awaitable[None]], domain: Optional[str] = None, role: Optional[str] = None):
         self.__logger = logging.getLogger(__name__+'.'+self.__class__.__name__)
         self.correlation_id = correlation_id
         self.__creation_date = datetime.datetime.now()
         self.__timeout = timeout
         self.__callback = callback
+        self.__domain = domain
+        self.__role = role
 
         self.__event_attente = asyncio.Event()
         self.__stream_queue: Optional[asyncio.Queue] = None
@@ -136,7 +182,15 @@ class MessageCorrelation:
         # if stream:
         #     self.__stream_queue = asyncio.Queue(maxsize=2)
 
-    async def wait(self, timeout=DEFAULT_TIMEOUT) -> MessageWrapper:
+    @property
+    def domain(self):
+        return self.__domain
+
+    @property
+    def role(self):
+        return self.__role
+
+    async def wait(self, timeout=CONST_WAIT_REPLY_DEFAULT) -> MessageWrapper:
         self.__timeout = timeout
         await asyncio.wait_for(self.__event_attente.wait(), timeout)
 
@@ -146,7 +200,7 @@ class MessageCorrelation:
         self.__reponse_consommee = True
         return self.__reponse
 
-    async def stream_reponse(self, timeout=DEFAULT_TIMEOUT):
+    async def stream_reponse(self, timeout=CONST_WAIT_REPLY_DEFAULT):
         self.__timeout = timeout
         while self.__event_attente.is_set() is False:
             valeur = await asyncio.wait_for(self.__stream_queue.get(), timeout)
@@ -216,6 +270,7 @@ class MilleGrillesPikaReplyQueueConsumer(MilleGrillesPikaQueueConsumer):
             self._context.stop()
         if len(pending) > 0:
             await asyncio.gather(*pending)
+        self.__logger.info("MilleGrillesPikaReplyQueueConsumer %s thread closed" % self.name)
 
     async def __thread_maintain_correlations(self):
         while self._context.stopping is False:
@@ -235,7 +290,21 @@ class MilleGrillesPikaReplyQueueConsumer(MilleGrillesPikaQueueConsumer):
             await self._context.wait(30)
 
     async def __on_reply_message(self, message: RawMessageWrapper):
-        raise NotImplementedError('todo')
+        # Verify message
+        correlation_id = message.properties.correlation_id
+        if correlation_id is None:
+            self.__logger.info("REPLY MESSAGE DROPPED: no correlation")
+            return
+
+        try:
+            correlation = self.__correlations[correlation_id]
+
+            # TODO: Check if streaming to avoid removing correlation
+            del self.__correlations[correlation_id]
+
+            await correlation.recevoir_reponse(message)
+        except KeyError:
+            self.__logger.info("REPLY MESSAGE DROPPED: unknown correlation_id %s" % correlation_id)
 
     def add_correlation(self, correlation: MessageCorrelation):
         self.__correlations[correlation.correlation_id] = correlation
