@@ -87,6 +87,7 @@ class MilleGrillesPikaChannel:
         await self.__q_change_event.wait()
 
     def add_queue(self, queue: MilleGrillesPikaQueueConsumer):
+        queue.setup(self.__prefetch_count)
         self.__queues.append(queue)
         self.__q_change_event.set()
 

@@ -59,8 +59,7 @@ class RawMessageWrapper:
 class MilleGrillesPikaQueueConsumer:
 
     def __init__(self, context: MilleGrillesBusContext, callback: Callable[[MessageWrapper], Coroutine[Any, Any, None]],
-                 name: Optional[str] = None, exclusive=False, durable=False, auto_delete=False, arguments: Optional[dict] = None,
-                 prefetch_count=1):
+                 name: Optional[str] = None, exclusive=False, durable=False, auto_delete=False, arguments: Optional[dict] = None):
         self.__logger = logging.getLogger(__name__+'.'+self.__class__.__name__)
         self._context = context
         self.__callback = callback
@@ -77,7 +76,7 @@ class MilleGrillesPikaQueueConsumer:
 
         self.routing_keys: list[RoutingKey] = list()
 
-        self.__async_queue: asyncio.Queue[Union[RawMessageWrapper, None]] = asyncio.Queue(maxsize=prefetch_count)
+        self.__async_queue: Optional[asyncio.Queue[Union[RawMessageWrapper, None]]] = None
         self.__running = False
 
         # Dynamic values
@@ -85,11 +84,17 @@ class MilleGrillesPikaQueueConsumer:
         self.__channel: Optional[Channel] = None
         self.__consumer_tag: Optional[str] = None
 
+    def setup(self, prefetch_count: int):
+        self.__async_queue: asyncio.Queue[Union[RawMessageWrapper, None]] = asyncio.Queue(maxsize=prefetch_count)
+
     @property
     def running(self):
         return self.__running
 
     async def start_consuming(self, channel: Channel):
+        if self.__async_queue is None:
+            raise Exception('Not initialized (setup)')
+
         self.__channel = channel
         loop = asyncio.get_event_loop()
         event = asyncio.Event()
@@ -256,9 +261,9 @@ class MessageCorrelation:
 
 class MilleGrillesPikaReplyQueueConsumer(MilleGrillesPikaQueueConsumer):
 
-    def __init__(self, context: MilleGrillesBusContext, prefetch_count=1):
+    def __init__(self, context: MilleGrillesBusContext):
         self.__logger = logging.getLogger(__name__+'.'+self.__class__.__name__)
-        super().__init__(context, self.__on_reply_message, exclusive=True, prefetch_count=prefetch_count)
+        super().__init__(context, self.__on_reply_message, exclusive=True)
         self.__correlations: dict[str, MessageCorrelation] = dict()
 
     async def run(self):
@@ -290,9 +295,9 @@ class MilleGrillesPikaReplyQueueConsumer(MilleGrillesPikaQueueConsumer):
 
             await self._context.wait(30)
 
-    async def __on_reply_message(self, message: RawMessageWrapper):
+    async def __on_reply_message(self, message: MessageWrapper):
         # Verify message
-        correlation_id = message.properties.correlation_id
+        correlation_id = message.correlation_id
         if correlation_id is None:
             self.__logger.info("REPLY MESSAGE DROPPED: no correlation")
             return

@@ -10,9 +10,11 @@ from typing import Optional, Union
 
 from millegrilles_messages.bus.BusConfiguration import MilleGrillesBusConfiguration
 from millegrilles_messages.messages.CleCertificat import CleCertificat
+from millegrilles_messages.messages.Constantes import ENV_REDIS_HOSTNAME, ENV_REDIS_PORT, ENV_REDIS_PASSWORD_PATH, \
+    ENV_CA_PEM, ENV_CERT_PEM, ENV_KEY_PEM
 from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
 from millegrilles_messages.messages.FormatteurMessages import SignateurTransactionSimple, FormatteurMessageMilleGrilles
-from millegrilles_messages.messages.ValidateurCertificats import ValidateurCertificatCache
+from millegrilles_messages.messages.ValidateurCertificats import ValidateurCertificatCache, ValidateurCertificatRedis
 from millegrilles_messages.messages.ValidateurMessage import ValidateurMessage
 
 LOGGER = logging.getLogger(__name__)
@@ -48,7 +50,7 @@ class MilleGrillesBusContext:
         self.__signateur = signateur
         self.__formatteur = formatteur
 
-        self.__verificateur_certificats = ValidateurCertificatCache(ca)
+        self.__verificateur_certificats = self.load_validateur_certificats()
         self.__validateur_messages = ValidateurMessage(self.__verificateur_certificats)
 
         signal.signal(signal.SIGINT, self.exit_gracefully)
@@ -82,6 +84,20 @@ class MilleGrillesBusContext:
                 await listener.stop()
             except Exception:
                 self.__logger.exception("Error stopping listener %s" % listener)
+
+    def load_validateur_certificats(self) -> Union[ValidateurCertificatRedis, ValidateurCertificatCache]:
+        if self.configuration.redis_password_path:
+            redis_configuration = {
+                ENV_REDIS_HOSTNAME: self.configuration.redis_hostname,
+                ENV_REDIS_PORT: str(self.configuration.redis_port),
+                ENV_REDIS_PASSWORD_PATH: self.configuration.redis_password_path,
+                ENV_CA_PEM: self.configuration.ca_path,
+                ENV_CERT_PEM: self.configuration.cert_path,
+                ENV_KEY_PEM: self.configuration.key_path,
+            }
+            return ValidateurCertificatRedis(self.ca, configuration=redis_configuration)
+        else:
+            return ValidateurCertificatCache(self.ca)
 
     async def wait(self, duration: Optional[Union[int,float]] = None):
         """
