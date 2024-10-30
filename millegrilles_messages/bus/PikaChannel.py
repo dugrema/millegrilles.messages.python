@@ -163,21 +163,27 @@ class MilleGrillesPikaChannel:
         self.__channel.queue_bind(name, rk.exchange, rk.routing_key, callback=bind_callback)
         await asyncio.wait_for(event.wait(), 5)
 
-    async def publish(self, exchanges: list, routing_key: str, content: bytes, properties: Optional[BasicProperties] = None):
-        for exchange in exchanges:
-            event = asyncio.Event()
-            item_no = self.__publish_count
-            self.__publish_count += 1
-            wait_dict = {'event': event, 'created': datetime.datetime.now()}
-            try:
-                self.__waiting_send[item_no] = wait_dict
-                self.__channel.basic_publish(exchange=exchange, routing_key=routing_key, body=content,
-                                             properties=properties, mandatory=True)
-                # Wait for send confirmation
-                await asyncio.wait_for(event.wait(), 5)
-            finally:
-                # Cleanup
-                del self.__waiting_send[item_no]
+    async def publish(self, exchanges: Optional[list], routing_key: str, content: bytes, properties: Optional[BasicProperties] = None):
+        if exchanges is not None:
+            for exchange in exchanges:
+                await self.__publish(exchange, routing_key, content, properties)
+        else:
+            await self.__publish('', routing_key, content, properties)
 
-            if wait_dict.get('ok') is not True:
-                raise Exception("NACK on send")
+    async def __publish(self, exchange: str, routing_key: str, content: bytes, properties: Optional[BasicProperties] = None):
+        event = asyncio.Event()
+        item_no = self.__publish_count
+        self.__publish_count += 1
+        wait_dict = {'event': event, 'created': datetime.datetime.now()}
+        try:
+            self.__waiting_send[item_no] = wait_dict
+            self.__channel.basic_publish(exchange=exchange, routing_key=routing_key, body=content,
+                                         properties=properties, mandatory=True)
+            # Wait for send confirmation
+            await asyncio.wait_for(event.wait(), 5)
+        finally:
+            # Cleanup
+            del self.__waiting_send[item_no]
+
+        if wait_dict.get('ok') is not True:
+            raise Exception("NACK on send")

@@ -68,7 +68,11 @@ class MilleGrillesPikaMessageProducer:
         if isinstance(message, str):
             message = message.encode('utf-8')
 
-        pending = MessagePending(message, routing_key, [exchange], reply_to, correlation_id)
+        exchanges = None
+        if exchange is not None:
+            exchanges = [exchange]
+
+        pending = MessagePending(message, routing_key, exchanges, reply_to, correlation_id)
         await self.send_raw(pending)
 
     async def send_wait_reply(self, message: Union[str, bytes], routing_key: str,
@@ -164,17 +168,21 @@ class MilleGrillesPikaMessageProducer:
 
     async def request(self, message_in: dict, domain: str, action: str, exchange: str, partition: Optional[str] = None,
             reply_to: Optional[str] = None, correlation_id: Optional[str] = None,
-            noformat=False, attachments: Optional[dict] = None, timeout=CONST_WAIT_REPLY_DEFAULT):
+            noformat=False, attachments: Optional[dict] = None, timeout=CONST_WAIT_REPLY_DEFAULT,
+            role_check: Optional[str] = None):
+        domain_check = role_check is None
         return await self.send_routed_message(
             message_in, Constantes.KIND_REQUETE, domain, action, exchange, partition, reply_to, correlation_id,
-            noformat, False, attachments, timeout)
+            noformat, False, attachments, timeout, domain_check, role_check)
 
     async def command(self, message_in: dict, domain: str, action: str, exchange: str, partition: Optional[str] = None,
             reply_to: Optional[str] = None, correlation_id: Optional[str] = None,
-            noformat=False, nowait=False, attachments: Optional[dict] = None, timeout=CONST_WAIT_REPLY_DEFAULT):
+            noformat=False, nowait=False, attachments: Optional[dict] = None, timeout=CONST_WAIT_REPLY_DEFAULT,
+            role_check: Optional[str] = None):
+        domain_check = role_check is None
         return await self.send_routed_message(
             message_in, Constantes.KIND_COMMANDE, domain, action, exchange, partition, reply_to, correlation_id,
-            noformat, nowait, attachments, timeout)
+            noformat, nowait, attachments, timeout, domain_check, role_check)
 
     async def event(self, message_in: dict, domain: str, action: str, exchange: str, partition: Optional[str] = None,
             reply_to: Optional[str] = None, correlation_id: Optional[str] = None,
@@ -182,3 +190,16 @@ class MilleGrillesPikaMessageProducer:
         return await self.send_routed_message(
             message_in, Constantes.KIND_EVENEMENT, domain, action, exchange, partition, reply_to, correlation_id,
             noformat, True, attachments, timeout)
+
+    async def reply(self, message_in: dict, reply_to: str, correlation_id: str, noformat=False, attachments: Optional[dict] = None):
+        if noformat is True:
+            message_id = message_in['id']
+            message = message_id
+        else:
+            message, message_id = self.__context.formatteur.signer_message(Constantes.KIND_REPONSE, message_in)
+
+        if attachments is not None:
+            message['attachements'] = attachments
+
+        message_bytes = json.dumps(message)
+        return await self.send(message_bytes, routing_key=reply_to, correlation_id=correlation_id, reply_to=reply_to)

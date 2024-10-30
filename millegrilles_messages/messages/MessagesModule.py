@@ -303,7 +303,7 @@ class MessageWrapper:
 
 class MessagePending:
 
-    def __init__(self, content: bytes, routing_key: str, exchanges: list, reply_to=None, correlation_id=None,
+    def __init__(self, content: bytes, routing_key: str, exchanges: Optional[list], reply_to=None, correlation_id=None,
                  headers: Optional[dict] = None, content_type = 'application/json'):
         self.content = content
         self.routing_key = routing_key

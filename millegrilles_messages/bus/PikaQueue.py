@@ -139,9 +139,17 @@ class MilleGrillesPikaQueueConsumer:
 
                 # Check the message domain/role
                 try:
-                    domain_role = message_wrapper.routing_key.split('.')[1]
+                    rk_split = message_wrapper.routing_key.split('.')
+                    if message_wrapper.reply_to == message_wrapper.routing_key or rk_split[0] == 'amq':
+                        domain_role = True # This is a reply, it will be checked with the correlation
+                    else:
+                        domain_role = rk_split[1]
                 except (AttributeError, IndexError):
-                    pass  # Likely a reply, will be checked at correlation
+                    if message_wrapper.correlation_id is not None:
+                        pass  # Likely a reply, will be checked at correlation
+                    else:
+                        self.__logger.info("MESSAGE DROPPED: No routing key domain nor correlation on %s" % message_wrapper.routing_key)
+                        message_wrapper = None
                 else:
                     domain_roles = set()
                     try:
@@ -152,7 +160,10 @@ class MilleGrillesPikaQueueConsumer:
                         domain_roles.update(enveloppe.get_domaines)
                     except ExtensionNotFound:
                         pass
-                    if domain_role not in domain_roles:
+
+                    if domain_role is True:
+                        pass
+                    elif domain_role not in domain_roles:
                         self.__logger.info("MESSAGE DROPPED: Routing key and certificate domain/role mismatch on %s" % message_wrapper.routing_key)
                         message_wrapper = None
 
@@ -328,6 +339,24 @@ class MilleGrillesPikaReplyQueueConsumer(MilleGrillesPikaQueueConsumer):
 
             # TODO: Check if streaming to avoid removing correlation
             del self.__correlations[correlation_id]
+
+            # Check certificate against expected domain/role
+            certificate = message.certificat
+            try:
+                if correlation.role:
+                    if correlation.role not in certificate.get_roles:
+                        self.__logger.info("REPLY MESSAGE DROPPED: role mismatch for %s" % correlation_id)
+                        await correlation.cancel()
+                        return
+                elif correlation.domain:
+                    if correlation.domain not in certificate.get_domaines:
+                        self.__logger.info("REPLY MESSAGE DROPPED: domain mismatch for %s" % correlation_id)
+                        await correlation.cancel()
+                        return
+            except ExtensionNotFound:
+                self.__logger.info("REPLY MESSAGE DROPPED: invalid domain/role for %s" % correlation_id)
+                await correlation.cancel()
+                return
 
             await correlation.recevoir_reponse(message)
         except KeyError:
