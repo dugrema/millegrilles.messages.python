@@ -334,9 +334,8 @@ class MilleGrillesPikaReplyQueueConsumer(MilleGrillesPikaQueueConsumer):
             self.__logger.info("REPLY MESSAGE DROPPED: no correlation")
             return
 
+        correlation = self.__correlations.get(correlation_id)
         try:
-            correlation = self.__correlations[correlation_id]
-
             # TODO: Check if streaming to avoid removing correlation
             del self.__correlations[correlation_id]
 
@@ -359,8 +358,13 @@ class MilleGrillesPikaReplyQueueConsumer(MilleGrillesPikaQueueConsumer):
                 return
 
             await correlation.recevoir_reponse(message)
+            correlation = None
         except KeyError:
             self.__logger.info("REPLY MESSAGE DROPPED: unknown correlation_id %s" % correlation_id)
+        finally:
+            if correlation:
+                # Reply not properly processed
+                await correlation.cancel()
 
     def add_correlation(self, correlation: MessageCorrelation):
         self.__correlations[correlation.correlation_id] = correlation
