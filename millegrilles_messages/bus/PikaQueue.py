@@ -13,7 +13,6 @@ from certvalidator.errors import PathValidationError
 from cryptography.exceptions import InvalidSignature
 
 from millegrilles_messages.bus.BusContext import MilleGrillesBusContext
-from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
 from millegrilles_messages.messages.Hachage import ErreurHachage
 from millegrilles_messages.messages.MessagesModule import MessageWrapper
 

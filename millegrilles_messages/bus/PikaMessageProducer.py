@@ -8,8 +8,7 @@ from typing import Union, Optional
 from millegrilles_messages.messages import Constantes
 from millegrilles_messages.bus.BusContext import MilleGrillesBusContext
 from millegrilles_messages.bus.PikaChannel import MilleGrillesPikaChannel
-from millegrilles_messages.bus.PikaQueue import MilleGrillesPikaReplyQueueConsumer, MessageCorrelation, \
-    CancelledException
+from millegrilles_messages.bus.PikaQueue import MilleGrillesPikaReplyQueueConsumer, MessageCorrelation
 from millegrilles_messages.messages.MessagesModule import MessagePending, MessageWrapper
 
 from pika import BasicProperties
