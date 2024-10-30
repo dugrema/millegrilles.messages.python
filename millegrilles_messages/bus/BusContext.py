@@ -2,6 +2,7 @@ import asyncio
 import logging
 import ssl
 import signal
+import threading
 
 from ssl import SSLContext, VerifyMode
 
@@ -52,24 +53,30 @@ class MilleGrillesBusContext:
 
         signal.signal(signal.SIGINT, self.exit_gracefully)
         signal.signal(signal.SIGTERM, self.exit_gracefully)
+        self.__loop = asyncio.get_event_loop()
+        self.__sync_event = threading.Event()
 
     def exit_gracefully(self, signum=None, frame=None):
         self.__logger.debug("Signal received: %d, closing" % signum)
         self.stop()
 
     def stop(self):
-        loop = asyncio.get_event_loop()
-        if loop is not None:
-            loop.call_soon(self.__stop_event.set)
-        else:
-            self.__logger.warning("Stopping without asyncio loop, may take time")
-            self.__stop_event.set()
+        self.__sync_event.set()
 
     async def run(self):
-        await self.__stop_thread()
+        await asyncio.gather(self.__stop_thread(), self.__sync_stop_thread())
+
+    async def __sync_stop_thread(self):
+        """
+        Thread that listens to a non async process/callback toggling the sync_event flag.
+        :return:
+        """
+        await asyncio.to_thread(self.__sync_event.wait)
+        self.__stop_event.set()  # Toggle async stop thread
 
     async def __stop_thread(self):
         await self.__stop_event.wait()
+        self.__sync_event.set()  # Ensure sync thread terminates
         for listener in self.__stop_listeners:
             try:
                 await listener.stop()
@@ -92,7 +99,7 @@ class MilleGrillesBusContext:
 
     @property
     def stopping(self):
-        return self.__stop_event.is_set()
+        return self.__stop_event.is_set() or self.__sync_event.is_set()
 
     def register_stop_listener(self, listener: StopListener):
         """

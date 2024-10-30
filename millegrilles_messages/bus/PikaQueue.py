@@ -132,26 +132,27 @@ class MilleGrillesPikaQueueConsumer:
                 message_wrapper.est_valide = True
             except json.JSONDecodeError:
                 self.__logger.info("MESSAGE DROPPED: Invalid JSON message")
-                continue
+                message_wrapper = None
             except KeyError:
                 self.__logger.info("MESSAGE DROPPED: Invalid parsed JSON message")
-                continue
+                message_wrapper = None
             except PathValidationError:
                 self.__logger.info("MESSAGE DROPPED: Invalid certificate")
-                continue
+                message_wrapper = None
             except (ErreurHachage, InvalidSignature):
                 self.__logger.info("MESSAGE DROPPED: Invalid message id (digest) or signature")
-                continue
+                message_wrapper = None
             except:
                 self.__logger.exception("MESSAGE DROPPED: Error processing message")
-                continue
+                message_wrapper = None
 
-            if message_wrapper.kind in [6, 8]:
+            if message_wrapper and message_wrapper.kind in [6, 8]:
                 self.__logger.error('PikaQueue TODO: Decrypt message')
-                raise NotImplementedError('todo')
+                message_wrapper = None
 
             try:
-                await self.__callback(message_wrapper)
+                if message_wrapper and message_wrapper.est_valide:
+                    await self.__callback(message_wrapper)
             except Exception as e:
                 self.__logger.exception('**UNHANDLED ERROR**: %s' % e)
             finally:
