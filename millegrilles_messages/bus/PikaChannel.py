@@ -116,7 +116,8 @@ class MilleGrillesPikaChannel:
         self.__channel = None
         self.__logger.debug("Channel %s closing" % channel)
         if self.ready.is_set() is True:
-            # Try to force shutdown
+            # This is an error, try to force shutdown
+            self.__context.stop()
             loop = asyncio.get_event_loop()
             loop.call_soon(self.__q_change_event.set)
 

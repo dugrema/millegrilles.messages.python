@@ -7,6 +7,7 @@ from typing import Awaitable, Optional, Callable
 
 from pika.adapters.asyncio_connection import AsyncioConnection
 from pika.channel import Channel
+from pika.exceptions import ProbableAuthenticationError
 
 from millegrilles_messages.bus.BusContext import MilleGrillesBusContext, StopListener
 
@@ -14,6 +15,8 @@ CONST_CONNECTION_ATTEMTPS = 5
 CONST_RETRY_DELAY = 5.0
 CONST_HEARTBEAT = 30
 CONST_BLOCKED_CONNECTION_TIMEOUT = 20
+
+LOGGER = logging.getLogger(__name__)
 
 
 class MilleGrillesPikaBusConnection(StopListener):
@@ -31,6 +34,7 @@ class MilleGrillesPikaBusConnection(StopListener):
 
         self.__event_connection_stopping = asyncio.Event()
         self.__loop: Optional[asyncio.EventLoop] = None
+        self.__access_just_created = False
 
         context.register_stop_listener(self)
 
@@ -101,8 +105,11 @@ class MilleGrillesPikaBusConnection(StopListener):
             on_close_callback=self.on_connection_closed)
 
         await event.wait()
-        if result.get('err'):
-            raise result['err']
+        exception = result.get('err')
+        if exception:
+            if isinstance(exception, ProbableAuthenticationError):
+                await self.create_midleware_access()  # On success, raises MiddlewareAccessCreatedException
+            raise exception
 
         self.__logger.debug("Connection adapter : %s", self._connection)
 
@@ -151,7 +158,15 @@ class MilleGrillesPikaBusConnection(StopListener):
         while self.__context.stopping is False:
             self.__logger.info("run_ioloop Connecting to MQ bus")
 
-            await self.connect()
+            try:
+                await self.connect()
+            except MiddlewareAccessCreatedException:
+                self.__logger.info("Middleware access was just created - retry")
+                if self.__access_just_created is True:
+                    raise Exception('Error creating middleware access, looping')
+                self.__access_just_created = True
+                continue
+
             await self.__on_connect_callback()
 
             await self.__event_connection_stopping.wait()
@@ -174,3 +189,57 @@ class MilleGrillesPikaBusConnection(StopListener):
             self._closing = True
             self.__logger.debug('__stop_connection Stopping')
             self.__logger.debug('__stop_connection Stopped')
+
+    async def create_midleware_access(self):
+        self.__logger.info("Creating middleware access using nginx")
+        configuration = self.__context.configuration
+        result = await asyncio.to_thread(
+            _create_middleware_access, configuration.mq_hostname, configuration.ca_path, configuration.cert_path,
+            configuration.key_path)
+        if result is True:
+            raise MiddlewareAccessCreatedException()
+
+
+class MiddlewareAccessCreatedException(Exception):
+    pass
+
+
+def _create_middleware_access(mq_host: str, ca_path: str, cert_path: str, key_path: str):
+    """
+    Creer un compte sur MQ via https (midcompte).
+    :return:
+    """
+    LOGGER.info("Creating MQ account using host %s" % mq_host)
+
+    # Le monitor peut etre trouve via quelques hostnames :
+    #  nginx : de l'interne, est le proxy web qui est mappe vers le monitor
+    #  mq_host : de l'exterieur, est le serveur mq qui est sur le meme swarm docker que nginx
+    hosts = ['nginx', mq_host, 'localhost']
+    port = 444
+    path = 'administration/ajouterCompte'
+
+    with open(cert_path, 'r') as fichier:
+        chaine_cert = {'certificat': fichier.read()}
+
+    cle_cert = (cert_path, key_path)
+    LOGGER.debug("Creation compte MQ avec fichiers %s" % str(cle_cert))
+    try:
+        import requests
+        for host in hosts:
+            path_complet = 'https://%s:%d/%s' % (host, port, path)
+            try:
+                LOGGER.debug("Creation compte avec path %s" % path_complet)
+                reponse = requests.post(path_complet, json=chaine_cert, cert=cle_cert, verify=ca_path)
+                if reponse.status_code in [200, 201]:
+                    return True
+                else:
+                    LOGGER.error("Erreur creation compte MQ via https, code : %d", reponse.status_code)
+            except requests.exceptions.SSLError as e:
+                LOGGER.exception("Erreur connexion https pour compte MQ")
+            except requests.exceptions.ConnectionError:
+                # Erreur connexion au serveur, tenter le prochain host
+                LOGGER.info("Echec creation compte MQ avec %s" % path_complet)
+    except ImportError:
+        LOGGER.warning("requests non disponible, on ne peut pas tenter d'ajouter le compte MQ")
+
+    return False
