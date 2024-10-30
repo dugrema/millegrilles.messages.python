@@ -122,7 +122,7 @@ class MilleGrillesPikaBusConnection(StopListener):
         :param Exception reason: exception representing reason for loss of
             connection.
         """
-        self.__loop.call_soon(self.__event_connection_stopping.set())
+        self.__loop.call_soon(self.__event_connection_stopping.set)
 
     async def open_channel(self) -> Channel:
         """Open a new channel with RabbitMQ by issuing the Channel.Open RPC

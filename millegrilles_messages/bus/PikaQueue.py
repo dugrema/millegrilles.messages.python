@@ -108,6 +108,9 @@ class MilleGrillesPikaQueueConsumer:
         if self.__channel.is_open and self.__consumer_tag:
             self.__channel.basic_cancel(self.__consumer_tag)
         self.__consumer_tag = None
+
+    async def close(self):
+        await self.stop_consuming()
         await self.__async_queue.put(None)  # Makes the async run exit if appropriate
 
     def add_routing_key(self, routing_key: RoutingKey):

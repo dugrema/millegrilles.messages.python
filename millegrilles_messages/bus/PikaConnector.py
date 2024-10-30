@@ -48,7 +48,7 @@ class MilleGrillesPikaConnector(ConnectionProvider):
             self.__context.stop()
 
         # Ensure all channels shut down
-        await self.__stop_consuming()
+        await self.__close_channels()
 
         if len(pending) > 0:
             await asyncio.gather(*pending)
@@ -79,6 +79,13 @@ class MilleGrillesPikaConnector(ConnectionProvider):
         for channel in self.__channels:
             try:
                 await channel.stop_consuming()
+            except:
+                self.__logger.exception("Error stopping channel %s" % channel)
+
+    async def __close_channels(self):
+        for channel in self.__channels:
+            try:
+                await channel.close()
             except:
                 self.__logger.exception("Error closing channel %s" % channel)
 

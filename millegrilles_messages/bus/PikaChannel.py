@@ -129,6 +129,11 @@ class MilleGrillesPikaChannel:
         self.__channel = None
         self.__q_change_event.set()
 
+    async def close(self):
+        await self.stop_consuming()
+        for q in self.__queues:
+            await q.close()
+
     async def set_qos(self):
         loop = asyncio.get_event_loop()
         event = asyncio.Event()
