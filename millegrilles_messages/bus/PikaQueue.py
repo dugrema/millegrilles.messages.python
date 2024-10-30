@@ -5,6 +5,7 @@ import json
 
 from typing import Any, Callable, Optional, Coroutine, Union, Awaitable
 
+from cryptography.x509 import ExtensionNotFound
 from pika.channel import Channel
 from pika.frame import Method
 from pika.spec import Basic, BasicProperties
@@ -135,6 +136,26 @@ class MilleGrillesPikaQueueConsumer:
                 enveloppe = await validateur.verifier(message_dict)
                 message_wrapper.certificat = enveloppe
                 message_wrapper.est_valide = True
+
+                # Check the message domain/role
+                try:
+                    domain_role = message_wrapper.routing_key.split('.')[1]
+                except (AttributeError, IndexError):
+                    pass  # Likely a reply, will be checked at correlation
+                else:
+                    domain_roles = set()
+                    try:
+                        domain_roles.update(enveloppe.get_roles)
+                    except ExtensionNotFound:
+                        pass
+                    try:
+                        domain_roles.update(enveloppe.get_domaines)
+                    except ExtensionNotFound:
+                        pass
+                    if domain_role not in domain_roles:
+                        self.__logger.info("MESSAGE DROPPED: Routing key and certificate domain/role mismatch on %s" % message_wrapper.routing_key)
+                        message_wrapper = None
+
             except json.JSONDecodeError:
                 self.__logger.info("MESSAGE DROPPED: Invalid JSON message")
                 message_wrapper = None
