@@ -183,13 +183,6 @@ class MilleGrillesPikaBusConnection(StopListener):
             # Wait for retry if applicable (using context event)
             await self.__context.wait(CONST_RETRY_DELAY)
 
-    def __stop_connection(self):
-        """ Shutdown the connection to RabbitMQ """
-        if not self._closing:
-            self._closing = True
-            self.__logger.debug('__stop_connection Stopping')
-            self.__logger.debug('__stop_connection Stopped')
-
     async def create_midleware_access(self):
         self.__logger.info("Creating middleware access using nginx")
         configuration = self.__context.configuration
