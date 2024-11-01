@@ -6,7 +6,7 @@ import threading
 
 from ssl import SSLContext, VerifyMode
 
-from typing import Optional, Union
+from typing import Optional, Union, Callable, Awaitable
 
 from millegrilles_messages.bus.BusConfiguration import MilleGrillesBusConfiguration
 from millegrilles_messages.messages.CleCertificat import CleCertificat
@@ -19,18 +19,22 @@ from millegrilles_messages.messages.ValidateurMessage import ValidateurMessage
 
 LOGGER = logging.getLogger(__name__)
 
+class ForceTerminateExecution(Exception):
+    pass
+
 
 class StopListener:
     """
     Extend this class to receive a stop callback when the application is stopping
     """
 
-    def __init__(self):
-        pass
+    def __init__(self, callback: Optional[Callable[[], Awaitable[None]]] = None):
+        self.__callback = callback
 
     async def stop(self):
         # Hook
-        pass
+        if self.__callback:
+            await self.__callback()
 
 
 class MilleGrillesBusContext:
@@ -47,10 +51,10 @@ class MilleGrillesBusContext:
         self.__ca: EnveloppeCertificat = ca
 
         signateur, formatteur = load_message_formatter(clecert, ca)
-        self.__signateur = signateur
-        self.__formatteur = formatteur
+        self.__signateur: SignateurTransactionSimple = signateur
+        self.__formatteur: FormatteurMessageMilleGrilles = formatteur
 
-        self.__verificateur_certificats = self.load_validateur_certificats()
+        self.__verificateur_certificats: Union[ValidateurCertificatRedis, ValidateurCertificatCache] = self.load_validateur_certificats()
         self.__validateur_messages = ValidateurMessage(self.__verificateur_certificats)
 
         signal.signal(signal.SIGINT, self.exit_gracefully)
