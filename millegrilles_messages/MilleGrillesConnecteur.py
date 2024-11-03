@@ -3,9 +3,10 @@ import asyncio
 import logging
 import os
 
-from asyncio import Event, TimeoutError
+from asyncio import Event, TimeoutError, TaskGroup
 from typing import Optional
 
+from millegrilles_messages.bus.BusContext import ForceTerminateExecution
 from millegrilles_messages.docker.Entretien import TacheEntretien
 
 from millegrilles_messages.messages import Constantes
@@ -476,7 +477,21 @@ class MilleGrillesConnecteur:
     def get_producer(self) -> Optional[MessageProducerFormatteur]:
         return self.__producer
 
+    async def __stop_thread(self):
+        await self.__event_stop.wait()
+        raise ForceTerminateExecution()
+
     async def run(self):
+        self.__logger.info("Debut thread asyncio MessagesThread")
+        self.__event_stop.clear()
+        try:
+            async with TaskGroup() as group:
+                group.create_task(self.__run__thread())
+                group.create_task(self.__stop_thread())
+        except* ForceTerminateExecution:
+            pass
+
+    async def __run__thread(self):
         self.__logger.info("Debut thread asyncio MessagesThread")
         self.__event_stop.clear()
 
@@ -506,7 +521,7 @@ class MilleGrillesConnecteur:
         self.__logger.info("Fin thread MessagesThread")
         if self.__event_stop.is_set() is False:
             # Forcer l'arret de l'application (si exception non geree)
-            raise Exception('MessagesThread stopped')
+            raise ForceTerminateExecution('MessagesThread stopped')
 
     async def creer_compte_mq(self):
         """
