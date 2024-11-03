@@ -304,6 +304,10 @@ class FormatteurMessageMilleGrilles:
     def chaine_certificat(self):
         return self.__signateur_transactions.chaine_certs
 
+    @property
+    def enveloppe_ca(self):
+        return self.__enveloppe_ca
+
 
 def preparer_message_bytes(message: dict):
     """
