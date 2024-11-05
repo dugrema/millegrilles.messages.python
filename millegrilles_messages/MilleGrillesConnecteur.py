@@ -133,6 +133,8 @@ class EtatInstance:
         if self.__clecertificat is not None:
             idmg = self.__clecertificat.enveloppe.idmg
 
+            self.__instance_id = self.__clecertificat.enveloppe.subject_common_name
+
             # Valider le certificat en memoire
             try:
                 await self.__validateur_certificats.valider(self.__clecertificat.enveloppe.chaine_pem())
