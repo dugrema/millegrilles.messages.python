@@ -49,6 +49,7 @@ class MilleGrillesBusContext:
         clecert, ca = load_certificates(configuration.key_path, configuration.cert_path, configuration.ca_path)
         self.__clecert: CleCertificat = clecert
         self.__ca: EnveloppeCertificat = ca
+        self.__instance_id: str = clecert.enveloppe.subject_common_name
 
         signateur, formatteur = load_message_formatter(clecert, ca)
         self.__signateur: SignateurTransactionSimple = signateur
@@ -160,6 +161,10 @@ class MilleGrillesBusContext:
     @property
     def validateur_message(self):
         return self.__validateur_messages
+
+    @property
+    def instance_id(self):
+        return self.__instance_id
 
 
 def _load_ssl_context(configuration: MilleGrillesBusConfiguration) -> ssl.SSLContext:
