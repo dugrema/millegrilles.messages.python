@@ -1,6 +1,9 @@
 import asyncio
 import logging
 
+from asyncio import TaskGroup
+from typing import Optional
+
 from millegrilles_messages.bus.PikaBusConnection import MilleGrillesPikaBusConnection
 from millegrilles_messages.bus.BusContext import MilleGrillesBusContext
 from millegrilles_messages.bus.PikaChannel import MilleGrillesPikaChannel, ConnectionProvider
@@ -29,6 +32,7 @@ class MilleGrillesPikaConnector(ConnectionProvider):
 
         self.__channels: list[MilleGrillesPikaChannel] = [self.__producer_channel]
         self.__producer = MilleGrillesPikaMessageProducer(context, self.__producer_channel, self.__reply_queue)
+        self.__task_group: Optional[TaskGroup] = None
 
     @property
     def connection(self):
@@ -55,20 +59,25 @@ class MilleGrillesPikaConnector(ConnectionProvider):
         self.__logger.info("MilleGrillesPikaConnector.run thread closed")
 
     async def __channel_thread(self):
-        tasks = [asyncio.create_task(c.run()) for c in self.__channels]
-        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-        if self.__context.stopping is not True:
-            self.__logger.exception("Thread quit unexpectedly: %s" % done)
-            self.__context.stop()
-        if len(pending) > 0:
-            await asyncio.gather(*pending)
+        async with TaskGroup() as group:
+            self.__task_group = group
+            for c in self.__channels:
+                group.create_task(c.run())
         self.__logger.info("MilleGrillesPikaConnector.__channel_thread thread closed")
 
     async def add_channel(self, channel: MilleGrillesPikaChannel):
-        if self._connection.connected:
-            raise Exception('Already running, cannot configure')
         self.__channels.append(channel)
+        if self._connection.connected:
+            # Immediately start running the channel
+            self.__task_group.create_task(channel.run())
         channel.setup(self)
+
+    async def remove_channel(self, channel: MilleGrillesPikaChannel):
+        try:
+            await channel.close()
+        except Exception as e:
+            self.__logger.info("Error closing channel: %s" % e)
+        self.__channels.remove(channel)
 
     async def on_connect(self):
         self.__logger.debug("Bus connected, starting channels")

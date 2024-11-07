@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import logging
+from asyncio import TaskGroup
 
 from typing import Optional
 
@@ -37,6 +38,7 @@ class MilleGrillesPikaChannel:
 
         self.__q_change_event = asyncio.Event()
         self.__running = False
+        self.__task_group: Optional[TaskGroup] = None
 
         self.ready = asyncio.Event()
         self.__waiting_send: dict[int, dict] = dict()
@@ -60,41 +62,55 @@ class MilleGrillesPikaChannel:
         loop = asyncio.get_event_loop()
         loop.call_soon(item['event'].set)
 
+    async def __stop_thread(self):
+        await self.__context.wait()
+        self.__q_change_event.set()
+
     async def run(self):
-        self.__q_change_event.clear()  # Avoids recycling watch thread
-        tasks = [asyncio.create_task(self.__change_watcher_thread())]
-
-        while len(tasks) > 0:
+        self.__logger.info("Channel thread starting")
+        self.__running = True
+        async with TaskGroup() as group:
+            group.create_task(self.__stop_thread())
             for q in self.__queues:
-                if q.running is False:
-                    tasks.append(asyncio.create_task(q.run()))
+                group.create_task(q.run())
 
-            done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-            tasks = list(pending)
-
-            if self.__context.stopping is False and self.__q_change_event.is_set() is True:
-                # Put change watcher back in list
-                self.__q_change_event.clear()
-                tasks.append(asyncio.create_task(self.__change_watcher_thread()))
-            else:
-                if self.ready.is_set():
-                    # Perform clean shutdown
-                    await self.stop_consuming()
+        # self.__q_change_event.clear()  # Avoids recycling watch thread
+        # tasks = [asyncio.create_task(self.__change_watcher_thread())]
+        #
+        # while len(tasks) > 0:
+        #     for q in self.__queues:
+        #         if q.running is False:
+        #             tasks.append(asyncio.create_task(q.run()))
+        #
+        #     done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        #     tasks = list(pending)
+        #
+        #     if self.__context.stopping is False and self.__q_change_event.is_set() is True:
+        #         # Put change watcher back in list
+        #         self.__q_change_event.clear()
+        #         tasks.append(asyncio.create_task(self.__change_watcher_thread()))
+        #     else:
+        #         if self.ready.is_set():
+        #             # Perform clean shutdown
+        #             await self.stop_consuming()
 
         self.__logger.info("Channel thread closed")
 
-    async def __change_watcher_thread(self):
-        await self.__q_change_event.wait()
+    # async def __change_watcher_thread(self):
+    #     await self.__q_change_event.wait()
 
     def add_queue(self, queue: MilleGrillesPikaQueueConsumer):
         queue.setup(self.__prefetch_count)
         self.__queues.append(queue)
-        self.__q_change_event.set()
+        # self.__q_change_event.set()
+        if self.ready.is_set() is True:
+            # Start running immediately
+            self.__task_group.create_task(queue.run())
 
     def remove_queue(self, queue: MilleGrillesPikaQueueConsumer):
-        queue.stop_consuming()
+        queue.close()
         self.__queues.remove(queue)
-        self.__q_change_event.set()
+        # self.__q_change_event.set()
 
     async def start_consuming(self):
         # Connect new channel
