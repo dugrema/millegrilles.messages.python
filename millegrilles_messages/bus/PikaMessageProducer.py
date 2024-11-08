@@ -93,19 +93,18 @@ class MilleGrillesPikaMessageProducer:
         self.__message_counter += 1  # Incrementer compteur
 
         # Conserver reference a la correlation
-        correlation_reponse = MessageCorrelation(correlation_id, domain=domain, role=role)
+        correlation_reponse = MessageCorrelation(correlation_id, timeout=timeout, domain=domain, role=role)
 
-        async with self.__semaphore_correlations:
-            self.__reply_queue.add_correlation(correlation_reponse)
-
-            try:
+        try:
+            async with self.__semaphore_correlations:
+                self.__reply_queue.add_correlation(correlation_reponse)
                 # Emettre le message
                 await self.send(message, routing_key, exchange, correlation_id, reply_to)
 
-                # Attendre la reponse. raises TimeoutError
-                response = await correlation_reponse.wait(timeout)
-            finally:
-                self.__reply_queue.remove_correlation(correlation_reponse.correlation_id)
+            # Attendre la reponse. raises TimeoutError
+            response = await correlation_reponse.wait(timeout)
+        finally:
+            self.__reply_queue.remove_correlation(correlation_reponse.correlation_id)
 
         return response
 

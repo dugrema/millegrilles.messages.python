@@ -2,6 +2,7 @@ import asyncio
 import datetime
 import logging
 import json
+from asyncio import TaskGroup
 
 from typing import Any, Callable, Optional, Coroutine, Union, Awaitable
 
@@ -125,6 +126,10 @@ class MilleGrillesPikaQueueConsumer:
         self.__async_queue.put_nowait(message)
 
     async def run(self):
+        async with TaskGroup() as group:
+            group.create_task(self.__run_consume())
+
+    async def __run_consume(self):
         self.__running = True
         while self._context.stopping is False:
             message = await self.__async_queue.get()
@@ -207,7 +212,7 @@ class CancelledException(Exception):
 
 class MessageCorrelation:
 
-    def __init__(self, correlation_id: str, timeout=CONST_WAIT_REPLY_DEFAULT, callback=Callable[[int, MessageWrapper], Awaitable[None]], domain: Optional[str] = None, role: Optional[str] = None):
+    def __init__(self, correlation_id: str, timeout=CONST_WAIT_REPLY_DEFAULT, callback: Optional[Callable[[int, MessageWrapper], Awaitable[None]]] = None, domain: Optional[str] = None, role: Optional[str] = None):
         self.__logger = logging.getLogger(__name__+'.'+self.__class__.__name__)
         self.correlation_id = correlation_id
         self.__creation_date = datetime.datetime.now()
@@ -235,7 +240,12 @@ class MessageCorrelation:
 
     async def wait(self, timeout=CONST_WAIT_REPLY_DEFAULT) -> MessageWrapper:
         self.__timeout = timeout
-        await asyncio.wait_for(self.__event_attente.wait(), timeout)
+        try:
+            await asyncio.wait_for(self.__event_attente.wait(), timeout)
+        except asyncio.TimeoutError as e:
+            if self.__event_attente.is_set():
+                self.__logger.error("Erreur timeout correlation %s, set pas triggered" % self.correlation_id)
+            raise e
 
         if self.__cancelled:
             raise CancelledException()
@@ -281,9 +291,11 @@ class MessageCorrelation:
             self.__event_attente.set()
 
     def expired(self):
-        duree_message = datetime.timedelta(seconds=self.__timeout)
-        if self.__reponse_consommee:
-            duree_message = duree_message * 3  # On donne un delai supplementaire si la reponse n'est pas consommee
+        if self.__reponse_consommee is False:
+            # On donne un delai supplementaire si la reponse n'est pas consommee
+            duree_message = datetime.timedelta(seconds=self.__timeout * 3)
+        else:
+            duree_message = datetime.timedelta(seconds=self.__timeout)
 
         date_expiration = datetime.datetime.now() - duree_message
 
@@ -304,15 +316,9 @@ class MilleGrillesPikaReplyQueueConsumer(MilleGrillesPikaQueueConsumer):
         self.__correlations: dict[str, MessageCorrelation] = dict()
 
     async def run(self):
-        done, pending = await asyncio.wait([
-            asyncio.create_task(super().run()),
-            asyncio.create_task(self.__thread_maintain_correlations()),
-        ], return_when=asyncio.FIRST_COMPLETED)
-        if self._context.stopping is not True:
-            self.__logger.error("Thread quit unexpectedly: %s" % done)
-            self._context.stop()
-        if len(pending) > 0:
-            await asyncio.gather(*pending)
+        async with TaskGroup() as group:
+            group.create_task(super().run())
+            group.create_task(self.__thread_maintain_correlations())
         self.__logger.info("MilleGrillesPikaReplyQueueConsumer %s thread closed" % self.name)
 
     async def __thread_maintain_correlations(self):

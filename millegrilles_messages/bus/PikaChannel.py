@@ -43,24 +43,30 @@ class MilleGrillesPikaChannel:
         self.ready = asyncio.Event()
         self.__waiting_send: dict[int, dict] = dict()
         self.__publish_count = 1
+        self.__last_delivery = 0
 
     def setup(self, connector: ConnectionProvider):
         self.__connector = connector
 
     def on_delivery_confirmation(self, frame: Method):
         delivery_tag = frame.method.delivery_tag
-        try:
-            item = self.__waiting_send[delivery_tag]
-        except KeyError:
-            return  # Mismatch
+        last_delivery = self.__last_delivery
+        self.__last_delivery = delivery_tag
 
-        if isinstance(frame.method, Basic.Ack):
-            item['ok'] = True
-        else:
-            item['ok'] = False
+        is_ok = isinstance(frame.method, Basic.Ack)
 
-        loop = asyncio.get_event_loop()
-        loop.call_soon(item['event'].set)
+        for no in range(last_delivery+1, delivery_tag+1):
+            try:
+                item = self.__waiting_send[no]
+            except KeyError:
+                continue
+
+            try:
+                item['ok'] = is_ok
+                loop = asyncio.get_event_loop()
+                loop.call_soon(item['event'].set)
+            except:
+                self.__logger.exception("Error processing delivery tag")
 
     async def __stop_thread(self):
         await self.__context.wait()
@@ -74,35 +80,11 @@ class MilleGrillesPikaChannel:
             for q in self.__queues:
                 group.create_task(q.run())
 
-        # self.__q_change_event.clear()  # Avoids recycling watch thread
-        # tasks = [asyncio.create_task(self.__change_watcher_thread())]
-        #
-        # while len(tasks) > 0:
-        #     for q in self.__queues:
-        #         if q.running is False:
-        #             tasks.append(asyncio.create_task(q.run()))
-        #
-        #     done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-        #     tasks = list(pending)
-        #
-        #     if self.__context.stopping is False and self.__q_change_event.is_set() is True:
-        #         # Put change watcher back in list
-        #         self.__q_change_event.clear()
-        #         tasks.append(asyncio.create_task(self.__change_watcher_thread()))
-        #     else:
-        #         if self.ready.is_set():
-        #             # Perform clean shutdown
-        #             await self.stop_consuming()
-
         self.__logger.info("Channel thread closed")
-
-    # async def __change_watcher_thread(self):
-    #     await self.__q_change_event.wait()
 
     def add_queue(self, queue: MilleGrillesPikaQueueConsumer):
         queue.setup(self.__prefetch_count)
         self.__queues.append(queue)
-        # self.__q_change_event.set()
         if self.ready.is_set() is True:
             # Start running immediately
             self.__task_group.create_task(queue.run())
@@ -199,13 +181,20 @@ class MilleGrillesPikaChannel:
         event = asyncio.Event()
         item_no = self.__publish_count
         self.__publish_count += 1
-        wait_dict = {'event': event, 'created': datetime.datetime.now()}
+        wait_dict = {'event': event, 'created': datetime.datetime.now(), 'no': item_no}
         try:
             self.__waiting_send[item_no] = wait_dict
             self.__channel.basic_publish(exchange=exchange, routing_key=routing_key, body=content,
                                          properties=properties, mandatory=True)
+
             # Wait for send confirmation
-            await asyncio.wait_for(event.wait(), 5)
+            if len(content) > 1_000_000:  # Very large message, give ample time to transfer
+                wait_time = 30
+            elif len(content) > 256_000:  # Large message
+                wait_time = 10
+            else:
+                wait_time = 5
+            await asyncio.wait_for(event.wait(), wait_time)
         finally:
             # Cleanup
             del self.__waiting_send[item_no]
