@@ -39,7 +39,7 @@ async def feed_filepart(etat_upload: UploadState, limit=BATCH_UPLOAD_DEFAULT):
         if etat_upload.stop_event and etat_upload.stop_event.is_set():
             break  # Stopped
 
-        chunk = input_stream.read(chunk_size)
+        chunk = await asyncio.to_thread(input_stream.read, chunk_size)
         if not chunk:
             etat_upload.done = True
             break
