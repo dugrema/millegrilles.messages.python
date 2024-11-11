@@ -29,6 +29,8 @@ class MilleGrillesPikaChannel:
     def __init__(self, context: MilleGrillesBusContext, prefetch_count=1):
         self.__logger = logging.getLogger(__name__+'.'+self.__class__.__name__)
         self.__context = context
+        if prefetch_count > 1:
+            raise NotImplementedError('Prefect stuck at 1, need to work on threading for ACKs')
         self.__prefetch_count = prefetch_count
 
         self.__connector: Optional[ConnectionProvider] = None
