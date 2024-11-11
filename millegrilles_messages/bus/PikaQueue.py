@@ -101,7 +101,7 @@ class MilleGrillesPikaQueueConsumer:
         event = asyncio.Event()
         def consume_callback(method: Method):
             loop.call_soon(event.set)
-        self.__consumer_tag = channel.basic_consume(self.auto_name, self.__on_message, callback=consume_callback)
+        self.__consumer_tag = channel.basic_consume(self.auto_name, self.__on_message, auto_ack=False, callback=consume_callback)
         await asyncio.wait_for(event.wait(), 3)
 
     async def stop_consuming(self):
@@ -203,7 +203,8 @@ class MilleGrillesPikaQueueConsumer:
             except Exception as e:
                 self.__logger.exception('**UNHANDLED ERROR**: %s' % e)
             finally:
-                self.__channel.basic_ack(message.deliver.delivery_tag)
+                # ACK must be sent back on same channel as received
+                message.channel.basic_ack(message.deliver.delivery_tag)
 
 
 class CancelledException(Exception):
