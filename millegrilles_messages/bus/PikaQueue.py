@@ -13,6 +13,7 @@ from pika.spec import Basic, BasicProperties
 from certvalidator.errors import PathValidationError
 from cryptography.exceptions import InvalidSignature
 
+from millegrilles_messages.messages import Constantes
 from millegrilles_messages.bus.BusContext import MilleGrillesBusContext
 from millegrilles_messages.messages.Hachage import ErreurHachage
 from millegrilles_messages.messages.MessagesModule import MessageWrapper
@@ -59,8 +60,9 @@ class RawMessageWrapper:
 
 class MilleGrillesPikaQueueConsumer:
 
-    def __init__(self, context: MilleGrillesBusContext, callback: Callable[[MessageWrapper], Coroutine[Any, Any, None]],
-                 name: Optional[str] = None, exclusive=False, durable=False, auto_delete=False, arguments: Optional[dict] = None):
+    def __init__(self, context: MilleGrillesBusContext, callback: Callable[[MessageWrapper], Coroutine[Any, Any, Optional[dict]]],
+                 name: Optional[str] = None, exclusive=False, durable=False, auto_delete=False,
+                 arguments: Optional[dict] = None, allow_user_messages=False):
         self.__logger = logging.getLogger(__name__+'.'+self.__class__.__name__)
         self._context = context
         self.__callback = callback
@@ -74,6 +76,7 @@ class MilleGrillesPikaQueueConsumer:
         self.durable = durable
         self.auto_delete = auto_delete
         self.arguments = arguments
+        self.allow_user_messages = allow_user_messages
 
         self.routing_keys: list[RoutingKey] = list()
 
@@ -151,7 +154,7 @@ class MilleGrillesPikaQueueConsumer:
                 try:
                     rk_split = message_wrapper.routing_key.split('.')
                     if message_wrapper.reply_to == message_wrapper.routing_key or rk_split[0] == 'amq':
-                        domain_role = True # This is a reply, it will be checked with the correlation
+                        domain_role = True  # This is a reply, it will be checked with the correlation
                     else:
                         domain_role = rk_split[1]
                 except (AttributeError, IndexError):
@@ -173,7 +176,11 @@ class MilleGrillesPikaQueueConsumer:
 
                     if domain_role is True:
                         pass
-                    elif domain_role not in domain_roles:
+                    elif domain_role in domain_roles:
+                        pass
+                    elif self.allow_user_messages and 'usager' in enveloppe.get_roles:
+                        pass  # This is a user message - needs to be checked at the business logic level
+                    else:
                         self.__logger.info("MESSAGE DROPPED: Routing key and certificate domain/role mismatch on %s" % message_wrapper.routing_key)
                         message_wrapper = None
 
@@ -199,13 +206,34 @@ class MilleGrillesPikaQueueConsumer:
 
             try:
                 if message_wrapper and message_wrapper.est_valide:
-                    await self.__callback(message_wrapper)
+                    response = await self.__callback(message_wrapper)
+                    if response is not None:
+                        # This is a reply
+                        await self.respond(message_wrapper, response)
             except Exception as e:
                 self.__logger.exception('**UNHANDLED ERROR**: %s' % e)
             finally:
                 # ACK must be sent back on same channel as received
                 message.channel.basic_ack(message.deliver.delivery_tag)
 
+
+    async def respond(self, message_wrapper: MessageWrapper, response: dict):
+        reply_to = message_wrapper.reply_to
+        correlation_id = message_wrapper.correlation_id
+
+        if reply_to and correlation_id:
+            signed_response, response_id = self._context.formatteur.signer_message(Constantes.KIND_REPONSE, response)
+            delivery_mode_v = 1
+            properties = BasicProperties(content_type='application/json', delivery_mode=delivery_mode_v)
+            # properties.reply_to = reply_to
+            properties.correlation_id = correlation_id
+
+            content = json.dumps(signed_response).encode('utf-8')
+            self.__channel.basic_publish(exchange='', routing_key=reply_to, body=content, properties=properties)
+        else:
+            self.__logger.info("Cannot reply to message without correlation_id/reply_to: %s" % message_wrapper.routing_key)
+
+        pass
 
 class CancelledException(Exception):
     pass
