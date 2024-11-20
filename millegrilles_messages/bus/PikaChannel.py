@@ -76,9 +76,11 @@ class MilleGrillesPikaChannel:
         self.__logger.info("Channel thread starting")
         self.__running = True
         async with TaskGroup() as group:
+            self.__task_group = group
             group.create_task(self.__stop_thread())
             for q in self.__queues:
                 group.create_task(q.run())
+        self.__task_group = None
 
         self.__logger.info("Channel thread closed")
 
@@ -89,8 +91,19 @@ class MilleGrillesPikaChannel:
             # Start running immediately
             self.__task_group.create_task(queue.run())
 
-    def remove_queue(self, queue: MilleGrillesPikaQueueConsumer):
-        queue.close()
+    async def add_queue_consume(self, queue: MilleGrillesPikaQueueConsumer):
+        """
+        Add queue and start consuming immediately
+        :param queue:
+        :return:
+        """
+        self.add_queue(queue)
+        if self.ready.is_set() is True:
+            await self.create_q(queue)
+            await queue.start_consuming(self.__channel)
+
+    async def remove_queue(self, queue: MilleGrillesPikaQueueConsumer):
+        await queue.close()
         self.__queues.remove(queue)
         # self.__q_change_event.set()
 
