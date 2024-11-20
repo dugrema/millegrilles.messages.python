@@ -13,6 +13,7 @@ from pika.spec import Basic, BasicProperties
 from certvalidator.errors import PathValidationError
 from cryptography.exceptions import InvalidSignature
 
+from millegrilles_messages.chiffrage.DechiffrageUtils import dechiffrer_reponse
 from millegrilles_messages.messages import Constantes
 from millegrilles_messages.bus.BusContext import MilleGrillesBusContext
 from millegrilles_messages.messages.Hachage import ErreurHachage
@@ -155,6 +156,8 @@ class MilleGrillesPikaQueueConsumer:
                     rk_split = message_wrapper.routing_key.split('.')
                     if message_wrapper.reply_to == message_wrapper.routing_key or rk_split[0] == 'amq':
                         domain_role = True  # This is a reply, it will be checked with the correlation
+                    elif rk_split[0] in ('commande', 'requete'):
+                        domain_role = True  # Messages from anyone can come in as requests or commands
                     else:
                         domain_role = rk_split[1]
                 except (AttributeError, IndexError):
@@ -201,8 +204,9 @@ class MilleGrillesPikaQueueConsumer:
                 message_wrapper = None
 
             if message_wrapper and message_wrapper.kind in [6, 8]:
-                self.__logger.error('PikaQueue TODO: Decrypt message')
-                message_wrapper = None
+                original = message_wrapper.original
+                decrypted_content = dechiffrer_reponse(self._context.signing_key, original)
+                message_wrapper.set_parsed_dechiffre(decrypted_content)
 
             try:
                 if message_wrapper and message_wrapper.est_valide:

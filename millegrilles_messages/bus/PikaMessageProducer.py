@@ -112,7 +112,7 @@ class MilleGrillesPikaMessageProducer:
             self, message_in: dict, kind: int, domain: str, action: str, exchange: str, partition: Optional[str] = None,
             reply_to: Optional[str] = None, correlation_id: Optional[str] = None,
             noformat=False, nowait=False, attachments: Optional[dict] = None, timeout=CONST_WAIT_REPLY_DEFAULT,
-            domain_check: Union[bool, str]=True, role_check: Optional[str] = None) -> [MessageWrapper, None]:
+            domain_check: Union[bool, str]=True, role_check: Optional[str] = None) -> Optional[MessageWrapper]:
 
         if noformat is True:
             message_id = message_in['id']
@@ -167,7 +167,7 @@ class MilleGrillesPikaMessageProducer:
     async def request(self, message_in: dict, domain: str, action: str, exchange: str, partition: Optional[str] = None,
             reply_to: Optional[str] = None, correlation_id: Optional[str] = None,
             noformat=False, attachments: Optional[dict] = None, timeout=CONST_WAIT_REPLY_DEFAULT,
-            role_check: Optional[str] = None):
+            role_check: Optional[str] = None) -> Optional[MessageWrapper]:
         domain_check = role_check is None
         return await self.send_routed_message(
             message_in, Constantes.KIND_REQUETE, domain, action, exchange, partition, reply_to, correlation_id,
@@ -176,7 +176,7 @@ class MilleGrillesPikaMessageProducer:
     async def command(self, message_in: dict, domain: str, action: str, exchange: str, partition: Optional[str] = None,
             reply_to: Optional[str] = None, correlation_id: Optional[str] = None,
             noformat=False, nowait=False, attachments: Optional[dict] = None, timeout=CONST_WAIT_REPLY_DEFAULT,
-            role_check: Optional[str] = None):
+            role_check: Optional[str] = None) -> Optional[MessageWrapper]:
         domain_check = role_check is None
         return await self.send_routed_message(
             message_in, Constantes.KIND_COMMANDE, domain, action, exchange, partition, reply_to, correlation_id,

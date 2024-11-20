@@ -97,10 +97,10 @@ class MilleGrillesPikaChannel:
         :param queue:
         :return:
         """
+        await self.ready.wait()
         self.add_queue(queue)
-        if self.ready.is_set() is True:
-            await self.create_q(queue)
-            await queue.start_consuming(self.__channel)
+        await self.create_q(queue)
+        await queue.start_consuming(self.__channel)
 
     async def remove_queue(self, queue: MilleGrillesPikaQueueConsumer):
         await queue.close()
