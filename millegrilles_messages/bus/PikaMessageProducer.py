@@ -77,7 +77,7 @@ class MilleGrillesPikaMessageProducer:
     async def send_wait_reply(self, message: Union[str, bytes], routing_key: str,
                               exchange: Optional[str] = None, correlation_id: str = None,
                               reply_to: str = None, timeout=CONST_WAIT_REPLY_DEFAULT,
-                              domain: Optional[str] = None, role: Optional[str] = None):
+                              domain: Optional[Union[str, list]] = None, role: Optional[str] = None):
         if reply_to is None:
             reply_to = self.__reply_queue.auto_name
 
@@ -112,7 +112,7 @@ class MilleGrillesPikaMessageProducer:
             self, message_in: dict, kind: int, domain: str, action: str, exchange: str, partition: Optional[str] = None,
             reply_to: Optional[str] = None, correlation_id: Optional[str] = None,
             noformat=False, nowait=False, attachments: Optional[dict] = None, timeout=CONST_WAIT_REPLY_DEFAULT,
-            domain_check: Union[bool, str]=True, role_check: Optional[str] = None) -> Optional[MessageWrapper]:
+            domain_check: Union[bool, str, list]=True, role_check: Optional[str] = None) -> Optional[MessageWrapper]:
 
         if noformat is True:
             message_id = message_in['id']
@@ -154,6 +154,8 @@ class MilleGrillesPikaMessageProducer:
                 domain_verification = domain
             elif isinstance(domain_check, str):
                 domain_verification = domain_check
+            elif isinstance(domain_check, list):
+                domain_verification = domain_check
             else:
                 domain_verification = None
 
@@ -176,8 +178,8 @@ class MilleGrillesPikaMessageProducer:
     async def command(self, message_in: dict, domain: str, action: str, exchange: str, partition: Optional[str] = None,
             reply_to: Optional[str] = None, correlation_id: Optional[str] = None,
             noformat=False, nowait=False, attachments: Optional[dict] = None, timeout=CONST_WAIT_REPLY_DEFAULT,
-            role_check: Optional[str] = None) -> Optional[MessageWrapper]:
-        domain_check = role_check is None
+            role_check: Optional[str] = None, domain_check: Optional[Union[bool, str, list]] = None) -> Optional[MessageWrapper]:
+        domain_check = domain_check or role_check is None
         return await self.send_routed_message(
             message_in, Constantes.KIND_COMMANDE, domain, action, exchange, partition, reply_to, correlation_id,
             noformat, nowait, attachments, timeout, domain_check, role_check)

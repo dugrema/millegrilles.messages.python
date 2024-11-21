@@ -245,7 +245,9 @@ class CancelledException(Exception):
 
 class MessageCorrelation:
 
-    def __init__(self, correlation_id: str, timeout=CONST_WAIT_REPLY_DEFAULT, callback: Optional[Callable[[int, MessageWrapper], Awaitable[None]]] = None, domain: Optional[str] = None, role: Optional[str] = None):
+    def __init__(self, correlation_id: str, timeout=CONST_WAIT_REPLY_DEFAULT,
+                 callback: Optional[Callable[[int, MessageWrapper], Awaitable[None]]] = None,
+                 domain: Optional[Union[str, list]] = None, role: Optional[str] = None):
         self.__logger = logging.getLogger(__name__+'.'+self.__class__.__name__)
         self.correlation_id = correlation_id
         self.__creation_date = datetime.datetime.now()
@@ -264,7 +266,7 @@ class MessageCorrelation:
         #     self.__stream_queue = asyncio.Queue(maxsize=2)
 
     @property
-    def domain(self):
+    def domain(self) -> Optional[Union[str, list]]:
         return self.__domain
 
     @property
@@ -392,7 +394,16 @@ class MilleGrillesPikaReplyQueueConsumer(MilleGrillesPikaQueueConsumer):
                         await correlation.cancel()
                         return
                 elif correlation.domain:
-                    if correlation.domain not in certificate.get_domaines:
+                    if isinstance(correlation.domain, list):
+                        domains = correlation.domain
+                    elif isinstance(correlation.domain, str):
+                        domains = [correlation.domain]
+                    else:
+                        self.__logger.info("REPLY MESSAGE DROPPED: domain types mismatch for %s" % correlation_id)
+                        return
+
+                    certificate_domains = certificate.get_domaines
+                    if any([d in certificate_domains for d in domains]) is False:
                         self.__logger.info("REPLY MESSAGE DROPPED: domain mismatch for %s" % correlation_id)
                         await correlation.cancel()
                         return
