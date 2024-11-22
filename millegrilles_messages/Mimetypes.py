@@ -11,7 +11,8 @@ def est_video(mimetype: str):
         "application/vnd.rn-realmedia",
         "application/vnd.rn-realplayer",
         "application/x-mplayer2",
-        "application/x-shockwave-flash"
+        "application/x-shockwave-flash",
+        "application/vnd.ms-asf",
     ]
 
     return mimetype in MIMETYPE_VIDEOS
