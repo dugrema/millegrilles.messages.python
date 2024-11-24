@@ -4,18 +4,20 @@ import logging
 import json
 import psutil
 
-from asyncio import Event as EventAsyncio
+from asyncio import Event as EventAsyncio, TaskGroup
 from asyncio.events import AbstractEventLoop
 from docker import DockerClient
 from docker.errors import APIError, DockerException
-from threading import Thread, Event
 from typing import Optional
+
+from millegrilles_messages.bus.BusContext import MilleGrillesBusContext
 
 
 class DockerState:
 
-    def __init__(self):
+    def __init__(self, context: MilleGrillesBusContext):
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
+        self.__context = context
         path_socket = '/run/docker.sock'
         try:
             self.__docker = docker.DockerClient('unix://' + path_socket)
@@ -25,6 +27,10 @@ class DockerState:
         self.__logger.info("Docker socket a connecte %s" % path_socket)
 
         self.__docker_actif: Optional[bool] = None
+
+    @property
+    def context(self) -> MilleGrillesBusContext:
+        return self.__context
 
     def docker_present(self):
         try:
@@ -119,68 +125,61 @@ class DockerHandler:
 
     def __init__(self, docker_state: DockerState):
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
+        self.__context = docker_state.context
         self.__docker = docker_state.docker
+        self.__action_fifo: asyncio.Queue[Optional[CommandeDocker]] = asyncio.Queue(maxsize=10)
 
-        self.__stop_event = Event()
-        self.__action_pending = Event()
-        self.__thread: Optional[Thread] = None
-        self.__throttle_actions: Optional[float] = None
+    @property
+    def context(self) -> MilleGrillesBusContext:
+        return self.__context
 
-        self.__action_fifo = list()
+    async def run(self):
+        async with TaskGroup() as group:
+            group.create_task(self.__process_actions())
 
-        self.__docker_initialise = False
+    async def __stop_thread(self):
+        await self.context.wait()
+        await self.__action_fifo.put(None)  # Stop condition
 
-    def start(self):
-        self.__thread = Thread(name="docker", target=self.run, daemon=True)
-        self.__thread.start()
+    async def ajouter_commande(self, action: CommandeDocker):
+        await self.__action_fifo.put(action)
 
-    def run(self):
-        while self.__stop_event.is_set() is False:
+    async def __process_actions(self):
+        while self.context.stopping is False:
+            action = await self.__action_fifo.get()
+            if action is None or self.context.stopping is True:
+                return  # Stop condition
 
-            # Traiter actions
-            while len(self.__action_fifo) > 0:
-                action: CommandeDocker = self.__action_fifo.pop(0)
-                self.__logger.debug("Traiter action docker %s" % action)
+            self.__logger.debug("Traiter action docker %s" % action)
+            try:
+                await asyncio.to_thread(action.executer, self.__docker)
+            except APIError as e:
+                # Monter silencieusement, erreur habituelle
+                action.erreur(e)
+            except DockerHandlerException as e:
                 try:
-                    action.executer(self.__docker)
-                except APIError as e:
-                    # Monter silencieusement, erreur habituelle
-                    action.erreur(e)
-                except DockerHandlerException as e:
-                    try:
-                        # Bubble up sans logging
-                        action.erreur(e)
-                    except:
-                        self.__logger.exception("Erreur emission action.erreur() commen reponse pour commande docker")
-                except Exception as e:
-                    self.__logger.exception("Erreur execution action docker")
-                    try:
-                        action.erreur(e)
-                    except:
-                        self.__logger.exception("Erreur emission action.erreur() commen reponse pour commande docker")
-                    finally:
-                        continue
+                    # Bubble up sans logging
+                    await asyncio.to_thread(action.erreur, e)
+                except:
+                    self.__logger.exception("Erreur emission action.erreur() commen reponse pour commande docker")
+            except Exception as e:
+                self.__logger.exception("Erreur execution action docker")
+                try:
+                    await asyncio.to_thread(action.erreur, e)
+                except:
+                    self.__logger.exception("Erreur emission action.erreur() commen reponse pour commande docker")
+                finally:
+                    continue
 
-                # Throttling commandes docker en fonction du CPU load
-                # Sous 1.5 de load, aucun throttling. Apres, c'est 3*cpu_load jusqu'a limite de 30.0 secondes
-                cpu_load, _cpu_load5, _cpu_load10 = psutil.getloadavg()
-                cpu_load = max(cpu_load, 0.3)  # Fixer a au moins 0.3 pour creer un throttle sur chaque commande
-                facteur_throttle = max(cpu_load, 0.3) * action.facteur_throttle
-                wait_time = min(facteur_throttle, 30.0)  # Attendre load*n en secondes, max 30 secondes
+            # Throttling commandes docker en fonction du CPU load
+            cpu_load, _cpu_load5, _cpu_load10 = await asyncio.to_thread(psutil.getloadavg)
+            cpu_load = max(cpu_load, 0.3)  # Fixer a au moins 0.3 pour creer un throttle sur chaque commande
+            facteur_throttle = max(cpu_load, 0.3) * action.facteur_throttle
+            wait_time = min(facteur_throttle, 30.0)  # Attendre load*n en secondes, max 30 secondes
 
-                self.__logger.debug("Throttling commandes docker, cpu_load:%f attente %f secondes" % (cpu_load, wait_time))
-                self.__stop_event.wait(wait_time)
-                self.__logger.debug("Throttling commandes docker, pret pour prochaine commande")
-
-                if self.__stop_event.is_set() is True:
-                    return  # Abort thread
-
-            self.__action_pending.wait(30)
-            self.__action_pending.clear()
-
-    def ajouter_commande(self, action: CommandeDocker):
-        self.__action_fifo.append(action)
-        self.__action_pending.set()
+            self.__logger.debug("Throttling commandes docker, cpu_load:%f attente %f secondes" % (cpu_load, wait_time))
+            await self.context.wait(wait_time)
+            self.__logger.debug("Throttling commandes docker, pret pour prochaine commande")
 
 
 class DockerHandlerException(Exception):
