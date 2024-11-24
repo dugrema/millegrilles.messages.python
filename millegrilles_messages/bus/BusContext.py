@@ -3,16 +3,18 @@ import logging
 import ssl
 import signal
 import threading
+from asyncio import TaskGroup
 
 from ssl import SSLContext, VerifyMode
 
 from typing import Optional, Union, Callable, Awaitable
 
 from millegrilles_messages.bus.BusConfiguration import MilleGrillesBusConfiguration
+from millegrilles_messages.bus.BusExceptions import ConfigurationFileError
 from millegrilles_messages.messages.CleCertificat import CleCertificat
 from millegrilles_messages.messages.Constantes import ENV_REDIS_HOSTNAME, ENV_REDIS_PORT, ENV_REDIS_PASSWORD_PATH, \
     ENV_CA_PEM, ENV_CERT_PEM, ENV_KEY_PEM
-from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
+from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat, CertificatExpire
 from millegrilles_messages.messages.FormatteurMessages import SignateurTransactionSimple, FormatteurMessageMilleGrilles
 from millegrilles_messages.messages.ValidateurCertificats import ValidateurCertificatCache, ValidateurCertificatRedis
 from millegrilles_messages.messages.ValidateurMessage import ValidateurMessage
@@ -39,31 +41,61 @@ class StopListener:
 
 class MilleGrillesBusContext:
 
-    def __init__(self, configuration: MilleGrillesBusConfiguration):
+    def __init__(self, configuration: MilleGrillesBusConfiguration, load=True):
         self.__logger = logging.getLogger(__name__+'.'+self.__class__.__name__)
         self.__configuration = configuration
         self.__stop_event = asyncio.Event()
         self.__stop_listeners: list[StopListener] = list()
-        self.__ssl_context = _load_ssl_context(configuration)
 
-        clecert, ca = load_certificates(configuration.key_path, configuration.cert_path, configuration.ca_path)
-        self.__clecert: CleCertificat = clecert
-        self.__ca: EnveloppeCertificat = ca
-        self.__instance_id: str = clecert.enveloppe.subject_common_name
-
-        signateur, formatteur = load_message_formatter(clecert, ca)
-        self.__signateur: SignateurTransactionSimple = signateur
-        self.__formatteur: FormatteurMessageMilleGrilles = formatteur
-
-        self.__verificateur_certificats: Union[ValidateurCertificatRedis, ValidateurCertificatCache] = self.load_validateur_certificats()
-        self.__validateur_messages = ValidateurMessage(self.__verificateur_certificats)
-
-        signal.signal(signal.SIGINT, self.exit_gracefully)
-        signal.signal(signal.SIGTERM, self.exit_gracefully)
         self.__loop = asyncio.get_event_loop()
         self.__sync_event = threading.Event()
 
-    def exit_gracefully(self, signum=None, frame=None):
+        # Signals
+        signal.signal(signal.SIGINT, self.__exit_gracefully)
+        signal.signal(signal.SIGTERM, self.__exit_gracefully)
+        signal.signal(signal.SIGHUP, self.__reload_hup)
+
+        # ###
+        # Configuration loaded from disk - can be reloaded
+        # ###
+        self.__ssl_context: Optional[ssl.SSLContext] = None
+        self.__clecert: Optional[CleCertificat] = None
+        self.__ca: Optional[EnveloppeCertificat] = None
+        self.__instance_id: Optional[str] = None
+        self.__signateur: Optional[SignateurTransactionSimple] = None
+        self.__formatteur: Optional[FormatteurMessageMilleGrilles] = None
+        self.__verificateur_certificats: Optional[Union[ValidateurCertificatRedis, ValidateurCertificatCache]] = None
+        self.__validateur_messages: Optional[ValidateurMessage] = None
+
+        if load:
+            # Initial load of the configuration
+            self.reload()
+
+    def __reload_hup(self, signum=None, frame=None):
+        self.__logger.info("HUP received, reloading configuration from disk")
+        self.reload()
+
+    def reload(self):
+        configuration = self.__configuration
+
+        # Read all configuration from disk
+        clecert, ca = load_certificates(configuration.key_path, configuration.cert_path, configuration.ca_path)
+        signateur, formatteur = load_message_formatter(clecert, ca)
+
+        if clecert.enveloppe.date_valide() is False:
+            raise CertificatExpire()
+
+        # Keep values in memory
+        self.__ssl_context = _load_ssl_context(configuration)
+        self.__clecert: CleCertificat = clecert
+        self.__ca: EnveloppeCertificat = ca
+        self.__instance_id: str = clecert.enveloppe.subject_common_name
+        self.__signateur: SignateurTransactionSimple = signateur
+        self.__formatteur: FormatteurMessageMilleGrilles = formatteur
+        self.__verificateur_certificats: Union[ValidateurCertificatRedis, ValidateurCertificatCache] = self.load_validateur_certificats()
+        self.__validateur_messages = ValidateurMessage(self.__verificateur_certificats)
+
+    def __exit_gracefully(self, signum=None, frame=None):
         self.__logger.debug("Signal received: %d, closing" % signum)
         self.stop()
 
@@ -71,7 +103,9 @@ class MilleGrillesBusContext:
         self.__sync_event.set()
 
     async def run(self):
-        await asyncio.gather(self.__stop_thread(), self.__sync_stop_thread())
+        async with TaskGroup() as group:
+            group.create_task(self.__stop_thread())
+            group.create_task(self.__sync_stop_thread())
 
     async def __sync_stop_thread(self):
         """
@@ -171,10 +205,17 @@ def _load_ssl_context(configuration: MilleGrillesBusConfiguration) -> ssl.SSLCon
     ssl_context = SSLContext()
 
     LOGGER.debug("Load web certificate %s" % configuration.cert_path)
-    ssl_context.load_cert_chain(configuration.cert_path,
-                                configuration.key_path)
+    try:
+        ssl_context.load_cert_chain(configuration.cert_path, configuration.key_path)
+    except FileNotFoundError:
+        files = "%s or %s" % (configuration.cert_path, configuration.key_path)
+        raise ConfigurationFileError(files)
 
-    ssl_context.load_verify_locations(cafile=configuration.ca_path)
+    try:
+        ssl_context.load_verify_locations(cafile=configuration.ca_path)
+    except FileNotFoundError:
+        raise ConfigurationFileError(configuration.ca_path)
+
     ssl_context.verify_mode = VerifyMode.CERT_REQUIRED
 
     return ssl_context

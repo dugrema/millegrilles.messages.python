@@ -5,7 +5,7 @@ from asyncio import TaskGroup
 from typing import Optional
 
 from millegrilles_messages.bus.PikaBusConnection import MilleGrillesPikaBusConnection
-from millegrilles_messages.bus.BusContext import MilleGrillesBusContext
+from millegrilles_messages.bus.BusContext import MilleGrillesBusContext, ForceTerminateExecution
 from millegrilles_messages.bus.PikaChannel import MilleGrillesPikaChannel, ConnectionProvider
 from millegrilles_messages.bus.PikaMessageProducer import MilleGrillesPikaMessageProducer
 from millegrilles_messages.bus.PikaQueue import MilleGrillesPikaReplyQueueConsumer
@@ -23,6 +23,8 @@ class MilleGrillesPikaConnector(ConnectionProvider):
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__context = context
         self._connection = MilleGrillesPikaBusConnection(context, self.on_connect, self.on_disconnect)
+
+        self.__stop_event = asyncio.Event()
 
         # Wire producer and reply Q
         self.__reply_queue = MilleGrillesPikaReplyQueueConsumer(context)
@@ -43,20 +45,27 @@ class MilleGrillesPikaConnector(ConnectionProvider):
         return self.__producer
 
     async def run(self):
-        done, pending = await asyncio.wait([
-            asyncio.create_task(self._connection.run()),
-            asyncio.create_task(self.__channel_thread())
-        ], return_when=asyncio.FIRST_COMPLETED)
-        if self.__context.stopping is not True:
-            self.__logger.exception("Thread quit unexpectedly: %s" % done)
-            self.__context.stop()
+        async with TaskGroup() as group:
+            group.create_task(self._connection.run())
+            group.create_task(self.__channel_thread())
+            group.create_task(self.__stop_thread())
 
         # Ensure all channels shut down
         await self.__close_channels()
 
-        if len(pending) > 0:
-            await asyncio.gather(*pending)
+        if self.__context.stopping is not True:
+            self.__logger.exception("MilleGrillesPikaConnector thread quit unexpectedly")
+            self.__context.stop()
+            raise ForceTerminateExecution()
+
         self.__logger.info("MilleGrillesPikaConnector.run thread closed")
+
+    async def __stop_thread(self):
+        await self.__context.wait()
+        self.__stop_event.set()
+
+    async def disconnect(self):
+        self.__stop_event.set()
 
     async def __channel_thread(self):
         async with TaskGroup() as group:

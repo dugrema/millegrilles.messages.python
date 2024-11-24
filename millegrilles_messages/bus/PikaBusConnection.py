@@ -1,5 +1,7 @@
 import asyncio
 import logging
+from asyncio import TaskGroup
+
 import pika
 import ssl
 
@@ -9,7 +11,7 @@ from pika.adapters.asyncio_connection import AsyncioConnection
 from pika.channel import Channel
 from pika.exceptions import ProbableAuthenticationError
 
-from millegrilles_messages.bus.BusContext import MilleGrillesBusContext, StopListener
+from millegrilles_messages.bus.BusContext import MilleGrillesBusContext, StopListener, ForceTerminateExecution
 
 CONST_CONNECTION_ATTEMTPS = 5
 CONST_RETRY_DELAY = 5.0
@@ -46,16 +48,15 @@ class MilleGrillesPikaBusConnection(StopListener):
         self.__event_connection_stopping.set()
 
     async def run(self):
-        self.__loop = asyncio.get_event_loop()
-        done, pending = await asyncio.wait([
-            asyncio.create_task(self.run_ioloop()),
-            asyncio.create_task(self.maintenance_thread()),
-        ], return_when=asyncio.FIRST_COMPLETED)
-        if self.__context.stopping is not True:
-            self.__logger.error("Thread quit unexpectedly: %s" % done)
+        async with TaskGroup() as group:
+            group.create_task(self.run_ioloop())
+            group.create_task(self.maintenance_thread())
+
+        if self.__context.stopping is False:
+            self.__logger.error("PikaBusConnection thread exited abruptly, stopping application")
             self.__context.stop()
-        if len(pending) > 0:
-            await asyncio.gather(*pending)
+            raise ForceTerminateExecution()
+
         self.__logger.info("MilleGrillesPikaBusConnection thread closed")
 
     async def maintenance_thread(self):
@@ -165,6 +166,7 @@ class MilleGrillesPikaBusConnection(StopListener):
                 if self.__access_just_created is True:
                     raise Exception('Error creating middleware access, looping')
                 self.__access_just_created = True
+                await self.__context.wait(2)
                 continue
 
             await self.__on_connect_callback()
