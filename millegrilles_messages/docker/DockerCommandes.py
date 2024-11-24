@@ -16,31 +16,31 @@ from docker.types import ServiceMode
 from millegrilles_messages.docker.DockerHandler import CommandeDocker
 
 
-class CommandeListerContainers(CommandeDocker):
-
-    def __init__(self, callback=None, aio=False, filters: dict = None):
-        super().__init__(callback, aio)
-        self.__filters = filters
-
-    def executer(self, docker_client: DockerClient):
-        liste = docker_client.containers.list(filters=self.__filters)
-        self.callback(liste)
-
-    async def get_liste(self) -> list:
-        resultat = await self.attendre()
-        liste = resultat['args'][0]
-        return liste
+# class CommandeListerContainers(CommandeDocker):
+#
+#     def __init__(self, callback=None, aio=False, filters: dict = None):
+#         super().__init__(callback, aio)
+#         self.__filters = filters
+#
+#     def executer(self, docker_client: DockerClient):
+#         liste = docker_client.containers.list(filters=self.__filters)
+#         self.callback(liste)
+#
+#     async def get_liste(self) -> list:
+#         resultat = await self.attendre()
+#         liste = resultat['args'][0]
+#         return liste
 
 
 class CommandeListerServices(CommandeDocker):
 
-    def __init__(self, callback=None, aio=False, filters: dict = None):
-        super().__init__(callback, aio)
+    def __init__(self, filters: dict = None):
+        super().__init__()
         self.__filters = filters
 
-    def executer(self, docker_client: DockerClient):
+    async def executer(self, docker_client: DockerClient):
         liste = docker_client.services.list(filters=self.__filters)
-        self.callback(liste)
+        await self._callback_asyncio(liste)
 
     async def get_liste(self) -> list[Service]:
         resultat = await self.attendre()
@@ -50,13 +50,13 @@ class CommandeListerServices(CommandeDocker):
 
 class CommandeRedemarrerService(CommandeDocker):
 
-    def __init__(self, nom_service: str, callback=None, aio=False, id_only=True):
-        super().__init__(callback, aio)
+    def __init__(self, nom_service: str, id_only=True):
+        super().__init__()
         self.__nom_service = nom_service
 
         self.facteur_throttle = 1.5
 
-    def executer(self, docker_client: DockerClient):
+    async def executer(self, docker_client: DockerClient):
         service = docker_client.services.get(self.__nom_service)
         attrs = service.attrs
         resultat = False
@@ -70,37 +70,37 @@ class CommandeRedemarrerService(CommandeDocker):
         except KeyError:
             pass
 
-        self.callback(resultat)
+        await self._callback_asyncio(resultat)
 
 
 class CommandeMajService(CommandeDocker):
 
-    def __init__(self, nom_service: str, config: dict, callback=None, aio=True):
-        super().__init__(callback, aio)
+    def __init__(self, nom_service: str, config: dict):
+        super().__init__()
         self.__nom_service = nom_service
         self.__config = config
 
         self.facteur_throttle = 1.5
 
-    def executer(self, docker_client: DockerClient):
+    async def executer(self, docker_client: DockerClient):
         service = docker_client.services.get(self.__nom_service)
         service.update(**self.__config)
-        self.callback(True)
+        await self._callback_asyncio(True)
 
 
 class CommandeDemarrerService(CommandeDocker):
 
-    def __init__(self, nom_service: str, replicas=1, callback=None, aio=True):
-        super().__init__(callback, aio)
+    def __init__(self, nom_service: str, replicas=1):
+        super().__init__()
         self.__nom_service = nom_service
         self.__replicas = replicas
 
         self.facteur_throttle = 1.5
 
-    def executer(self, docker_client: DockerClient):
+    async def executer(self, docker_client: DockerClient):
         service = docker_client.services.get(self.__nom_service)
         resultat = service.scale(self.__replicas)
-        self.callback(resultat)
+        await self._callback_asyncio(resultat)
 
     async def get_resultat(self) -> bool:
         resultats = await self.attendre()
@@ -110,16 +110,16 @@ class CommandeDemarrerService(CommandeDocker):
 
 class CommandeArreterService(CommandeDocker):
 
-    def __init__(self, nom_service: str, callback=None, aio=True):
-        super().__init__(callback, aio)
+    def __init__(self, nom_service: str):
+        super().__init__()
         self.__nom_service = nom_service
 
         self.facteur_throttle = 0.5
 
-    def executer(self, docker_client: DockerClient):
+    async def executer(self, docker_client: DockerClient):
         service = docker_client.services.get(self.__nom_service)
         resultat = service.scale(0)
-        self.callback(resultat)
+        await self._callback_asyncio(resultat)
 
     async def get_resultat(self) -> bool:
         resultats = await self.attendre()
@@ -129,16 +129,16 @@ class CommandeArreterService(CommandeDocker):
 
 class CommandeSupprimerService(CommandeDocker):
 
-    def __init__(self, nom_service: str, callback=None, aio=True):
-        super().__init__(callback, aio)
+    def __init__(self, nom_service: str):
+        super().__init__()
         self.__nom_service = nom_service
 
         self.facteur_throttle = 0.5
 
-    def executer(self, docker_client: DockerClient):
+    async def executer(self, docker_client: DockerClient):
         service = docker_client.services.get(self.__nom_service)
         resultat = service.remove()
-        self.callback(resultat)
+        await self._callback_asyncio(resultat)
 
     async def get_resultat(self) -> bool:
         resultats = await self.attendre()
@@ -148,12 +148,12 @@ class CommandeSupprimerService(CommandeDocker):
 
 class CommandeListerConfigs(CommandeDocker):
 
-    def __init__(self, callback=None, aio=False, filters: dict = None, id_only=True):
-        super().__init__(callback, aio)
+    def __init__(self, filters: dict = None, id_only=True):
+        super().__init__()
         self.__filters = filters
         self.__id_only = id_only
 
-    def executer(self, docker_client: DockerClient):
+    async def executer(self, docker_client: DockerClient):
         liste = docker_client.configs.list(filters=self.__filters)
 
         resultat = liste
@@ -164,7 +164,7 @@ class CommandeListerConfigs(CommandeDocker):
                 name = c.name
                 resultat[name] = id_c
 
-        self.callback(resultat)
+        await self._callback_asyncio(resultat)
 
     async def get_resultat(self) -> list:
         resultat = await self.attendre()
@@ -174,12 +174,12 @@ class CommandeListerConfigs(CommandeDocker):
 
 class CommandeListerSecrets(CommandeDocker):
 
-    def __init__(self, callback=None, aio=False, filters: dict = None, id_only=True):
-        super().__init__(callback, aio)
+    def __init__(self, filters: dict = None, id_only=True):
+        super().__init__()
         self.__filters = filters
         self.__id_only = id_only
 
-    def executer(self, docker_client: DockerClient):
+    async def executer(self, docker_client: DockerClient):
         liste = docker_client.secrets.list(filters=self.__filters)
 
         resultat = liste
@@ -190,7 +190,7 @@ class CommandeListerSecrets(CommandeDocker):
                 name = c.name
                 resultat[name] = id_c
 
-        self.callback(resultat)
+        await self._callback_asyncio(resultat)
 
     async def get_resultat(self) -> list:
         resultat = await self.attendre()
@@ -201,7 +201,7 @@ class CommandeListerSecrets(CommandeDocker):
 class CommandeAjouterConfiguration(CommandeDocker):
 
     def __init__(self, nom: str, data: Union[dict, str, bytes], labels: dict = None, callback=None, aio=False):
-        super().__init__(callback, aio)
+        super().__init__()
         self.__nom = nom
         self.__labels = labels
 
@@ -218,9 +218,9 @@ class CommandeAjouterConfiguration(CommandeDocker):
 
         self.facteur_throttle = 0.25
 
-    def executer(self, docker_client: DockerClient):
+    async def executer(self, docker_client: DockerClient):
         reponse = docker_client.configs.create(name=self.__nom, data=self.__data, labels=self.__labels)
-        self.callback(reponse)
+        await self._callback_asyncio(reponse)
 
     async def get_resultat(self) -> list:
         resultat = await self.attendre()
@@ -229,15 +229,15 @@ class CommandeAjouterConfiguration(CommandeDocker):
 
 class CommandeSupprimerConfiguration(CommandeDocker):
 
-    def __init__(self, nom: str, callback=None, aio=False):
-        super().__init__(callback, aio)
+    def __init__(self, nom: str):
+        super().__init__()
         self.__nom = nom
         self.facteur_throttle = 0.25
 
-    def executer(self, docker_client: DockerClient):
+    async def executer(self, docker_client: DockerClient):
         config = docker_client.configs.get(self.__nom)
         reponse = config.remove()
-        self.callback(reponse)
+        await self._callback_asyncio(reponse)
 
     async def get_resultat(self) -> list:
         resultat = await self.attendre()
@@ -246,14 +246,14 @@ class CommandeSupprimerConfiguration(CommandeDocker):
 
 class CommandeGetConfiguration(CommandeDocker):
 
-    def __init__(self, nom: str, callback=None, aio=False):
-        super().__init__(callback, aio)
+    def __init__(self, nom: str):
+        super().__init__()
         self.__nom = nom
         self.facteur_throttle = 0.25
 
-    def executer(self, docker_client: DockerClient):
-        config = docker_client.configs.get(self.__nom)
-        self.callback(config)
+    async def executer(self, docker_client: DockerClient):
+        config = await asyncio.to_thread(docker_client.configs.get, self.__nom)
+        await self._callback_asyncio(config)
 
     async def get_config(self) -> list:
         resultat = await self.attendre()
@@ -272,8 +272,8 @@ class CommandeGetConfiguration(CommandeDocker):
 
 class CommandeAjouterSecret(CommandeDocker):
 
-    def __init__(self, nom: str, data: Union[dict, str, bytes], labels: dict = None, callback=None, aio=False):
-        super().__init__(callback, aio)
+    def __init__(self, nom: str, data: Union[dict, str, bytes], labels: dict = None):
+        super().__init__()
         self.__nom = nom
         self.__labels = labels
 
@@ -290,9 +290,9 @@ class CommandeAjouterSecret(CommandeDocker):
 
         self.facteur_throttle = 0.25
 
-    def executer(self, docker_client: DockerClient):
+    async def executer(self, docker_client: DockerClient):
         reponse = docker_client.secrets.create(name=self.__nom, data=self.__data, labels=self.__labels)
-        self.callback(reponse)
+        await self._callback_asyncio(reponse)
 
     async def get_resultat(self) -> list:
         resultat = await self.attendre()
@@ -301,15 +301,15 @@ class CommandeAjouterSecret(CommandeDocker):
 
 class CommandeSupprimerSecret(CommandeDocker):
 
-    def __init__(self, nom: str, callback=None, aio=False):
-        super().__init__(callback, aio)
+    def __init__(self, nom: str):
+        super().__init__()
         self.__nom = nom
         self.facteur_throttle = 0.25
 
-    def executer(self, docker_client: DockerClient):
+    async def executer(self, docker_client: DockerClient):
         config = docker_client.secrets.get(self.__nom)
         reponse = config.remove()
-        self.callback(reponse)
+        await self._callback_asyncio(reponse)
 
     async def get_resultat(self) -> list:
         resultat = await self.attendre()
@@ -318,15 +318,15 @@ class CommandeSupprimerSecret(CommandeDocker):
 
 class CommandeCreerService(CommandeDocker):
 
-    def __init__(self, image: str, configuration: dict, reinstaller=False, callback=None, aio=False):
-        super().__init__(callback, aio)
+    def __init__(self, image: str, configuration: dict, reinstaller=False):
+        super().__init__()
         self.__image = image
         self.__configuration = configuration
         self.__reinstaller = reinstaller
 
         self.facteur_throttle = 2.0
 
-    def executer(self, docker_client: DockerClient, attendre=True):
+    async def executer(self, docker_client: DockerClient, attendre=True):
         config_ajustee = self.__configuration.copy()
         del config_ajustee['image']
 
@@ -343,7 +343,7 @@ class CommandeCreerService(CommandeDocker):
 
         resultat = docker_client.services.create(self.__image, **config_ajustee)
         info_service = {'id': resultat.id, 'name': resultat.name}
-        self.callback(info_service)
+        await self._callback_asyncio(info_service)
 
     async def get_resultat(self) -> list:
         resultat = await self.attendre()
@@ -352,12 +352,12 @@ class CommandeCreerService(CommandeDocker):
 
 class CommandeCreerSwarm(CommandeDocker):
 
-    def __init__(self, callback=None, aio=False):
-        super().__init__(callback, aio)
+    def __init__(self):
+        super().__init__()
 
         self.facteur_throttle = 0.5
 
-    def executer(self, docker_client: DockerClient, attendre=True):
+    async def executer(self, docker_client: DockerClient, attendre=True):
         try:
             docker_client.swarm.init(advertise_addr="127.0.0.1")
         except APIError as apie:
@@ -366,18 +366,18 @@ class CommandeCreerSwarm(CommandeDocker):
             else:
                 raise apie
 
-        self.callback()
+        await self._callback_asyncio()
 
 
 class CommandeCreerNetworkOverlay(CommandeDocker):
 
-    def __init__(self, network_name: str, callback=None, aio=False):
-        super().__init__(callback, aio)
+    def __init__(self, network_name: str):
+        super().__init__()
         self.__network_name = network_name
 
         self.facteur_throttle = 0.5
 
-    def executer(self, docker_client: DockerClient, attendre=True):
+    async def executer(self, docker_client: DockerClient, attendre=True):
         try:
             docker_client.networks.create(name=self.__network_name, scope="swarm", driver="overlay", attachable=True)
         except APIError as apie:
@@ -386,7 +386,7 @@ class CommandeCreerNetworkOverlay(CommandeDocker):
             else:
                 raise apie
 
-        self.callback()
+        await self._callback_asyncio()
 
 
 class PullStatus:
@@ -449,8 +449,8 @@ class PullStatus:
 
 class CommandeGetImage(CommandeDocker):
 
-    def __init__(self, nom_image: str, pull=False, callback=None, aio=False):
-        super().__init__(callback, aio)
+    def __init__(self, nom_image: str, pull=False):
+        super().__init__()
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__nom_image = nom_image
         self.__pull = pull
@@ -461,10 +461,10 @@ class CommandeGetImage(CommandeDocker):
         else:
             self.facteur_throttle = 0.5
 
-    def executer(self, docker_client: DockerClient):
+    async def executer(self, docker_client: DockerClient):
         try:
             reponse = docker_client.images.get(self.__nom_image)
-            self.callback({'id': reponse.id, 'tags': reponse.tags})
+            await self._callback_asyncio({'id': reponse.id, 'tags': reponse.tags})
             return
         except NotFound:
             pass
@@ -494,12 +494,12 @@ class CommandeGetImage(CommandeDocker):
                 # reponse = docker_client.images.pull(image_repository, tag)
                 self.download_package(docker_client, image_repository, tag)
                 reponse = docker_client.images.get(self.__nom_image)
-                self.callback({'id': reponse.id, 'tags': reponse.tags})
+                await self._callback_asyncio({'id': reponse.id, 'tags': reponse.tags})
                 return
             except NotFound:
                 pass
 
-        self.callback(None)
+        await self._callback_asyncio(None)
 
     async def get_resultat(self) -> dict:
         resultat = await self.attendre()
@@ -564,13 +564,13 @@ class CommandeEnsureNodeLabels(CommandeDocker):
     S'assure de l'existence de labels dans la swarm. Creer le label sur le node de management sinon.
     """
 
-    def __init__(self, labels: list, callback=None, aio=False):
-        super().__init__(callback, aio)
+    def __init__(self, labels: list):
+        super().__init__()
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__labels = labels
         self.facteur_throttle = 0.25
 
-    def executer(self, docker_client: DockerClient, attendre=True):
+    async def executer(self, docker_client: DockerClient, attendre=True):
         nodes = docker_client.nodes.list()
 
         labels_connus = set()
@@ -593,18 +593,18 @@ class CommandeEnsureNodeLabels(CommandeDocker):
         if changement is True:
             node_create.update(node_spec)
 
-        self.callback()
+        await self._callback_asyncio()
 
 
 class CommandeGetConfigurationsDatees(CommandeDocker):
     """
     Fait la liste des config et secrets avec label certificat=true et password=true
     """
-    def __init__(self, callback=None, aio=True):
-        super().__init__(callback, aio)
+    def __init__(self):
+        super().__init__()
         self.facteur_throttle = 0.5
 
-    def executer(self, docker_client: DockerClient):
+    async def executer(self, docker_client: DockerClient):
 
         dict_secrets = dict()
         dict_configs = dict()
@@ -620,7 +620,7 @@ class CommandeGetConfigurationsDatees(CommandeDocker):
 
         correspondance = self.correspondre_cle_cert(dict_secrets, dict_configs)
 
-        self.callback({'configs': dict_configs, 'secrets': dict_secrets, 'correspondance': correspondance})
+        await self._callback_asyncio({'configs': dict_configs, 'secrets': dict_secrets, 'correspondance': correspondance})
 
     def parse_reponse(self, reponse) -> dict:
         data = dict()
@@ -694,7 +694,7 @@ class CommandeRunContainer(CommandeDocker):
     """
 
     def __init__(self, image: str, command: Optional[str] = None, environment: Optional[dict] = None, mounts: Optional[list[docker.types.Mount]] = None):
-        super().__init__(callback=None, aio=True)
+        super().__init__()
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.__image = image
         self.__command = command
@@ -709,7 +709,7 @@ class CommandeRunContainer(CommandeDocker):
         mount = docker.types.Mount(target, source, type=mount_type, read_only=read_only)
         self.__mounts.append(mount)
 
-    def executer(self, docker_client: DockerClient, attendre=True):
+    async def executer(self, docker_client: DockerClient, attendre=True):
         params = {
             'environment': self.__environment,
             'mounts': self.__mounts,
@@ -718,7 +718,7 @@ class CommandeRunContainer(CommandeDocker):
         }
         self.__logger.debug("Run %s %s" % (self.__image, self.__command))
         resultat = docker_client.containers.run(self.__image, command=self.__command, stdout=True, stderr=True, **params)
-        self.callback(resultat)
+        await self._callback_asyncio(resultat)
 
     async def get_resultat(self) -> dict:
         resultat = await self.attendre()
@@ -731,17 +731,17 @@ class CommandeReloadNginx(CommandeDocker):
     """
 
     def __init__(self):
-        super().__init__(callback=None, aio=True)
+        super().__init__()
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.facteur_throttle = 1.0
 
-    def executer(self, docker_client: DockerClient, attendre=True):
+    async def executer(self, docker_client: DockerClient, attendre=True):
         nginx_container = docker_client.containers.list(filters={"name": "nginx"})
 
         for container in nginx_container:
             container.exec_run("nginx -s reload")
 
-        self.callback(True)
+        await self._callback_asyncio(True)
 
     async def get_resultat(self) -> dict:
         resultat = await self.attendre()
