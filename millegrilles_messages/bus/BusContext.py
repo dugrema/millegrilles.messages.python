@@ -106,6 +106,16 @@ class MilleGrillesBusContext:
         async with TaskGroup() as group:
             group.create_task(self.__stop_thread())
             group.create_task(self.__sync_stop_thread())
+            group.create_task(self.__maintenance())
+
+    async def __maintenance(self):
+        while self.stopping is False:
+            if self.__verificateur_certificats:
+                try:
+                    await self.__verificateur_certificats.entretien()
+                except:
+                    self.__logger.exception("Error during maintenance of __verificateur_certificats")
+            await self.wait(300)
 
     async def __sync_stop_thread(self):
         """
