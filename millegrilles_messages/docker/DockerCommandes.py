@@ -392,6 +392,7 @@ class CommandeCreerNetworkOverlay(CommandeDocker):
 class PullStatus:
 
     def __init__(self):
+        self.initialized = False
         self.total_size = 0
         self.current_size = 0
         self.incomplete = 0
@@ -410,6 +411,7 @@ class PullStatus:
         }
 
     def update(self, layers: dict[str, dict]):
+        self.initialized = True
         self.all_totals_known = True
         self.current_size = 0
         self.total_size = 0
@@ -432,6 +434,7 @@ class PullStatus:
             self.pct = math.floor(self.current_size / self.total_size * 100)
 
     def set_done(self):
+        self.initialized = True
         self.current_size = self.total_size
         self.incomplete = 0
         self.all_totals_known = True
@@ -439,6 +442,8 @@ class PullStatus:
         self.done = True
 
     def status_str(self) -> str:
+        if self.initialized is False:
+            return 'Checking'
         if self.done:
             return "Downloading: DONE"
         if self.pct:
@@ -491,7 +496,6 @@ class CommandeGetImage(CommandeDocker):
                 image_repository = nom_image
 
             try:
-                # reponse = docker_client.images.pull(image_repository, tag)
                 self.download_package(docker_client, image_repository, tag)
                 reponse = docker_client.images.get(self.__nom_image)
                 await self._callback_asyncio({'id': reponse.id, 'tags': reponse.tags})
@@ -546,12 +550,12 @@ class CommandeGetImage(CommandeDocker):
                     await cb(self.pull_status)
                 except:
                     self.__logger.exception("CommandeGetImage.progress_coro Error running callback")
-            self.__logger.info("Downloading %s status: %s" % (self.__nom_image, status))
+            self.__logger.info("CommandeGetImage %s status: %s" % (self.__nom_image, status))
             try:
                 await asyncio.wait_for(self._event_asyncio.wait(), 3)
             except asyncio.TimeoutError:
                 pass
-        self.__logger.info("Downloading %s status: Done" % self.__nom_image)
+        self.__logger.info("CommandeGetImage %s status: Done" % self.__nom_image)
         if cb:
             try:
                 await cb(self.pull_status)
