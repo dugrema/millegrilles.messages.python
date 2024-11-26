@@ -43,7 +43,7 @@ class MilleGrillesBusContext:
 
     def __init__(self, configuration: MilleGrillesBusConfiguration, load=True):
         self.__logger = logging.getLogger(__name__+'.'+self.__class__.__name__)
-        self.__configuration = configuration
+        self.__configuration: MilleGrillesBusConfiguration = configuration
         self.__stop_event = asyncio.Event()
         self.__stop_listeners: list[StopListener] = list()
 
@@ -175,7 +175,7 @@ class MilleGrillesBusContext:
         self.__stop_listeners.append(listener)
 
     @property
-    def configuration(self):
+    def configuration(self) -> MilleGrillesBusConfiguration:
         return self.__configuration
 
     @property
