@@ -9,6 +9,7 @@ from millegrilles_messages.messages import Constantes
 from millegrilles_messages.bus.BusContext import MilleGrillesBusContext
 from millegrilles_messages.bus.PikaChannel import MilleGrillesPikaChannel
 from millegrilles_messages.bus.PikaQueue import MilleGrillesPikaReplyQueueConsumer, MessageCorrelation
+from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
 from millegrilles_messages.messages.MessagesModule import MessagePending, MessageWrapper
 
 from pika import BasicProperties
@@ -197,6 +198,20 @@ class MilleGrillesPikaMessageProducer:
             message = message_id
         else:
             message, message_id = self.__context.formatteur.signer_message(Constantes.KIND_REPONSE, message_in)
+
+        if attachments is not None:
+            message['attachements'] = attachments
+
+        message_bytes = json.dumps(message)
+        return await self.send(message_bytes, routing_key=reply_to, correlation_id=correlation_id, reply_to=reply_to)
+
+    async def encrypt_reply(self, keys: Union[EnveloppeCertificat, list[EnveloppeCertificat]], message_in: dict, reply_to: str, correlation_id: str,
+                            attachments: Optional[dict] = None):
+
+        if isinstance(keys, EnveloppeCertificat):
+            keys = [keys]
+
+        message, message_id = await self.__context.formatteur.chiffrer_message(keys, Constantes.KIND_REPONSE_CHIFFREE, message_in)
 
         if attachments is not None:
             message['attachements'] = attachments
