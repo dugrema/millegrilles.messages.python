@@ -341,9 +341,15 @@ class CommandeCreerService(CommandeDocker):
                 else:
                     raise apie
 
-        resultat = docker_client.services.create(self.__image, **config_ajustee)
-        info_service = {'id': resultat.id, 'name': resultat.name}
-        await self._callback_asyncio(info_service)
+        try:
+            resultat = docker_client.services.create(self.__image, **config_ajustee)
+            info_service = {'id': resultat.id, 'name': resultat.name}
+            return await self._callback_asyncio(info_service)
+        except APIError as e:
+            if e.status_code == 409:  # Already present
+                return await self._callback_asyncio({'ok': True})
+            else:
+                raise e
 
     async def get_resultat(self) -> list:
         resultat = await self.attendre()
@@ -550,12 +556,12 @@ class CommandeGetImage(CommandeDocker):
                     await cb(self.pull_status)
                 except:
                     self.__logger.exception("CommandeGetImage.progress_coro Error running callback")
-            self.__logger.info("CommandeGetImage %s status: %s" % (self.__nom_image, status))
+            self.__logger.debug("CommandeGetImage %s status: %s" % (self.__nom_image, status))
             try:
                 await asyncio.wait_for(self._event_asyncio.wait(), 3)
             except asyncio.TimeoutError:
                 pass
-        self.__logger.info("CommandeGetImage %s status: Done" % self.__nom_image)
+        self.__logger.debug("CommandeGetImage %s status: Done" % self.__nom_image)
         if cb:
             try:
                 await cb(self.pull_status)
