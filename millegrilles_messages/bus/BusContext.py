@@ -73,7 +73,10 @@ class MilleGrillesBusContext:
 
     def __reload_hup(self, signum=None, frame=None):
         self.__logger.info("HUP received, reloading configuration from disk")
-        self.reload()
+        try:
+            self.reload()
+        except CertificatExpire:
+            self.__logger.error("Reload HUP - certificate expired")
 
     def reload(self):
         configuration = self.__configuration
@@ -100,13 +103,28 @@ class MilleGrillesBusContext:
         self.stop()
 
     def stop(self):
+        if self.__logger.isEnabledFor(logging.DEBUG):
+            loop = asyncio.get_event_loop()
+            loop.set_debug(True)
+
+        # Set the async event to stop async threads
+        asyncio.get_event_loop().call_soon_threadsafe(self.__stop_event.set)
+
+        # Set the sync event to release sync threads
         self.__sync_event.set()
 
     async def run(self):
-        async with TaskGroup() as group:
-            group.create_task(self.__stop_thread())
-            group.create_task(self.__sync_stop_thread())
-            group.create_task(self.__maintenance())
+        self.__logger.debug("BusContext thread started")
+        try:
+            async with TaskGroup() as group:
+                group.create_task(self.__stop_thread())
+                group.create_task(self.__sync_stop_thread())
+                group.create_task(self.__maintenance())
+        finally:
+            # Ensure stop events are set
+            self.__stop_event.set()
+            self.__sync_event.set()
+        self.__logger.debug("BusContext thread done")
 
     async def __maintenance(self):
         while self.stopping is False:
@@ -157,10 +175,16 @@ class MilleGrillesBusContext:
         if duration:
             try:
                 await asyncio.wait_for(self.__stop_event.wait(), duration)
+                # Assuming this operation with explicit wait time is not expecting for the stop event to be set
+                raise ForceTerminateExecution()
             except asyncio.TimeoutError:
                 pass
         else:
+            # Assuming this wait operation expects for a return only when stopping
             await self.__stop_event.wait()
+
+    def wait_sync(self):
+        self.__sync_event.wait()
 
     @property
     def stopping(self):
