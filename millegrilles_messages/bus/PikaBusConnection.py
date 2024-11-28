@@ -35,7 +35,7 @@ class MilleGrillesPikaBusConnection(StopListener):
         self._closing = False
 
         self.__event_connection_stopping = asyncio.Event()
-        self.__loop: Optional[asyncio.EventLoop] = None
+        self.__loop = asyncio.get_event_loop()
         self.__access_just_created = False
 
         context.register_stop_listener(self)
