@@ -89,18 +89,17 @@ class MilleGrillesPikaBusConnection(StopListener):
             blocked_connection_timeout=CONST_BLOCKED_CONNECTION_TIMEOUT)
 
         event = asyncio.Event()
-        loop = asyncio.get_event_loop()
         result = dict()
         def on_connection_open(_unused_connection: AsyncioConnection):
-            loop.call_soon(event.set)
+            self.__loop.call_soon_threadsafe(event.set)
 
         def on_connection_open_error(_unused_connection: AsyncioConnection, err: BaseException):
             result['err'] = err
-            loop.call_soon(event.set)
+            self.__loop.call_soon_threadsafe(event.set)
 
         self._connection = AsyncioConnection(
             parameters,
-            custom_ioloop=loop,
+            custom_ioloop=self.__loop,
             on_open_callback=on_connection_open,
             on_open_error_callback=on_connection_open_error,
             on_close_callback=self.on_connection_closed)
@@ -130,7 +129,7 @@ class MilleGrillesPikaBusConnection(StopListener):
         :param Exception reason: exception representing reason for loss of
             connection.
         """
-        self.__loop.call_soon(self.__event_connection_stopping.set)
+        self.__loop.call_soon_threadsafe(self.__event_connection_stopping.set)
 
     async def open_channel(self) -> Channel:
         """Open a new channel with RabbitMQ by issuing the Channel.Open RPC
@@ -142,10 +141,9 @@ class MilleGrillesPikaBusConnection(StopListener):
         channel_dict = {}
         event = asyncio.Event()
 
-        loop = asyncio.get_event_loop()
         def callback(new_channel: Channel):
             channel_dict['channel'] = new_channel
-            loop.call_soon(event.set)
+            self.__loop.call_soon_threadsafe(event.set)
 
         self._connection.channel(on_open_callback=callback)
         await asyncio.wait_for(event.wait(), 10)

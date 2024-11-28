@@ -89,6 +89,8 @@ class MilleGrillesPikaQueueConsumer:
         self.__channel: Optional[Channel] = None
         self.__consumer_tag: Optional[str] = None
 
+        self.__loop = asyncio.get_event_loop()
+
     def setup(self, prefetch_count: int):
         self.__async_queue: asyncio.Queue[Union[RawMessageWrapper, None]] = asyncio.Queue(maxsize=prefetch_count)
 
@@ -101,10 +103,9 @@ class MilleGrillesPikaQueueConsumer:
             raise Exception('Not initialized (setup)')
 
         self.__channel = channel
-        loop = asyncio.get_event_loop()
         event = asyncio.Event()
         def consume_callback(method: Method):
-            loop.call_soon(event.set)
+            self.__loop.call_soon_threadsafe(event.set)
         self.__consumer_tag = channel.basic_consume(self.auto_name, self.__on_message, auto_ack=False, callback=consume_callback)
         await asyncio.wait_for(event.wait(), 3)
 
@@ -127,7 +128,9 @@ class MilleGrillesPikaQueueConsumer:
 
     def __on_message(self, channel: Channel, deliver: Basic.Deliver, properties: BasicProperties, body: bytes):
         message = RawMessageWrapper(self.auto_name or self.name, channel, deliver, properties, body)
-        self.__async_queue.put_nowait(message)
+        # self.__async_queue.put_nowait(message)
+        # Note - put_nowait is safe because we use the same maxvalue as the queue prefetch count
+        self.__loop.call_soon_threadsafe(self.__async_queue.put_nowait, message)
 
     async def run(self):
         async with TaskGroup() as group:

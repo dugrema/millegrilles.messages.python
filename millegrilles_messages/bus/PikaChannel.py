@@ -45,6 +45,8 @@ class MilleGrillesPikaChannel:
         self.__publish_count = 1
         self.__last_delivery = 0
 
+        self.__loop = asyncio.get_event_loop()
+
     def setup(self, connector: ConnectionProvider):
         self.__connector = connector
 
@@ -63,8 +65,7 @@ class MilleGrillesPikaChannel:
 
             try:
                 item['ok'] = is_ok
-                loop = asyncio.get_event_loop()
-                loop.call_soon(item['event'].set)
+                self.__loop.call_soon_threadsafe(item['event'].set)
             except:
                 self.__logger.exception("Error processing delivery tag")
 
@@ -129,8 +130,7 @@ class MilleGrillesPikaChannel:
         if self.ready.is_set() is True:
             # This is an error, try to force shutdown
             self.__context.stop()
-            loop = asyncio.get_event_loop()
-            loop.call_soon(self.__q_change_event.set)
+            self.__loop.call_soon_threadsafe(self.__q_change_event.set)
 
     async def stop_consuming(self):
         self.ready.clear()
@@ -150,20 +150,18 @@ class MilleGrillesPikaChannel:
             await q.close()
 
     async def set_qos(self):
-        loop = asyncio.get_event_loop()
         event = asyncio.Event()
         def qos_callback(method: Method):
-            loop.call_soon(event.set)
+            self.__loop.call_soon_threadsafe(event.set)
         self.__channel.basic_qos(prefetch_count=self.__prefetch_count, callback=qos_callback)
         await asyncio.wait_for(event.wait(), 3)
 
     async def create_q(self, q: MilleGrillesPikaQueueConsumer):
-        loop = asyncio.get_event_loop()
         event = asyncio.Event()
         name = q.name or ''
         def queue_declare_callback(frame: Method):
             q.auto_name = frame.method.queue
-            loop.call_soon(event.set)
+            self.__loop.call_soon_threadsafe(event.set)
         self.__channel.queue_declare(name, durable=q.durable, exclusive=q.exclusive,
                                      auto_delete=q.auto_delete, arguments=q.arguments,
                                      callback=queue_declare_callback)
@@ -175,10 +173,9 @@ class MilleGrillesPikaChannel:
     async def bind_routing_key(self, q: MilleGrillesPikaQueueConsumer, rk: RoutingKey):
         name = q.auto_name
 
-        loop = asyncio.get_event_loop()
         event = asyncio.Event()
         def bind_callback(method: Method):
-            loop.call_soon(event.set)
+            self.__loop.call_soon_threadsafe(event.set)
 
         self.__channel.queue_bind(name, rk.exchange, rk.routing_key, callback=bind_callback)
         await asyncio.wait_for(event.wait(), 5)

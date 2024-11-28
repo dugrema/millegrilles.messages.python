@@ -104,11 +104,10 @@ class MilleGrillesBusContext:
 
     def stop(self):
         if self.__logger.isEnabledFor(logging.DEBUG):
-            loop = asyncio.get_event_loop()
-            loop.set_debug(True)
+            self.__loop.set_debug(True)
 
         # Set the async event to stop async threads
-        asyncio.get_event_loop().call_soon_threadsafe(self.__stop_event.set)
+        self.__loop.call_soon_threadsafe(self.__stop_event.set)
 
         # Set the sync event to release sync threads
         self.__sync_event.set()
