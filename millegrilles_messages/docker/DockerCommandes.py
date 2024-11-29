@@ -47,12 +47,16 @@ class CommandeListerServices(CommandeDocker):
         liste = resultat['args'][0]
         return liste
 
+    def __repr__(self):
+        return 'CommandeListerServices'
+
 
 class CommandeRedemarrerService(CommandeDocker):
 
-    def __init__(self, nom_service: str, id_only=True):
+    def __init__(self, nom_service: str, force=False):
         super().__init__()
         self.__nom_service = nom_service
+        self.__force = force
 
         self.facteur_throttle = 1.5
 
@@ -65,12 +69,15 @@ class CommandeRedemarrerService(CommandeDocker):
             mode = spec['Mode']
             replicated = mode['Replicated']
             replicas = replicated['Replicas']
-            if replicas > 0:
+            if replicas > 0 or self.__force:
                 resultat = service.force_update()
         except KeyError:
             pass
 
         await self._callback_asyncio(resultat)
+
+    def __repr__(self):
+        return f'CommandeRedemarrerService {self.__nom_service} (force: {self.__force})'
 
 
 class CommandeMajService(CommandeDocker):
@@ -86,6 +93,9 @@ class CommandeMajService(CommandeDocker):
         service = docker_client.services.get(self.__nom_service)
         service.update(**self.__config)
         await self._callback_asyncio(True)
+
+    def __repr__(self):
+        return f'CommandeMajService {self.__nom_service}'
 
 
 class CommandeDemarrerService(CommandeDocker):
@@ -107,6 +117,9 @@ class CommandeDemarrerService(CommandeDocker):
         succes = resultats['args'][0]
         return succes
 
+    def __repr__(self):
+        return f'CommandeDemarrerService {self.__nom_service}'
+
 
 class CommandeArreterService(CommandeDocker):
 
@@ -126,6 +139,9 @@ class CommandeArreterService(CommandeDocker):
         succes = resultats['args'][0]
         return succes
 
+    def __repr__(self):
+        return f'CommandeArreterService {self.__nom_service}'
+
 
 class CommandeSupprimerService(CommandeDocker):
 
@@ -144,6 +160,9 @@ class CommandeSupprimerService(CommandeDocker):
         resultats = await self.attendre()
         succes = resultats['args'][0]
         return succes
+
+    def __repr__(self):
+        return f'CommandeSupprimerService {self.__nom_service}'
 
 
 class CommandeListerConfigs(CommandeDocker):
@@ -171,6 +190,9 @@ class CommandeListerConfigs(CommandeDocker):
         liste = resultat['args'][0]
         return liste
 
+    def __repr__(self):
+        return f'CommandeListerConfigs filters: {self.__filters}'
+
 
 class CommandeListerSecrets(CommandeDocker):
 
@@ -196,6 +218,9 @@ class CommandeListerSecrets(CommandeDocker):
         resultat = await self.attendre()
         liste = resultat['args'][0]
         return liste
+
+    def __repr__(self):
+        return f'CommandeListerSecrets filters: {self.__filters}'
 
 
 class CommandeAjouterConfiguration(CommandeDocker):
@@ -226,6 +251,9 @@ class CommandeAjouterConfiguration(CommandeDocker):
         resultat = await self.attendre()
         return resultat['args'][0]
 
+    def __repr__(self):
+        return f'CommandeAjouterConfiguration {self.__nom}'
+
 
 class CommandeSupprimerConfiguration(CommandeDocker):
 
@@ -242,6 +270,9 @@ class CommandeSupprimerConfiguration(CommandeDocker):
     async def get_resultat(self) -> list:
         resultat = await self.attendre()
         return resultat['args'][0]
+
+    def __repr__(self):
+        return f'CommandeSupprimerConfiguration {self.__nom}'
 
 
 class CommandeGetConfiguration(CommandeDocker):
@@ -268,6 +299,9 @@ class CommandeGetConfiguration(CommandeDocker):
             data_str = data_str.decode('utf-8')
 
         return data_str
+
+    def __repr__(self):
+        return f'CommandeGetConfiguration {self.__nom}'
 
 
 class CommandeAjouterSecret(CommandeDocker):
@@ -298,6 +332,9 @@ class CommandeAjouterSecret(CommandeDocker):
         resultat = await self.attendre()
         return resultat['args'][0]
 
+    def __repr__(self):
+        return f'CommandeAjouterSecret {self.__nom}'
+
 
 class CommandeSupprimerSecret(CommandeDocker):
 
@@ -314,6 +351,9 @@ class CommandeSupprimerSecret(CommandeDocker):
     async def get_resultat(self) -> list:
         resultat = await self.attendre()
         return resultat['args'][0]
+
+    def __repr__(self):
+        return f'CommandeSupprimerSecret {self.__nom}'
 
 
 class CommandeCreerService(CommandeDocker):
@@ -355,6 +395,9 @@ class CommandeCreerService(CommandeDocker):
         resultat = await self.attendre()
         return resultat['args'][0]
 
+    def __repr__(self):
+        return f'CommandeCreerService {self.__configuration.get('name') or self.__image}'
+
 
 class CommandeCreerSwarm(CommandeDocker):
 
@@ -373,6 +416,9 @@ class CommandeCreerSwarm(CommandeDocker):
                 raise apie
 
         await self._callback_asyncio()
+
+    def __repr__(self):
+        return 'CommandeCreerSwarm'
 
 
 class CommandeCreerNetworkOverlay(CommandeDocker):
@@ -393,6 +439,9 @@ class CommandeCreerNetworkOverlay(CommandeDocker):
                 raise apie
 
         await self._callback_asyncio()
+
+    def __repr__(self):
+        return 'CommandeCreerNetworkOverlay'
 
 
 class PullStatus:
@@ -568,6 +617,9 @@ class CommandeGetImage(CommandeDocker):
             except:
                 self.__logger.exception("CommandeGetImage.progress_coro Error running callback")
 
+    def __repr__(self):
+        return f'CommandeGetImage {self.__nom_image}'
+
 
 class CommandeEnsureNodeLabels(CommandeDocker):
     """
@@ -604,6 +656,9 @@ class CommandeEnsureNodeLabels(CommandeDocker):
             node_create.update(node_spec)
 
         await self._callback_asyncio()
+
+    def __repr__(self):
+        return f'CommandeEnsureNodeLabels {self.__labels}'
 
 
 class CommandeGetConfigurationsDatees(CommandeDocker):
@@ -697,6 +752,9 @@ class CommandeGetConfigurationsDatees(CommandeDocker):
         resultat = await self.attendre()
         return resultat['args'][0]
 
+    def __repr__(self):
+        return 'CommandeGetConfigurationsDatees'
+
 
 class CommandeRunContainer(CommandeDocker):
     """
@@ -734,6 +792,9 @@ class CommandeRunContainer(CommandeDocker):
         resultat = await self.attendre()
         return resultat['args'][0]
 
+    def __repr__(self):
+        return f'CommandeRunContainer {self.__image}: {self.__command}'
+
 
 class CommandeReloadNginx(CommandeDocker):
     """
@@ -756,3 +817,6 @@ class CommandeReloadNginx(CommandeDocker):
     async def get_resultat(self) -> dict:
         resultat = await self.attendre()
         return resultat['args'][0]
+
+    def __repr__(self):
+        return 'CommandeReloadNginx'

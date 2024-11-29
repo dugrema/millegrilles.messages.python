@@ -179,10 +179,10 @@ class DockerHandler:
             facteur_throttle = max(cpu_load, 0.3) * action.facteur_throttle
             wait_time = min(facteur_throttle, 30.0)  # Attendre load*n en secondes, max 30 secondes
 
-            self.__logger.debug(
-                "Throttling commandes docker, cpu_load:%f attente %f secondes" % (cpu_load, wait_time))
+            # self.__logger.debug(
+            #     "Throttling commandes docker, cpu_load:%f attente %f secondes" % (cpu_load, wait_time))
             await self.__context.wait(wait_time)
-            self.__logger.debug("Throttling commandes docker, pret pour prochaine commande")
+            # self.__logger.debug("Throttling commandes docker, pret pour prochaine commande")
 
         if self.context.stopping is False:
             self.__logger.error("Docker thread stopping out of turn - quitting")
