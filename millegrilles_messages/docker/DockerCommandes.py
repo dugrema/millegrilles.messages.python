@@ -837,7 +837,13 @@ class CommandPruneCleanup(CommandeDocker):
         await asyncio.to_thread(docker_client.containers.prune)
         volumes: list[Volume] = await asyncio.to_thread(docker_client.volumes.list, filters={'dangling': True})
         for volume in volumes:
-            await asyncio.to_thread(volume.remove)
+            try:
+                await asyncio.to_thread(volume.remove)
+            except APIError as e:
+                if e.status_code == 500:
+                    self.__logger.debug("CLEANUP: Unable to remove docker volume %s", volume.name)
+                else:
+                    raise e
 
         await self._callback_asyncio(True)
 
