@@ -10,6 +10,7 @@ from typing import Optional, Union, Callable, Coroutine, Any
 from docker import DockerClient
 from docker.errors import APIError, NotFound
 from docker.models.services import Service
+from docker.models.volumes import Volume
 from docker.types import ServiceMode
 
 
@@ -39,7 +40,7 @@ class CommandeListerServices(CommandeDocker):
         self.__filters = filters
 
     async def executer(self, docker_client: DockerClient):
-        liste = docker_client.services.list(filters=self.__filters)
+        liste = await asyncio.to_thread(docker_client.services.list, filters=self.__filters)
         await self._callback_asyncio(liste)
 
     async def get_liste(self) -> list[Service]:
@@ -61,7 +62,7 @@ class CommandeRedemarrerService(CommandeDocker):
         self.facteur_throttle = 1.5
 
     async def executer(self, docker_client: DockerClient):
-        service = docker_client.services.get(self.__nom_service)
+        service = await asyncio.to_thread(docker_client.services.get, self.__nom_service)
         attrs = service.attrs
         resultat = False
         try:
@@ -70,7 +71,7 @@ class CommandeRedemarrerService(CommandeDocker):
             replicated = mode['Replicated']
             replicas = replicated['Replicas']
             if replicas > 0 or self.__force:
-                resultat = service.force_update()
+                resultat = await asyncio.to_thread(service.force_update)
         except KeyError:
             pass
 
@@ -90,8 +91,8 @@ class CommandeMajService(CommandeDocker):
         self.facteur_throttle = 1.5
 
     async def executer(self, docker_client: DockerClient):
-        service = docker_client.services.get(self.__nom_service)
-        service.update(**self.__config)
+        service = await asyncio.to_thread(docker_client.services.get, self.__nom_service)
+        await asyncio.to_thread(service.update, **self.__config)
         await self._callback_asyncio(True)
 
     def __repr__(self):
@@ -108,8 +109,8 @@ class CommandeDemarrerService(CommandeDocker):
         self.facteur_throttle = 1.5
 
     async def executer(self, docker_client: DockerClient):
-        service = docker_client.services.get(self.__nom_service)
-        resultat = service.scale(self.__replicas)
+        service = await asyncio.to_thread(docker_client.services.get, self.__nom_service)
+        resultat = await asyncio.to_thread(service.scale, self.__replicas)
         await self._callback_asyncio(resultat)
 
     async def get_resultat(self) -> bool:
@@ -130,8 +131,8 @@ class CommandeArreterService(CommandeDocker):
         self.facteur_throttle = 0.5
 
     async def executer(self, docker_client: DockerClient):
-        service = docker_client.services.get(self.__nom_service)
-        resultat = service.scale(0)
+        service = await asyncio.to_thread(docker_client.services.get, self.__nom_service)
+        resultat = await asyncio.to_thread(service.scale, 0)
         await self._callback_asyncio(resultat)
 
     async def get_resultat(self) -> bool:
@@ -152,8 +153,8 @@ class CommandeSupprimerService(CommandeDocker):
         self.facteur_throttle = 0.5
 
     async def executer(self, docker_client: DockerClient):
-        service = docker_client.services.get(self.__nom_service)
-        resultat = service.remove()
+        service = await asyncio.to_thread(docker_client.services.get, self.__nom_service)
+        resultat = await asyncio.to_thread(service.remove)
         await self._callback_asyncio(resultat)
 
     async def get_resultat(self) -> bool:
@@ -173,7 +174,7 @@ class CommandeListerConfigs(CommandeDocker):
         self.__id_only = id_only
 
     async def executer(self, docker_client: DockerClient):
-        liste = docker_client.configs.list(filters=self.__filters)
+        liste = await asyncio.to_thread(docker_client.configs.list, filters=self.__filters)
 
         resultat = liste
         if self.__id_only:
@@ -202,7 +203,7 @@ class CommandeListerSecrets(CommandeDocker):
         self.__id_only = id_only
 
     async def executer(self, docker_client: DockerClient):
-        liste = docker_client.secrets.list(filters=self.__filters)
+        liste = await asyncio.to_thread(docker_client.secrets.list, filters=self.__filters)
 
         resultat = liste
         if self.__id_only:
@@ -244,7 +245,7 @@ class CommandeAjouterConfiguration(CommandeDocker):
         self.facteur_throttle = 0.25
 
     async def executer(self, docker_client: DockerClient):
-        reponse = docker_client.configs.create(name=self.__nom, data=self.__data, labels=self.__labels)
+        reponse = await asyncio.to_thread(docker_client.configs.create, name=self.__nom, data=self.__data, labels=self.__labels)
         await self._callback_asyncio(reponse)
 
     async def get_resultat(self) -> list:
@@ -263,8 +264,8 @@ class CommandeSupprimerConfiguration(CommandeDocker):
         self.facteur_throttle = 0.25
 
     async def executer(self, docker_client: DockerClient):
-        config = docker_client.configs.get(self.__nom)
-        reponse = config.remove()
+        config = await asyncio.to_thread(docker_client.configs.get, self.__nom)
+        reponse = await asyncio.to_thread(config.remove)
         await self._callback_asyncio(reponse)
 
     async def get_resultat(self) -> list:
@@ -325,7 +326,7 @@ class CommandeAjouterSecret(CommandeDocker):
         self.facteur_throttle = 0.25
 
     async def executer(self, docker_client: DockerClient):
-        reponse = docker_client.secrets.create(name=self.__nom, data=self.__data, labels=self.__labels)
+        reponse = await asyncio.to_thread(docker_client.secrets.create, name=self.__nom, data=self.__data, labels=self.__labels)
         await self._callback_asyncio(reponse)
 
     async def get_resultat(self) -> list:
@@ -344,8 +345,8 @@ class CommandeSupprimerSecret(CommandeDocker):
         self.facteur_throttle = 0.25
 
     async def executer(self, docker_client: DockerClient):
-        config = docker_client.secrets.get(self.__nom)
-        reponse = config.remove()
+        config = await asyncio.to_thread(docker_client.secrets.get, self.__nom)
+        reponse = await asyncio.to_thread(config.remove)
         await self._callback_asyncio(reponse)
 
     async def get_resultat(self) -> list:
@@ -373,7 +374,7 @@ class CommandeCreerService(CommandeDocker):
         if self.__reinstaller is True:
             nom_app = self.__configuration['name']
             try:
-                service = docker_client.services.get(nom_app)
+                service = await asyncio.to_thread(docker_client.services.get, nom_app)
                 service.remove()
             except APIError as apie:
                 if apie.status_code == 404:
@@ -382,7 +383,7 @@ class CommandeCreerService(CommandeDocker):
                     raise apie
 
         try:
-            resultat = docker_client.services.create(self.__image, **config_ajustee)
+            resultat = await asyncio.to_thread(docker_client.services.create, self.__image, **config_ajustee)
             info_service = {'id': resultat.id, 'name': resultat.name}
             return await self._callback_asyncio(info_service)
         except APIError as e:
@@ -408,7 +409,7 @@ class CommandeCreerSwarm(CommandeDocker):
 
     async def executer(self, docker_client: DockerClient, attendre=True):
         try:
-            docker_client.swarm.init(advertise_addr="127.0.0.1")
+            await asyncio.to_thread(docker_client.swarm.init, advertise_addr="127.0.0.1")
         except APIError as apie:
             if apie.status_code == 409:
                 pass  # OK, existe deja
@@ -431,7 +432,7 @@ class CommandeCreerNetworkOverlay(CommandeDocker):
 
     async def executer(self, docker_client: DockerClient, attendre=True):
         try:
-            docker_client.networks.create(name=self.__network_name, scope="swarm", driver="overlay", attachable=True)
+            await asyncio.to_thread(docker_client.networks.create, name=self.__network_name, scope="swarm", driver="overlay", attachable=True)
         except APIError as apie:
             if apie.status_code == 409:
                 pass  # OK, existe deja
@@ -523,7 +524,7 @@ class CommandeGetImage(CommandeDocker):
 
     async def executer(self, docker_client: DockerClient):
         try:
-            reponse = docker_client.images.get(self.__nom_image)
+            reponse = await asyncio.to_thread(docker_client.images.get, self.__nom_image)
             await self._callback_asyncio({'id': reponse.id, 'tags': reponse.tags})
             return
         except NotFound:
@@ -552,7 +553,7 @@ class CommandeGetImage(CommandeDocker):
 
             try:
                 self.download_package(docker_client, image_repository, tag)
-                reponse = docker_client.images.get(self.__nom_image)
+                reponse = await asyncio.to_thread(docker_client.images.get, self.__nom_image)
                 await self._callback_asyncio({'id': reponse.id, 'tags': reponse.tags})
                 return
             except NotFound:
@@ -633,7 +634,7 @@ class CommandeEnsureNodeLabels(CommandeDocker):
         self.facteur_throttle = 0.25
 
     async def executer(self, docker_client: DockerClient, attendre=True):
-        nodes = docker_client.nodes.list()
+        nodes = await asyncio.to_thread(docker_client.nodes.list)
 
         labels_connus = set()
         for node in nodes:
@@ -653,7 +654,7 @@ class CommandeEnsureNodeLabels(CommandeDocker):
                 changement = True
 
         if changement is True:
-            node_create.update(node_spec)
+            await asyncio.to_thread(node_create.update, node_spec)
 
         await self._callback_asyncio()
 
@@ -674,13 +675,13 @@ class CommandeGetConfigurationsDatees(CommandeDocker):
         dict_secrets = dict()
         dict_configs = dict()
 
-        reponse = docker_client.secrets.list(filters={'label': 'certificat=true'})
+        reponse = await asyncio.to_thread(docker_client.secrets.list, filters={'label': 'certificat=true'})
         dict_secrets.update(self.parse_reponse(reponse))
 
-        reponse = docker_client.secrets.list(filters={'label': 'password=true'})
+        reponse = await asyncio.to_thread(docker_client.secrets.list, filters={'label': 'password=true'})
         dict_secrets.update(self.parse_reponse(reponse))
 
-        reponse = docker_client.configs.list(filters={'label': 'certificat=true'})
+        reponse = await asyncio.to_thread(docker_client.configs.list, filters={'label': 'certificat=true'})
         dict_configs.update(self.parse_reponse(reponse))
 
         correspondance = self.correspondre_cle_cert(dict_secrets, dict_configs)
@@ -785,7 +786,7 @@ class CommandeRunContainer(CommandeDocker):
             'auto_remove': True,
         }
         self.__logger.debug("Run %s %s" % (self.__image, self.__command))
-        resultat = docker_client.containers.run(self.__image, command=self.__command, stdout=True, stderr=True, **params)
+        resultat = await asyncio.to_thread(docker_client.containers.run, self.__image, command=self.__command, stdout=True, stderr=True, **params)
         await self._callback_asyncio(resultat)
 
     async def get_resultat(self) -> dict:
@@ -807,10 +808,10 @@ class CommandeReloadNginx(CommandeDocker):
         self.facteur_throttle = 1.0
 
     async def executer(self, docker_client: DockerClient, attendre=True):
-        nginx_container = docker_client.containers.list(filters={"name": "nginx"})
+        nginx_container = await asyncio.to_thread(docker_client.containers.list, filters={"name": "nginx"})
 
         for container in nginx_container:
-            container.exec_run("nginx -s reload")
+            await asyncio.to_thread(container.exec_run, "nginx -s reload")
 
         await self._callback_asyncio(True)
 
@@ -820,3 +821,26 @@ class CommandeReloadNginx(CommandeDocker):
 
     def __repr__(self):
         return 'CommandeReloadNginx'
+
+
+class CommandPruneCleanup(CommandeDocker):
+    """
+    Run une image dans un nouveau container
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
+        self.facteur_throttle = 1.0
+
+    async def executer(self, docker_client: DockerClient, attendre=True):
+        await asyncio.to_thread(docker_client.containers.prune)
+        volumes: list[Volume] = await asyncio.to_thread(docker_client.volumes.list, filters={'dangling': True})
+        for volume in volumes:
+            await asyncio.to_thread(volume.remove)
+
+        await self._callback_asyncio(True)
+
+    def __repr__(self):
+        return 'CommandePruneCleanup'
+
