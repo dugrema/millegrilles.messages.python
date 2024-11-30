@@ -161,7 +161,11 @@ class MilleGrillesBusContext:
                 ENV_CERT_PEM: self.configuration.cert_path,
                 ENV_KEY_PEM: self.configuration.key_path,
             }
-            return ValidateurCertificatRedis(self.ca, configuration=redis_configuration)
+            try:
+                return ValidateurCertificatRedis(self.ca, configuration=redis_configuration)
+            except FileNotFoundError as e:
+                self.__logger.warning("Error loading Redis validator, using in memory only: %s", e)
+                return ValidateurCertificatCache(self.ca)
         else:
             return ValidateurCertificatCache(self.ca)
 

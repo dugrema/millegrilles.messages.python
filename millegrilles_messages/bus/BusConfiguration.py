@@ -53,4 +53,8 @@ class MilleGrillesBusConfiguration:
     def load():
         config = MilleGrillesBusConfiguration()
         config.parse_config()
+        config.reload()
         return config
+
+    def reload(self):
+        pass  # Hook for sub-classes
