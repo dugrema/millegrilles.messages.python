@@ -70,10 +70,12 @@ class CommandeRedemarrerService(CommandeDocker):
             mode = spec['Mode']
             replicated = mode['Replicated']
             replicas = replicated['Replicas']
-            if replicas > 0 or self.__force:
-                resultat = await asyncio.to_thread(service.force_update)
+            if replicas == 0:
+                await asyncio.to_thread(service.scale, 1)
         except KeyError:
-            pass
+            pass  # await asyncio.to_thread(service.scale, 1)
+
+        resultat = await asyncio.to_thread(service.force_update)
 
         await self._callback_asyncio(resultat)
 
