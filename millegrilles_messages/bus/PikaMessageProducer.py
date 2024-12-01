@@ -174,8 +174,8 @@ class MilleGrillesPikaMessageProducer:
     async def request(self, message_in: dict, domain: str, action: str, exchange: str, partition: Optional[str] = None,
             reply_to: Optional[str] = None, correlation_id: Optional[str] = None,
             noformat=False, attachments: Optional[dict] = None, timeout=CONST_WAIT_REPLY_DEFAULT,
-            role_check: Optional[str] = None) -> Optional[MessageWrapper]:
-        domain_check = role_check is None
+            role_check: Optional[str] = None, domain_check: Optional[Union[bool, str, list]] = None) -> Optional[MessageWrapper]:
+        domain_check = domain_check or role_check is None
         return await self.send_routed_message(
             message_in, Constantes.KIND_REQUETE, domain, action, exchange, partition, reply_to, correlation_id,
             noformat, False, attachments, timeout, domain_check, role_check)
