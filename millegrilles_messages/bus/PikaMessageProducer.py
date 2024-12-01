@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 
 from uuid import uuid4
 
@@ -14,12 +15,15 @@ from millegrilles_messages.messages.MessagesModule import MessagePending, Messag
 
 from pika import BasicProperties
 
+from millegrilles_messages.messages.ValidateurCertificats import CertificatInconnu
+
 CONST_WAIT_REPLY_DEFAULT = 15
 
 
 class MilleGrillesPikaMessageProducer:
 
     def __init__(self, context: MilleGrillesBusContext, channel: MilleGrillesPikaChannel, reply_queue: MilleGrillesPikaReplyQueueConsumer):
+        self.__logger = logging.getLogger(__name__+'.'+self.__class__.__name__)
         self.__context: MilleGrillesBusContext = context
         self.__channel: MilleGrillesPikaChannel = channel
         self.__reply_queue: MilleGrillesPikaReplyQueueConsumer = reply_queue
@@ -218,3 +222,22 @@ class MilleGrillesPikaMessageProducer:
 
         message_bytes = json.dumps(message)
         return await self.send(message_bytes, routing_key=reply_to, correlation_id=correlation_id, reply_to=reply_to)
+
+    async def fetch_certificate(self, fingerprint: str):
+        """ Charge un certificat a partir de son fingerprint """
+        try:
+            return await self.__context.verificateur_certificats.valider_fingerprint(fingerprint)
+        except CertificatInconnu as ce:
+            # Try to load from the bus
+            try:
+                cert_pems = await self.__context.verificateur_certificats.fetch_certificat(fingerprint, self)
+                enveloppe = await self.__context.verificateur_certificats.valider(cert_pems)
+                return enveloppe
+            except asyncio.CancelledError as e:
+                raise e
+            except Exception as e:
+                self.__logger.warning("Error trying to load certificate from bus: %s", e)
+                pass
+
+            # Failure to load the certificate. Raise original error
+            raise ce

@@ -12,6 +12,7 @@ from typing import Optional, Union
 import redis.asyncio as redis
 from redis.exceptions import ConnectionError
 
+# from millegrilles_messages.bus.PikaMessageProducer import MilleGrillesPikaMessageProducer
 from millegrilles_messages.messages import Constantes
 from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
 from millegrilles_messages.messages.ParamsEnvironnement import ConfigurationRedis
@@ -158,16 +159,19 @@ class ValidateurCertificat:
                 store.set_time(date_reference)
             return store
 
-    async def fetch_certificat(self, fingerprint: str):
+    async def fetch_certificat(self, fingerprint: str, producer = None):
 
-        if self.__producer_messages is None:
+        if producer is None:
+            producer = self.__producer_messages
+
+        if producer is None:
             raise CertificatInconnu('PERSISTENT CACHE MISS', fingerprint=fingerprint)
 
-        await self.__producer_messages.producer_pret().wait()
+        # await self.__producer_messages.producer_pret().wait()
 
         requete = {'fingerprint': fingerprint}
         try:
-            reponse_certificat = await self.__producer_messages.executer_requete(
+            reponse_certificat = await producer.request(
                 requete, 'CorePki', action='infoCertificat', exchange=Constantes.SECURITE_PUBLIC, timeout=3)
             parsed = reponse_certificat.parsed
             if parsed.get('ok') is not False:
@@ -178,7 +182,7 @@ class ValidateurCertificat:
             self.__logger.exception("Erreur traitement reponse certificat directe pour %s" % fingerprint)
 
         try:
-            reponse_certificat = await self.__producer_messages.executer_requete(
+            reponse_certificat = await producer.request(
                 requete, 'certificat', action=fingerprint, exchange=Constantes.SECURITE_PUBLIC, timeout=5)
             parsed = reponse_certificat.parsed
             if parsed.get('ok') is not False:
