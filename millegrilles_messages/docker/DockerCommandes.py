@@ -399,7 +399,8 @@ class CommandeCreerService(CommandeDocker):
         return resultat['args'][0]
 
     def __repr__(self):
-        return f'CommandeCreerService {self.__configuration.get('name') or self.__image}'
+        service_name = self.__configuration.get('name') or self.__image
+        return f'CommandeCreerService {service_name}'
 
 
 class CommandeCreerSwarm(CommandeDocker):
