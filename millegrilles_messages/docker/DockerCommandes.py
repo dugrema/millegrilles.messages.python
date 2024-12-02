@@ -547,7 +547,7 @@ class CommandeGetImage(CommandeDocker):
                 tag = None
 
             if nom_image is None:
-                raise Exception("Nom image incorrect : %s" % self.__nom_image)
+                raise Exception("Incorrect image name : %s" % self.__nom_image)
 
             if repository is not None:
                 image_repository = '%s/%s' % (repository, nom_image)
@@ -609,12 +609,12 @@ class CommandeGetImage(CommandeDocker):
                     await cb(self.pull_status)
                 except:
                     self.__logger.exception("CommandeGetImage.progress_coro Error running callback")
-            self.__logger.info("CommandeGetImage %s status: %s" % (self.__nom_image, status))
+            self.__logger.debug("CommandeGetImage %s status: %s" % (self.__nom_image, status))
             try:
                 await asyncio.wait_for(self._event_asyncio.wait(), 3)
             except asyncio.TimeoutError:
                 pass
-        self.__logger.info("CommandeGetImage %s status: Done" % self.__nom_image)
+        self.__logger.debug("CommandeGetImage %s status: Done" % self.__nom_image)
         if cb:
             try:
                 await cb(self.pull_status)
