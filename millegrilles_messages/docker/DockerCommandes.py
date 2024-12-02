@@ -839,17 +839,27 @@ class CommandPruneCleanup(CommandeDocker):
     async def executer(self, docker_client: DockerClient, attendre=True):
         await asyncio.to_thread(docker_client.containers.prune)
         volumes: list[Volume] = await asyncio.to_thread(docker_client.volumes.list, filters={'dangling': True})
+        # volumes: list[Volume] = await asyncio.to_thread(docker_client.volumes.list)
         for volume in volumes:
             try:
-                await asyncio.to_thread(volume.remove)
-            except APIError as e:
-                if e.status_code == 500:
-                    self.__logger.debug("CLEANUP: Unable to remove docker volume %s", volume.name)
-                else:
-                    raise e
+                label_anonymous = volume.attrs['Labels']['com.docker.volume.anonymous'] is not None
+            except(TypeError, KeyError):
+                label_anonymous = False
+
+            # Only remove unnamed volumes from dead containers (e.g. ddeca4ceabd6762a07f7bfbd416f1b2e24298a2af237605b3990f124d7ccc7be)
+            if label_anonymous and len(volume.name) == 64:
+                try:
+                    await asyncio.to_thread(volume.remove)
+                    self.__logger.debug("CommandPruneCleanup: Volume %s removed", volume.name)
+                except APIError as e:
+                    if e.status_code == 500:
+                        self.__logger.debug("CLEANUP: Unable to remove docker volume %s", volume.name)
+                    elif e.status_code == 409:
+                        pass  # Ok, currently in use
+                    else:
+                        raise e
 
         await self._callback_asyncio(True)
 
     def __repr__(self):
         return 'CommandePruneCleanup'
-
