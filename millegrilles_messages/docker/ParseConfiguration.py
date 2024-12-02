@@ -282,6 +282,11 @@ class ConfigurationService:
             except KeyError:
                 pass
 
+            try:
+                labels['package_name'] = self.__params['__package_name']
+            except KeyError:
+                pass
+
         self.__labels = labels
 
     def _parse_container_labels(self):
