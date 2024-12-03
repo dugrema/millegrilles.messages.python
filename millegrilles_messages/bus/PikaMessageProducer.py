@@ -121,7 +121,7 @@ class MilleGrillesPikaMessageProducer:
 
         if noformat is True:
             message_id = message_in['id']
-            message = message_id
+            message = message_in
         else:
             message, message_id = self.__context.formatteur.signer_message(
                 kind, message_in, domain, action=action, partition=partition)
