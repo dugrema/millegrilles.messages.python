@@ -15,6 +15,17 @@ class Filehost:
         self.deleted: Optional[bool] = None
         self.sync_active: Optional[bool] = None
 
+    def to_dict(self):
+        return {
+            'filehost_id': self.filehost_id,
+            'url_internal': self.url_internal,
+            'url_external': self.url_external,
+            'tls_external': self.tls_external,
+            'instance_id': self.instance_id,
+            'deleted': self.deleted,
+            'sync_active': self.sync_active,
+        }
+
     @staticmethod
     def load_from_dict(value: dict):
         filehost_id = value['filehost_id']
