@@ -120,7 +120,7 @@ class MilleGrillesPikaChannel:
                 await self.create_q(q)
                 await q.start_consuming(self.__channel)
         except AttributeError:
-            self.__logger.info("Error in start_consuming, aborting")
+            self.__logger.exception("Error in start_consuming, aborting")
             return
         self.ready.set()
 
@@ -168,17 +168,17 @@ class MilleGrillesPikaChannel:
         await asyncio.wait_for(event.wait(), 5)
 
         for rk in q.routing_keys:
-            await self.bind_routing_key(q, rk)
+            await q.bind_routing_key(rk, self.__channel)
 
-    async def bind_routing_key(self, q: MilleGrillesPikaQueueConsumer, rk: RoutingKey):
-        name = q.auto_name
-
-        event = asyncio.Event()
-        def bind_callback(method: Method):
-            self.__loop.call_soon_threadsafe(event.set)
-
-        self.__channel.queue_bind(name, rk.exchange, rk.routing_key, callback=bind_callback)
-        await asyncio.wait_for(event.wait(), 5)
+    # async def bind_routing_key(self, q: MilleGrillesPikaQueueConsumer, rk: RoutingKey):
+    #     name = q.auto_name
+    #
+    #     event = asyncio.Event()
+    #     def bind_callback(method: Method):
+    #         self.__loop.call_soon_threadsafe(event.set)
+    #
+    #     self.__channel.queue_bind(name, rk.exchange, rk.routing_key, callback=bind_callback)
+    #     await asyncio.wait_for(event.wait(), 5)
 
     async def publish(self, exchanges: Optional[list], routing_key: str, content: bytes, properties: Optional[BasicProperties] = None):
         if exchanges is not None:

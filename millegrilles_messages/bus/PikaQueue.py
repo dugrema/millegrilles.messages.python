@@ -98,6 +98,16 @@ class MilleGrillesPikaQueueConsumer:
     def running(self):
         return self.__running
 
+    async def bind_routing_key(self, rk: RoutingKey, channel: Optional[Channel] = None):
+        name = self.auto_name
+
+        event = asyncio.Event()
+        def bind_callback(method: Method):
+            self.__loop.call_soon_threadsafe(event.set)
+        channel = channel or self.__channel
+        channel.queue_bind(name, rk.exchange, rk.routing_key, callback=bind_callback)
+        await asyncio.wait_for(event.wait(), 5)
+
     async def start_consuming(self, channel: Channel):
         if self.__async_queue is None:
             raise Exception('Not initialized (setup)')
@@ -123,8 +133,28 @@ class MilleGrillesPikaQueueConsumer:
 
     def add_routing_key(self, routing_key: RoutingKey):
         if self.__running:
-            raise Exception('Already running, cannot configure')
+            raise Exception('Already running, use add_bind_routing_key')
         self.routing_keys.append(routing_key)
+
+    async def add_bind_routing_key(self, routing_key: RoutingKey):
+        self.routing_keys.append(routing_key)
+        await self.bind_routing_key(routing_key)
+
+    async def remove_unbind_routing_key(self, routing_key: RoutingKey):
+        try:
+            self.routing_keys.remove(routing_key)
+        except ValueError:
+            pass
+        name = self.auto_name
+        self.__channel.queue_unbind(name, routing_key.exchange, routing_key.routing_key)
+
+    def remove_routing_key(self, routing_key: RoutingKey):
+        if self.__running:
+            raise Exception('Already running, cannot configure')
+        try:
+            self.routing_keys.remove(routing_key)
+        except ValueError:
+            pass  # Already removed
 
     def __on_message(self, channel: Channel, deliver: Basic.Deliver, properties: BasicProperties, body: bytes):
         message = RawMessageWrapper(self.auto_name or self.name, channel, deliver, properties, body)
@@ -208,8 +238,12 @@ class MilleGrillesPikaQueueConsumer:
 
             if message_wrapper and message_wrapper.kind in [6, 8]:
                 original = message_wrapper.original
-                decrypted_content = dechiffrer_reponse(self._context.signing_key, original)
-                message_wrapper.set_parsed_dechiffre(decrypted_content)
+                try:
+                    decrypted_content = dechiffrer_reponse(self._context.signing_key, original)
+                    message_wrapper.set_parsed_dechiffre(decrypted_content)
+                except KeyError:
+                    # Unable to decrypt message - it me not be intended for this instance (e.g. web relay)
+                    pass
 
             try:
                 if message_wrapper and message_wrapper.est_valide:
