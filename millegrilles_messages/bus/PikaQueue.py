@@ -163,6 +163,9 @@ class MilleGrillesPikaQueueConsumer:
         self.__loop.call_soon_threadsafe(self.__async_queue.put_nowait, message)
 
     async def run(self):
+        if self.auto_name is None:
+            raise Exception('queue not initialized')
+
         async with TaskGroup() as group:
             group.create_task(self.__run_consume())
 
@@ -283,8 +286,9 @@ class CancelledException(Exception):
 class MessageCorrelation:
 
     def __init__(self, correlation_id: str, timeout=CONST_WAIT_REPLY_DEFAULT,
-                 callback: Optional[Callable[[int, MessageWrapper], Awaitable[None]]] = None,
-                 domain: Optional[Union[str, list]] = None, role: Optional[Union[list, str]] = None):
+                 callback: Optional[Callable[[str, MessageWrapper], Awaitable[None]]] = None,
+                 domain: Optional[Union[bool, str, list]] = None, role: Optional[Union[list, str]] = None,
+                 stream=False):
         self.__logger = logging.getLogger(__name__+'.'+self.__class__.__name__)
         self.correlation_id = correlation_id
         self.__creation_date = datetime.datetime.now()
@@ -300,13 +304,15 @@ class MessageCorrelation:
         self.__roles: Optional[set] = role_set
 
         self.__event_attente = asyncio.Event()
-        self.__stream_queue: Optional[asyncio.Queue] = None
+
+        stream_queue = None
+        if stream:  # Set up streaming responses
+            stream_queue = asyncio.Queue(maxsize=3)
+        self.__stream_queue: Optional[asyncio.Queue] = stream_queue
+
         self.__reponse: Optional[MessageWrapper] = None
         self.__reponse_consommee = False
         self.__cancelled = False
-
-        # if stream:
-        #     self.__stream_queue = asyncio.Queue(maxsize=2)
 
     @property
     def domain(self) -> Optional[Union[str, list]]:
@@ -316,8 +322,16 @@ class MessageCorrelation:
     def roles(self) -> Optional[set]:
         return self.__roles
 
+    @property
+    def streaming(self) -> bool:
+        return self.__stream_queue is not None
+
+    @property
+    def done(self) -> bool:
+        return self.__event_attente.is_set()
+
     async def wait(self, timeout=CONST_WAIT_REPLY_DEFAULT) -> MessageWrapper:
-        self.__timeout = timeout
+        self.__timeout = timeout or CONST_WAIT_REPLY_DEFAULT
         try:
             await asyncio.wait_for(self.__event_attente.wait(), timeout)
         except asyncio.TimeoutError as e:
@@ -332,7 +346,10 @@ class MessageCorrelation:
         return self.__reponse
 
     async def stream_reponse(self, timeout=CONST_WAIT_REPLY_DEFAULT):
-        self.__timeout = timeout
+        if self.__stream_queue is None:
+            raise Exception('Streaming not set')
+
+        self.__timeout = timeout or CONST_WAIT_REPLY_DEFAULT
         while self.__event_attente.is_set() is False:
             valeur = await asyncio.wait_for(self.__stream_queue.get(), timeout)
             if self.__cancelled:
@@ -343,7 +360,7 @@ class MessageCorrelation:
 
         self.__reponse_consommee = True
 
-    async def recevoir_reponse(self, message: MessageWrapper):
+    async def handle_response(self, message: MessageWrapper):
         self.__reponse = message
         if self.__stream_queue is not None:
             # Verifier si on a l'attachement "streaming=True", indique que le stream n'est pas termine
@@ -351,11 +368,12 @@ class MessageCorrelation:
                 await self.__stream_queue.put(message)
                 self.__creation_date = datetime.datetime.now()  # Reset expiration
                 if message.parsed['__original']['attachements']['streaming'] is True:
-                    pass  # Ok, continuer le streaming
+                    pass  # Continue streaming
             except (AttributeError, KeyError):
                 # Streaming done
                 self.__event_attente.set()
                 await self.__stream_queue.put(message)
+                await self.__stream_queue.put(None)  # Exit condition
         elif self.__callback is not None:
             try:
                 await self.__callback(self.correlation_id, message)
@@ -425,12 +443,16 @@ class MilleGrillesPikaReplyQueueConsumer(MilleGrillesPikaQueueConsumer):
 
         correlation = self.__correlations.get(correlation_id)
         try:
-            # TODO: Check if streaming to avoid removing correlation
-            del self.__correlations[correlation_id]
+            if correlation is None:
+                return  # Message gone, finally block will handle cleanup
+
+            if correlation.streaming is False:
+                # Preemptively remove - not streaming and we got the response
+                del self.__correlations[correlation_id]
 
             # Check certificate against expected domain/role
-            certificate = message.certificat
             try:
+                certificate = message.certificat
                 if correlation.roles:
                     if correlation.roles.isdisjoint(certificate.get_roles):
                         self.__logger.info("REPLY MESSAGE DROPPED: role mismatch for %s" % correlation_id)
@@ -450,12 +472,20 @@ class MilleGrillesPikaReplyQueueConsumer(MilleGrillesPikaQueueConsumer):
                         self.__logger.info("REPLY MESSAGE DROPPED: domain mismatch for %s (%s vs %s)", correlation_id, certificate_domains, domains)
                         await correlation.cancel()
                         return
+
+                await correlation.handle_response(message)
+
             except ExtensionNotFound:
                 self.__logger.info("REPLY MESSAGE DROPPED: invalid domain/role for %s" % correlation_id)
                 await correlation.cancel()
                 return
+            finally:
+                if correlation.done:
+                    try:
+                        del self.__correlations[correlation_id]
+                    except KeyError:
+                        pass  # Already removed
 
-            await correlation.recevoir_reponse(message)
             correlation = None
         except KeyError:
             self.__logger.info("REPLY MESSAGE DROPPED: unknown correlation_id %s" % correlation_id)

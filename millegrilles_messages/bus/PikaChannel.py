@@ -79,8 +79,8 @@ class MilleGrillesPikaChannel:
         async with TaskGroup() as group:
             self.__task_group = group
             group.create_task(self.__stop_thread())
-            for q in self.__queues:
-                group.create_task(q.run())
+            # for q in self.__queues:
+            #     group.create_task(q.run())
         self.__task_group = None
 
         self.__logger.info("Channel thread closed")
@@ -102,6 +102,7 @@ class MilleGrillesPikaChannel:
         self.add_queue(queue)
         await self.create_q(queue)
         await queue.start_consuming(self.__channel)
+        self.__task_group.create_task(queue.run())
 
     async def remove_queue(self, queue: MilleGrillesPikaQueueConsumer):
         await queue.close()
@@ -118,6 +119,7 @@ class MilleGrillesPikaChannel:
         try:
             for q in self.__queues:
                 await self.create_q(q)
+                self.__task_group.create_task(q.run())
                 await q.start_consuming(self.__channel)
         except AttributeError:
             self.__logger.exception("Error in start_consuming, aborting")

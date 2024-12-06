@@ -536,9 +536,14 @@ class MessageProducer:
         try:
             while self.__actif:
                 while len(self.__deliveries) > 0:
-                    message = self.__deliveries.pop(0)
-                    self.__logger.debug("producer : send message")
-                    await self.send(message)
+                    try:
+                        message = self.__deliveries.pop(0)
+                        self.__logger.debug("producer : send message")
+                        await self.send(message)
+                    except asyncio.CancelledError as e:
+                        raise e
+                    except:
+                        self.__logger.exception("Unhandled Error processing message")
 
                 self._event_q_prete.set()  # Debloque reception de messages
 

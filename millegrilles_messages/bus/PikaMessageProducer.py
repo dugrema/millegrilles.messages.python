@@ -4,7 +4,7 @@ import logging
 
 from uuid import uuid4
 
-from typing import Union, Optional
+from typing import Union, Optional, Callable, Awaitable
 
 from millegrilles_messages.messages import Constantes
 from millegrilles_messages.bus.BusContext import MilleGrillesBusContext
@@ -241,3 +241,8 @@ class MilleGrillesPikaMessageProducer:
 
             # Failure to load the certificate. Raise original error
             raise ce
+
+    async def add_streaming_correlation(self, correlation_id: str, callback: Callable[[str, MessageWrapper], Awaitable[None]], timeout=15,
+                                        domain: Optional[Union[bool, str, list]] = None, role: Optional[Union[list, str]] = None):
+        correlation_reponse = MessageCorrelation(correlation_id, callback=callback, timeout=timeout, domain=domain, role=role)
+        self.__reply_queue.add_correlation(correlation_reponse)
