@@ -379,9 +379,9 @@ class MessageCorrelation:
             try:
                 await asyncio.wait_for(self.__stream_queue.put(message), 0.5)
                 self.__creation_date = datetime.datetime.now()  # Reset expiration
-                if message.parsed['__original']['attachements']['streaming'] is True:
+                if message.original['attachements']['streaming'] is True:
                     pass  # Continue streaming
-            except (AttributeError, KeyError):
+            except (TypeError, AttributeError, KeyError):
                 # Streaming done
                 self.__event_attente.set()
                 await asyncio.wait_for(self.__stream_queue.put(message), 0.5)
