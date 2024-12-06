@@ -284,14 +284,20 @@ class MessageCorrelation:
 
     def __init__(self, correlation_id: str, timeout=CONST_WAIT_REPLY_DEFAULT,
                  callback: Optional[Callable[[int, MessageWrapper], Awaitable[None]]] = None,
-                 domain: Optional[Union[str, list]] = None, role: Optional[str] = None):
+                 domain: Optional[Union[str, list]] = None, role: Optional[Union[list, str]] = None):
         self.__logger = logging.getLogger(__name__+'.'+self.__class__.__name__)
         self.correlation_id = correlation_id
         self.__creation_date = datetime.datetime.now()
         self.__timeout = timeout
         self.__callback = callback
         self.__domain = domain
-        self.__role = role
+        if isinstance(role, str):
+            role_set = {role}
+        elif isinstance(role, list):
+            role_set = set(role)
+        else:
+            role_set = role
+        self.__roles: Optional[set] = role_set
 
         self.__event_attente = asyncio.Event()
         self.__stream_queue: Optional[asyncio.Queue] = None
@@ -307,8 +313,8 @@ class MessageCorrelation:
         return self.__domain
 
     @property
-    def role(self):
-        return self.__role
+    def roles(self) -> Optional[set]:
+        return self.__roles
 
     async def wait(self, timeout=CONST_WAIT_REPLY_DEFAULT) -> MessageWrapper:
         self.__timeout = timeout
@@ -425,8 +431,8 @@ class MilleGrillesPikaReplyQueueConsumer(MilleGrillesPikaQueueConsumer):
             # Check certificate against expected domain/role
             certificate = message.certificat
             try:
-                if correlation.role:
-                    if correlation.role not in certificate.get_roles:
+                if correlation.roles:
+                    if correlation.roles.isdisjoint(certificate.get_roles):
                         self.__logger.info("REPLY MESSAGE DROPPED: role mismatch for %s" % correlation_id)
                         await correlation.cancel()
                         return
@@ -441,7 +447,7 @@ class MilleGrillesPikaReplyQueueConsumer(MilleGrillesPikaQueueConsumer):
 
                     certificate_domains = certificate.get_domaines
                     if any([d in certificate_domains for d in domains]) is False:
-                        self.__logger.info("REPLY MESSAGE DROPPED: domain mismatch for %s" % correlation_id)
+                        self.__logger.info("REPLY MESSAGE DROPPED: domain mismatch for %s (%s vs %s)", correlation_id, certificate_domains, domains)
                         await correlation.cancel()
                         return
             except ExtensionNotFound:

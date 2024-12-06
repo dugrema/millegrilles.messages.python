@@ -17,8 +17,6 @@ from pika import BasicProperties
 
 from millegrilles_messages.messages.ValidateurCertificats import CertificatInconnu
 
-CONST_WAIT_REPLY_DEFAULT = 15
-
 
 class MilleGrillesPikaMessageProducer:
 
@@ -81,7 +79,7 @@ class MilleGrillesPikaMessageProducer:
 
     async def send_wait_reply(self, message: Union[str, bytes], routing_key: str,
                               exchange: Optional[str] = None, correlation_id: str = None,
-                              reply_to: str = None, timeout=CONST_WAIT_REPLY_DEFAULT,
+                              reply_to: str = None, timeout=Constantes.CONST_WAIT_REPLY_DEFAULT,
                               domain: Optional[Union[str, list]] = None, role: Optional[str] = None):
         if reply_to is None:
             reply_to = self.__reply_queue.auto_name
@@ -116,7 +114,7 @@ class MilleGrillesPikaMessageProducer:
     async def send_routed_message(
             self, message_in: dict, kind: int, domain: str, action: str, exchange: str, partition: Optional[str] = None,
             reply_to: Optional[str] = None, correlation_id: Optional[str] = None,
-            noformat=False, nowait=False, attachments: Optional[dict] = None, timeout=CONST_WAIT_REPLY_DEFAULT,
+            noformat=False, nowait=False, attachments: Optional[dict] = None, timeout=Constantes.CONST_WAIT_REPLY_DEFAULT,
             domain_check: Union[bool, str, list]=True, role_check: Optional[str] = None) -> Optional[MessageWrapper]:
 
         if noformat is True:
@@ -173,25 +171,27 @@ class MilleGrillesPikaMessageProducer:
 
     async def request(self, message_in: dict, domain: str, action: str, exchange: str, partition: Optional[str] = None,
             reply_to: Optional[str] = None, correlation_id: Optional[str] = None,
-            noformat=False, attachments: Optional[dict] = None, timeout=CONST_WAIT_REPLY_DEFAULT,
+            noformat=False, attachments: Optional[dict] = None, timeout=Constantes.CONST_WAIT_REPLY_DEFAULT,
             role_check: Optional[str] = None, domain_check: Optional[Union[bool, str, list]] = None) -> Optional[MessageWrapper]:
-        domain_check = domain_check or role_check is None
+        if domain_check is not False:
+            domain_check = domain_check or role_check is None
         return await self.send_routed_message(
             message_in, Constantes.KIND_REQUETE, domain, action, exchange, partition, reply_to, correlation_id,
             noformat, False, attachments, timeout, domain_check, role_check)
 
     async def command(self, message_in: dict, domain: str, action: str, exchange: str, partition: Optional[str] = None,
             reply_to: Optional[str] = None, correlation_id: Optional[str] = None,
-            noformat=False, nowait=False, attachments: Optional[dict] = None, timeout=CONST_WAIT_REPLY_DEFAULT,
+            noformat=False, nowait=False, attachments: Optional[dict] = None, timeout=Constantes.CONST_WAIT_REPLY_DEFAULT,
             role_check: Optional[str] = None, domain_check: Optional[Union[bool, str, list]] = None) -> Optional[MessageWrapper]:
-        domain_check = domain_check or role_check is None
+        if domain_check is not False:
+            domain_check = domain_check or role_check is None
         return await self.send_routed_message(
             message_in, Constantes.KIND_COMMANDE, domain, action, exchange, partition, reply_to, correlation_id,
             noformat, nowait, attachments, timeout, domain_check, role_check)
 
     async def event(self, message_in: dict, domain: str, action: str, exchange: str, partition: Optional[str] = None,
             reply_to: Optional[str] = None, correlation_id: Optional[str] = None,
-            noformat=False, attachments: Optional[dict] = None, timeout=CONST_WAIT_REPLY_DEFAULT):
+            noformat=False, attachments: Optional[dict] = None, timeout=Constantes.CONST_WAIT_REPLY_DEFAULT):
         return await self.send_routed_message(
             message_in, Constantes.KIND_EVENEMENT, domain, action, exchange, partition, reply_to, correlation_id,
             noformat, True, attachments, timeout)
