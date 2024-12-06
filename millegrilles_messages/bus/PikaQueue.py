@@ -330,6 +330,10 @@ class MessageCorrelation:
     def done(self) -> bool:
         return self.__event_attente.is_set()
 
+    @property
+    def has_callback(self):
+        return self.__callback is not None
+
     async def wait(self, timeout=CONST_WAIT_REPLY_DEFAULT) -> MessageWrapper:
         self.__timeout = timeout or CONST_WAIT_REPLY_DEFAULT
         try:
@@ -360,19 +364,27 @@ class MessageCorrelation:
 
         self.__reponse_consommee = True
 
+    async def stream_to_callback_thread(self):
+        """
+        Start this thread to pipe the responses to the callback.
+        :return:
+        """
+        async for message in self.stream_reponse(self.__timeout):
+            await self.__callback(self.correlation_id, message)
+
     async def handle_response(self, message: MessageWrapper):
         self.__reponse = message
         if self.__stream_queue is not None:
             # Verifier si on a l'attachement "streaming=True", indique que le stream n'est pas termine
             try:
-                await self.__stream_queue.put(message)
+                await asyncio.wait_for(self.__stream_queue.put(message), 0.5)
                 self.__creation_date = datetime.datetime.now()  # Reset expiration
                 if message.parsed['__original']['attachements']['streaming'] is True:
                     pass  # Continue streaming
             except (AttributeError, KeyError):
                 # Streaming done
                 self.__event_attente.set()
-                await self.__stream_queue.put(message)
+                await asyncio.wait_for(self.__stream_queue.put(message), 0.5)
                 await self.__stream_queue.put(None)  # Exit condition
         elif self.__callback is not None:
             try:
@@ -410,11 +422,14 @@ class MilleGrillesPikaReplyQueueConsumer(MilleGrillesPikaQueueConsumer):
         self.__logger = logging.getLogger(__name__+'.'+self.__class__.__name__)
         super().__init__(context, self.__on_reply_message, exclusive=True)
         self.__correlations: dict[str, MessageCorrelation] = dict()
+        self.__group: Optional[TaskGroup] = None
 
     async def run(self):
         async with TaskGroup() as group:
+            self.__group = group
             group.create_task(super().run())
             group.create_task(self.__thread_maintain_correlations())
+        self.__group = None
         self.__logger.info("MilleGrillesPikaReplyQueueConsumer %s thread closed" % self.name)
 
     async def __thread_maintain_correlations(self):
@@ -494,8 +509,12 @@ class MilleGrillesPikaReplyQueueConsumer(MilleGrillesPikaQueueConsumer):
                 # Reply not properly processed
                 await correlation.cancel()
 
-    def add_correlation(self, correlation: MessageCorrelation):
+    def add_correlation(self, correlation: MessageCorrelation, run_thread=False):
         self.__correlations[correlation.correlation_id] = correlation
+        if run_thread:
+            if correlation.has_callback is False:
+                raise ValueError("The correlation needs a callback to be deployed in a thread")
+            self.__group.create_task(correlation.stream_to_callback_thread())
 
     def remove_correlation(self, correlation_id: str):
         try:

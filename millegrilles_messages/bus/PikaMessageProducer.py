@@ -25,7 +25,7 @@ class MilleGrillesPikaMessageProducer:
         self.__context: MilleGrillesBusContext = context
         self.__channel: MilleGrillesPikaChannel = channel
         self.__reply_queue: MilleGrillesPikaReplyQueueConsumer = reply_queue
-        self.__message_counter = 0
+        # self.__message_counter = 0
         self.__semaphore_correlations = asyncio.BoundedSemaphore(value=100)  # Max requests waiting at the same time
 
     async def ready(self):
@@ -46,7 +46,9 @@ class MilleGrillesPikaMessageProducer:
         delivery_mode_v = 1
 
         properties = BasicProperties(content_type=message.content_type, delivery_mode=delivery_mode_v)
-        if reply_to is not None:
+        if reply_to is True:
+            properties.reply_to = self.__reply_queue.auto_name
+        elif reply_to is not None:
             properties.reply_to = reply_to
         if correlation_id is not None:
             properties.correlation_id = correlation_id
@@ -56,7 +58,7 @@ class MilleGrillesPikaMessageProducer:
         await self.__channel.publish(exchanges, routing_key, message.content, properties)
 
     async def send(self, message: Union[str, bytes], routing_key: str,
-                   exchange: Optional[str] = None, correlation_id: str = None, reply_to: str = None):
+                   exchange: Optional[str] = None, correlation_id: str = None, reply_to: Union[bool, str] = None):
         """
         Send message without waiting. Can be used to redirect reply to other system.
         :param message:
@@ -84,16 +86,20 @@ class MilleGrillesPikaMessageProducer:
         if reply_to is None:
             reply_to = self.__reply_queue.auto_name
 
-        # Bug - si un message avec meme contenu est emis plusieurs fois durant la meme seconde,
-        #       la correlation echoue (reponses des duplications sont perdues).
-        #       Ajouter le compteur de messages pour rendre unique pour ce producer.
+        # # Bug - si un message avec meme contenu est emis plusieurs fois durant la meme seconde,
+        # #       la correlation echoue (reponses des duplications sont perdues).
+        # #       Ajouter le compteur de messages pour rendre unique pour ce producer.
+        # if correlation_id is None:
+        #     # correlation_id = str(uuid4())
+        #     correlation_id = '%d/%s' % (self.__message_counter, str(uuid4()))
+        # else:
+        #     correlation_id = '%d/%s' % (self.__message_counter, correlation_id)
+
         if correlation_id is None:
             # correlation_id = str(uuid4())
-            correlation_id = '%d_%s' % (self.__message_counter, str(uuid4()))
-        else:
-            correlation_id = '%d_%s' % (self.__message_counter, correlation_id)
+            correlation_id = str(uuid4())
 
-        self.__message_counter += 1  # Incrementer compteur
+        # self.__message_counter += 1  # Incrementer compteur
 
         # Conserver reference a la correlation
         correlation_reponse = MessageCorrelation(correlation_id, timeout=timeout, domain=domain, role=role)
@@ -171,13 +177,15 @@ class MilleGrillesPikaMessageProducer:
 
     async def request(self, message_in: dict, domain: str, action: str, exchange: str, partition: Optional[str] = None,
             reply_to: Optional[str] = None, correlation_id: Optional[str] = None,
-            noformat=False, attachments: Optional[dict] = None, timeout=Constantes.CONST_WAIT_REPLY_DEFAULT,
+            noformat=False, attachments: Optional[dict] = None, nowait = False, timeout=Constantes.CONST_WAIT_REPLY_DEFAULT,
             role_check: Optional[str] = None, domain_check: Optional[Union[bool, str, list]] = None) -> Optional[MessageWrapper]:
         if domain_check is not False:
             domain_check = domain_check or role_check is None
+        if nowait:
+            reply_to = reply_to or True  # True will use the reply_q name
         return await self.send_routed_message(
             message_in, Constantes.KIND_REQUETE, domain, action, exchange, partition, reply_to, correlation_id,
-            noformat, False, attachments, timeout, domain_check, role_check)
+            noformat, nowait, attachments, timeout, domain_check, role_check)
 
     async def command(self, message_in: dict, domain: str, action: str, exchange: str, partition: Optional[str] = None,
             reply_to: Optional[str] = None, correlation_id: Optional[str] = None,
@@ -185,6 +193,8 @@ class MilleGrillesPikaMessageProducer:
             role_check: Optional[str] = None, domain_check: Optional[Union[bool, str, list]] = None) -> Optional[MessageWrapper]:
         if domain_check is not False:
             domain_check = domain_check or role_check is None
+        if nowait:
+            reply_to = reply_to or True  # True will use the reply_q name
         return await self.send_routed_message(
             message_in, Constantes.KIND_COMMANDE, domain, action, exchange, partition, reply_to, correlation_id,
             noformat, nowait, attachments, timeout, domain_check, role_check)
@@ -244,5 +254,5 @@ class MilleGrillesPikaMessageProducer:
 
     async def add_streaming_correlation(self, correlation_id: str, callback: Callable[[str, MessageWrapper], Awaitable[None]], timeout=15,
                                         domain: Optional[Union[bool, str, list]] = None, role: Optional[Union[list, str]] = None):
-        correlation_reponse = MessageCorrelation(correlation_id, callback=callback, timeout=timeout, domain=domain, role=role)
-        self.__reply_queue.add_correlation(correlation_reponse)
+        correlation_reponse = MessageCorrelation(correlation_id, callback=callback, timeout=timeout, domain=domain, role=role, stream=True)
+        self.__reply_queue.add_correlation(correlation_reponse, run_thread=True)
