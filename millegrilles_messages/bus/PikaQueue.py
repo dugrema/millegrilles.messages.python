@@ -311,7 +311,7 @@ class MessageCorrelation:
         self.__stream_queue: Optional[asyncio.Queue] = stream_queue
 
         self.__reponse: Optional[MessageWrapper] = None
-        self.__reponse_consommee = False
+        self.__consumed = False
         self.__cancelled = False
 
     @property
@@ -334,6 +334,10 @@ class MessageCorrelation:
     def has_callback(self):
         return self.__callback is not None
 
+    @property
+    def consumed(self):
+        return self.__consumed
+
     async def wait(self, timeout=CONST_WAIT_REPLY_DEFAULT) -> MessageWrapper:
         self.__timeout = timeout or CONST_WAIT_REPLY_DEFAULT
         try:
@@ -346,7 +350,7 @@ class MessageCorrelation:
         if self.__cancelled:
             raise CancelledException()
 
-        self.__reponse_consommee = True
+        self.__consumed = True
         return self.__reponse
 
     async def stream_reponse(self, timeout=CONST_WAIT_REPLY_DEFAULT):
@@ -362,15 +366,21 @@ class MessageCorrelation:
                 break
             yield valeur
 
-        self.__reponse_consommee = True
+        self.__consumed = True
 
     async def stream_to_callback_thread(self):
         """
         Start this thread to pipe the responses to the callback.
         :return:
         """
-        async for message in self.stream_reponse(self.__timeout):
-            await self.__callback(self.correlation_id, message)
+        try:
+            async for message in self.stream_reponse(self.__timeout):
+                await self.__callback(self.correlation_id, message)
+        except TimeoutError:
+            self.__logger.debug("Stream timeout")
+        finally:
+            self.__event_attente.set()
+            self.__consumed = True
 
     async def handle_response(self, message: MessageWrapper):
         self.__reponse = message
@@ -399,7 +409,7 @@ class MessageCorrelation:
             self.__event_attente.set()
 
     def expired(self):
-        if self.__reponse_consommee is False:
+        if self.__consumed is False:
             # On donne un delai supplementaire si la reponse n'est pas consommee
             duree_message = datetime.timedelta(seconds=self.__timeout * 3)
         else:
@@ -410,7 +420,7 @@ class MessageCorrelation:
         return self.__creation_date < date_expiration
 
     async def cancel(self):
-        if self.__reponse_consommee is False:
+        if self.__consumed is False:
             self.__logger.debug("Correlation reponse %s annulee par le consumer" % self.correlation_id)
             self.__cancelled = True
             self.__event_attente.set()
@@ -440,6 +450,9 @@ class MilleGrillesPikaReplyQueueConsumer(MilleGrillesPikaQueueConsumer):
                 if c.expired():
                     expired_ids.append(c.correlation_id)
                     await c.cancel()
+                elif c.consumed:
+                    # Cleanup for unaffiliated streaming tasks
+                    expired_ids.append(c.correlation_id)
 
             for expired_id in expired_ids:
                 try:
@@ -447,7 +460,7 @@ class MilleGrillesPikaReplyQueueConsumer(MilleGrillesPikaQueueConsumer):
                 except KeyError:
                     pass
 
-            await self._context.wait(30)
+            await self._context.wait(5)
 
     async def __on_reply_message(self, message: MessageWrapper):
         # Verify message
