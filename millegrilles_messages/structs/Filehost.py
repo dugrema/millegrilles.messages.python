@@ -15,6 +15,21 @@ class Filehost:
         self.deleted: Optional[bool] = None
         self.sync_active: Optional[bool] = None
 
+    def export_for_client(self):
+        if self.url_external:
+            url = f'{self.url_external}/filehost'
+            tls = self.tls_external
+        else:
+            url = 'https://localhost/filehost'   # Tells the app to use the connexion url
+            tls = 'external'                     # Means standard internet CAs like Verisign, ZeroSSl, etc.
+
+        return {
+            'instance_id': self.instance_id,
+            'filehost_id': self.filehost_id,
+            'url': url,
+            'tls': tls,
+        }
+
     def to_dict(self):
         return {
             'filehost_id': self.filehost_id,

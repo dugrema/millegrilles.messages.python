@@ -25,7 +25,7 @@ class MilleGrillesPikaMessageProducer:
         self.__context: MilleGrillesBusContext = context
         self.__channel: MilleGrillesPikaChannel = channel
         self.__reply_queue: MilleGrillesPikaReplyQueueConsumer = reply_queue
-        # self.__message_counter = 0
+        self.__message_counter = 0
         self.__semaphore_correlations = asyncio.BoundedSemaphore(value=100)  # Max requests waiting at the same time
 
     async def ready(self):
@@ -50,8 +50,10 @@ class MilleGrillesPikaMessageProducer:
             properties.reply_to = self.__reply_queue.auto_name
         elif reply_to is not None:
             properties.reply_to = reply_to
+
         if correlation_id is not None:
             properties.correlation_id = correlation_id
+
         if headers:
             properties.headers = headers
 
@@ -86,20 +88,8 @@ class MilleGrillesPikaMessageProducer:
         if reply_to is None:
             reply_to = self.__reply_queue.auto_name
 
-        # # Bug - si un message avec meme contenu est emis plusieurs fois durant la meme seconde,
-        # #       la correlation echoue (reponses des duplications sont perdues).
-        # #       Ajouter le compteur de messages pour rendre unique pour ce producer.
-        # if correlation_id is None:
-        #     # correlation_id = str(uuid4())
-        #     correlation_id = '%d/%s' % (self.__message_counter, str(uuid4()))
-        # else:
-        #     correlation_id = '%d/%s' % (self.__message_counter, correlation_id)
-
         if correlation_id is None:
-            # correlation_id = str(uuid4())
             correlation_id = str(uuid4())
-
-        # self.__message_counter += 1  # Incrementer compteur
 
         # Conserver reference a la correlation
         correlation_reponse = MessageCorrelation(correlation_id, timeout=timeout, domain=domain, role=role)
@@ -133,7 +123,13 @@ class MilleGrillesPikaMessageProducer:
         if attachments is not None:
             message['attachements'] = attachments
 
-        correlation_id = correlation_id or str(message_id)
+        if correlation_id is None:
+            # Add a message number to the message_id. If 2 identical messages are produced within the
+            # same second (e.g. same content and estampille), the id is the same. The correlation is not
+            # unique for this producer in that case.
+            # Using: [message_counter]/[message.id] as correlation_id.
+            correlation_id = '%d/%s' % (self.__message_counter, message_id)
+            self.__message_counter += 1  # Increment message counter
 
         if kind == Constantes.KIND_REQUETE:
             route_prefix = 'requete'
