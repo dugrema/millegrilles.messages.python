@@ -56,27 +56,39 @@ class CommandeRedemarrerService(CommandeDocker):
 
     def __init__(self, nom_service: str, force=False):
         super().__init__()
+        self.__logger = logging.getLogger(__name__+'.'+self.__class__.__name__)
         self.__nom_service = nom_service
         self.__force = force
 
         self.facteur_throttle = 1.5
 
     async def executer(self, docker_client: DockerClient):
-        service = await asyncio.to_thread(docker_client.services.get, self.__nom_service)
+        service: Service = await asyncio.to_thread(docker_client.services.get, self.__nom_service)
         attrs = service.attrs
-        resultat = False
+        replicas = 1
         try:
             spec = attrs['Spec']
             mode = spec['Mode']
             replicated = mode['Replicated']
             replicas = replicated['Replicas']
             if replicas == 0:
-                await asyncio.to_thread(service.scale, 1)
+                replicas = 1
+                # There were no replicas assigned - scale to 1
+                resultat = await asyncio.to_thread(service.scale, replicas)
+                #await asyncio.to_thread(service.reload)
+            else:
+                # DANGEROUS - may disable the task if replicas get stuck to 0
+                # Scale down to 0 and put back number of replicas - this will cycle through containers
+                try:
+                    await asyncio.to_thread(service.scale, 0)
+                finally:
+                    await asyncio.to_thread(service.reload)
+                    resultat = await asyncio.to_thread(service.scale, replicas)
         except KeyError:
-            pass  # await asyncio.to_thread(service.scale, 1)
+            # Try a force update - doesn't always work
+            resultat = await asyncio.to_thread(service.force_update)
 
-        resultat = await asyncio.to_thread(service.force_update)
-
+        self.__logger.debug("Restart %s result: %s", self.__nom_service, resultat)
         await self._callback_asyncio(resultat)
 
     def __repr__(self):
@@ -837,9 +849,11 @@ class CommandPruneCleanup(CommandeDocker):
         self.facteur_throttle = 1.0
 
     async def executer(self, docker_client: DockerClient, attendre=True):
+        # Prune containers
         await asyncio.to_thread(docker_client.containers.prune)
+
+        # Remove dangling anonymous modules
         volumes: list[Volume] = await asyncio.to_thread(docker_client.volumes.list, filters={'dangling': True})
-        # volumes: list[Volume] = await asyncio.to_thread(docker_client.volumes.list)
         for volume in volumes:
             try:
                 label_anonymous = volume.attrs['Labels']['com.docker.volume.anonymous'] is not None
