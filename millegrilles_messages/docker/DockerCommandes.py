@@ -46,6 +46,14 @@ class CommandeListerServices(CommandeDocker):
     async def get_liste(self) -> list[Service]:
         resultat = await self.attendre()
         liste = resultat['args'][0]
+
+        try:
+            # Ensure the name matches exactly
+            name_filter = self.__filters['name']
+            liste = [s for s in liste if s.name == name_filter]
+        except (AttributeError, TypeError, KeyError):
+            pass
+
         return liste
 
     def __repr__(self):
