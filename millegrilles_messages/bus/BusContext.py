@@ -53,7 +53,10 @@ class MilleGrillesBusContext:
         # Signals
         signal.signal(signal.SIGINT, self.__exit_gracefully)
         signal.signal(signal.SIGTERM, self.__exit_gracefully)
-        signal.signal(signal.SIGHUP, self.__reload_hup)
+        try:
+            signal.signal(signal.SIGHUP, self.__reload_hup)
+        except AttributeError:
+            pass  # No SIGHUP (e.g. on win32)
 
         # ###
         # Configuration loaded from disk - can be reloaded
