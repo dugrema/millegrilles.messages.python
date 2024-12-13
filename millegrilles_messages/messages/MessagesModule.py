@@ -5,7 +5,6 @@ import asyncio
 import datetime
 import json
 import logging
-import resource
 
 from threading import Event as EventThreading
 from typing import Optional, Union
