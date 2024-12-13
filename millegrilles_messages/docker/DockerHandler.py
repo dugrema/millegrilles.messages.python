@@ -23,7 +23,7 @@ class DockerState:
         try:
             self.__docker = docker.DockerClient('unix://' + path_socket)
         except DockerException:
-            self.__docker = None
+            self.__docker = docker.from_env()  # On Windows
 
         self.__logger.info("Docker socket a connecte %s" % path_socket)
 
