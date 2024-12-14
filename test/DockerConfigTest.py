@@ -1,7 +1,7 @@
 import asyncio
 import logging
 
-from millegrilles_messages.docker.ParseConfiguration import ConfigurationService
+from millegrilles_messages.docker_obsolete.ParseConfiguration import ConfigurationService
 
 
 logger = logging.getLogger(__name__)
