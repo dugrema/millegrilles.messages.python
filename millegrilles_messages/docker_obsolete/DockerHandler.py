@@ -40,7 +40,7 @@ class DockerState:
             # __docker = None
             return False
 
-        self.__logger.debug("Version docker : %s" % json.dumps(version_docker, indent=2))
+        self.__logger.debug("Version docker_obsolete : %s" % json.dumps(version_docker, indent=2))
         return True
 
     def swarm_present(self):
@@ -51,10 +51,10 @@ class DockerState:
 
         try:
             swarm_config = info_docker['Swarm']
-            self.__logger.info("Information swarm docker %s" % json.dumps(swarm_config, indent=2))
+            self.__logger.info("Information swarm docker_obsolete %s" % json.dumps(swarm_config, indent=2))
             return swarm_config['Nodes'] > 0
         except KeyError:
-            self.__logger.info("Swarm docker n'est pas configure")
+            self.__logger.info("Swarm docker_obsolete n'est pas configure")
             return False
 
     def docker_actif(self):
@@ -67,7 +67,7 @@ class DockerState:
                 else:
                     self.__docker_actif = False
             except Exception:
-                self.__logger.exception("Erreur verification etat docker")
+                self.__logger.exception("Erreur verification etat docker_obsolete")
                 self.__docker_actif = False
 
         return self.__docker_actif
@@ -147,7 +147,7 @@ class DockerHandler:
                 return  # Exit condition
 
             # Traiter actions
-            self.__logger.debug("Traiter action docker %s" % action)
+            self.__logger.debug("Traiter action docker_obsolete %s" % action)
             try:
                 await action.executer(self.__docker)
             except APIError as e:
@@ -155,24 +155,24 @@ class DockerHandler:
                 try:
                     await action.erreur(e)
                 except:
-                    self.__logger.exception("Error handling docker action exception")
+                    self.__logger.exception("Error handling docker_obsolete action exception")
                     await action.annuler()
             except DockerHandlerException as e:
                 try:
                     # Bubble up sans logging
                     await action.erreur(e)
                 except:
-                    self.__logger.exception("Erreur emission action.erreur() commen reponse pour commande docker")
+                    self.__logger.exception("Erreur emission action.erreur() commen reponse pour commande docker_obsolete")
             except Exception as e:
-                self.__logger.exception("Erreur execution action docker")
+                self.__logger.exception("Erreur execution action docker_obsolete")
                 try:
                     await action.erreur(e)
                 except:
-                    self.__logger.exception("Erreur emission action.erreur() commen reponse pour commande docker")
+                    self.__logger.exception("Erreur emission action.erreur() commen reponse pour commande docker_obsolete")
                 finally:
                     continue
 
-            # Throttling commandes docker en fonction du CPU load
+            # Throttling commandes docker_obsolete en fonction du CPU load
             # Sous 1.5 de load, aucun throttling. Apres, c'est 3*cpu_load jusqu'a limite de 30.0 secondes
             cpu_load, _cpu_load5, _cpu_load10 = await asyncio.to_thread(psutil.getloadavg)
             cpu_load = max(cpu_load, 0.3)  # Fixer a au moins 0.3 pour creer un throttle sur chaque commande
@@ -180,9 +180,9 @@ class DockerHandler:
             wait_time = min(facteur_throttle, 30.0)  # Attendre load*n en secondes, max 30 secondes
 
             # self.__logger.debug(
-            #     "Throttling commandes docker, cpu_load:%f attente %f secondes" % (cpu_load, wait_time))
+            #     "Throttling commandes docker_obsolete, cpu_load:%f attente %f secondes" % (cpu_load, wait_time))
             await self.__context.wait(wait_time)
-            # self.__logger.debug("Throttling commandes docker, pret pour prochaine commande")
+            # self.__logger.debug("Throttling commandes docker_obsolete, pret pour prochaine commande")
 
         if self.context.stopping is False:
             self.__logger.error("Docker thread stopping out of turn - quitting")

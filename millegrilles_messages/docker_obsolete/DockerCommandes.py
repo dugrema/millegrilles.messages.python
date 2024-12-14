@@ -14,7 +14,7 @@ from docker.models.volumes import Volume
 from docker.types import ServiceMode
 
 
-from millegrilles_messages.docker.DockerHandler import CommandeDocker
+from millegrilles_messages.docker_obsolete.DockerHandler import CommandeDocker
 
 
 # class CommandeListerContainers(CommandeDocker):
@@ -864,7 +864,7 @@ class CommandPruneCleanup(CommandeDocker):
         volumes: list[Volume] = await asyncio.to_thread(docker_client.volumes.list, filters={'dangling': True})
         for volume in volumes:
             try:
-                label_anonymous = volume.attrs['Labels']['com.docker.volume.anonymous'] is not None
+                label_anonymous = volume.attrs['Labels']['com.docker_obsolete.volume.anonymous'] is not None
             except(TypeError, KeyError):
                 label_anonymous = False
 
@@ -875,7 +875,7 @@ class CommandPruneCleanup(CommandeDocker):
                     self.__logger.debug("CommandPruneCleanup: Volume %s removed", volume.name)
                 except APIError as e:
                     if e.status_code == 500:
-                        self.__logger.debug("CLEANUP: Unable to remove docker volume %s", volume.name)
+                        self.__logger.debug("CLEANUP: Unable to remove docker_obsolete volume %s", volume.name)
                     elif e.status_code == 409:
                         pass  # Ok, currently in use
                     else:

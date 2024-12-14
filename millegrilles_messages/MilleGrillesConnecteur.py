@@ -7,7 +7,7 @@ from asyncio import Event, TimeoutError, TaskGroup
 from typing import Optional
 
 from millegrilles_messages.bus.BusContext import ForceTerminateExecution
-from millegrilles_messages.docker.Entretien import TacheEntretien
+from millegrilles_messages.docker_obsolete.Entretien import TacheEntretien
 
 from millegrilles_messages.messages import Constantes
 from millegrilles_messages.messages.MessagesModule import RessourcesConsommation, MessageWrapper
@@ -118,7 +118,7 @@ class EtatInstance:
         self.__stop_event: Optional[Event] = None
 
     async def reload_configuration(self):
-        self.__logger.info("Reload configuration sur disque ou dans docker")
+        self.__logger.info("Reload configuration sur disque ou dans docker_obsolete")
 
         self.__mq_host = self.__configuration.mq_host or self.__configuration_json.get('mq_host') or 'mq'
         self.__mq_port = self.__configuration.mq_port or self.__configuration_json.get('mq_port') or 5673
@@ -535,7 +535,7 @@ class MilleGrillesConnecteur:
 
         # Le monitor peut etre trouve via quelques hostnames :
         #  nginx : de l'interne, est le proxy web qui est mappe vers le monitor
-        #  mq_host : de l'exterieur, est le serveur mq qui est sur le meme swarm docker que nginx
+        #  mq_host : de l'exterieur, est le serveur mq qui est sur le meme swarm docker_obsolete que nginx
         hosts = ['nginx', self.__etat_instance.mq_host]
         port = 444  # 443
         path = 'administration/ajouterCompte'

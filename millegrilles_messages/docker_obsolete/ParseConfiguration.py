@@ -34,7 +34,7 @@ class WebApplicationConfiguration:
 
 class ConfigurationService:
     """
-    Converti format config MilleGrilles en format du module docker
+    Converti format config MilleGrilles en format du module docker_obsolete
     """
 
     def __init__(self, configuration: dict, params: Optional[dict] = None):

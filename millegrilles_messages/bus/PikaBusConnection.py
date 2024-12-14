@@ -206,7 +206,7 @@ def _create_middleware_access(mq_host: str, ca_path: str, cert_path: str, key_pa
 
     # Le monitor peut etre trouve via quelques hostnames :
     #  nginx : de l'interne, est le proxy web qui est mappe vers le monitor
-    #  mq_host : de l'exterieur, est le serveur mq qui est sur le meme swarm docker que nginx
+    #  mq_host : de l'exterieur, est le serveur mq qui est sur le meme swarm docker_obsolete que nginx
     hosts = ['nginx', mq_host, 'localhost']
     port = 444
     path = 'administration/ajouterCompte'
