@@ -409,6 +409,9 @@ class MessageCorrelation:
             self.__event_attente.set()
 
     def expired(self):
+        if self.__timeout is None:
+            return True
+
         if self.__consumed is False:
             # On donne un delai supplementaire si la reponse n'est pas consommee
             duree_message = datetime.timedelta(seconds=self.__timeout * 3)
