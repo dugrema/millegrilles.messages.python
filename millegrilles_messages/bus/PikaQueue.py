@@ -164,7 +164,10 @@ class MilleGrillesPikaQueueConsumer:
 
     async def run(self):
         if self.auto_name is None:
-            raise Exception('queue not initialized')
+            if self.name is not None:
+                self.auto_name = self.name
+            else:
+                raise Exception('queue not initialized')
 
         async with TaskGroup() as group:
             group.create_task(self.__run_consume())
