@@ -4,6 +4,7 @@ import logging
 import pathlib
 import time
 import concurrent.futures
+from asyncio import TaskGroup
 
 from os import listdir, path, rename
 
@@ -68,8 +69,12 @@ class VerifierRepertoire:
 
     def afficher_progres_ligne(self):
         pct_progres = int(self.__compteur_bytes / self.__taille_fichiers * 100)
-        print('\rProgres {:3d}%: {:d}/{:d} fichiers ({:d}/{:d} bytes) traites, {:d} erreurs'.format(
-            pct_progres, self.__compteur, self.__nombre_fichiers, self.__compteur_bytes, self.__taille_fichiers,
+
+        data_progress = format_size(self.__compteur_bytes)
+        data_total = format_size(self.__taille_fichiers)
+
+        print('\rProgres {:3d}%: {:d}/{:d} fichiers ({:s}/{:s}) traites, {:d} erreurs'.format(
+            pct_progres, self.__compteur, self.__nombre_fichiers, data_progress, data_total,
             self.__compteur_err),
             end=''
         )
@@ -92,29 +97,23 @@ class VerifierRepertoire:
             print("%d erreurs de verification, les fichiers sont deplaces sous %s" % (self.__compteur_err, self.__path_invalides))
 
     async def verifier_fichiers(self):
-        threads_verification = [self.__stop_event.wait()]
-
         # Creer un thread pool pour l'execution des threads
-        executor = concurrent.futures.ThreadPoolExecutor(
-            max_workers=self.__nombre_threads,
-        )
+        try:
+            async with TaskGroup() as group:
+                # Initialiser le nombre de threads
+                for i in range(0, self.__nombre_threads):
+                    group.create_task(self.verification_fichiers_thread())
+        except* Exception:
+            self.__logger.exception("Error checking files")
 
-        # Initialiser le nombre de threads
-        for i in range(0, self.__nombre_threads):
-            threads_verification.append(self.verification_fichiers_thread(executor))
-
-        await asyncio.wait(threads_verification, return_when=asyncio.FIRST_COMPLETED)
-
-    async def verification_fichiers_thread(self, executor):
-        loop = asyncio.get_event_loop()
-
+    async def verification_fichiers_thread(self):
         while self.__stop_event.is_set() is False:
             task = await self.__queue_fichiers.get()
             nom_bucket = task['nom_bucket']
             fichier = task['fichier']
 
             # Executer dans une thread separee
-            await loop.run_in_executor(executor, self.verifier_fichier, nom_bucket, fichier)
+            await asyncio.to_thread(self.verifier_fichier, nom_bucket, fichier)
 
     async def remplir_queue_thread(self):
         """
@@ -177,3 +176,28 @@ async def main(repertoire: str, threads: int):
     threads = min(32, threads)
     verificateur = VerifierRepertoire(repertoire, nombre_threads=threads)
     await verificateur.run()
+
+CONST_KiB = 1_000
+CONST_MiB = 1_000_000
+CONST_GiB = 1_000_000_000
+CONST_TiB = 1_000_000_000_000
+
+def format_size(size: int) -> str:
+    if size >= CONST_TiB:
+        val = size / CONST_TiB
+        unit = 'TiB'
+    elif size >= CONST_GiB:
+        val = size / CONST_GiB
+        unit = 'GiB'
+    elif size >= CONST_MiB:
+        val = size / CONST_MiB
+        unit = 'MiB'
+    elif size >= CONST_KiB:
+        val = size / CONST_KiB
+        unit = 'KiB'
+    else:
+        val = size
+        unit = 'bytes'
+
+    val = round(val, 2)
+    return f'{val} {unit}'
