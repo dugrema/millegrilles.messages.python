@@ -4,7 +4,7 @@ import logging
 import pathlib
 import time
 import concurrent.futures
-from asyncio import TaskGroup
+from asyncio import TaskGroup, QueueFull
 
 from os import listdir, path, rename
 
@@ -29,16 +29,26 @@ class VerifierRepertoire:
         self.__stop_event = asyncio.Event()
 
         self.__queue_fichiers = asyncio.Queue(maxsize=2*self.__nombre_threads)
+        self.__thread_files_done = asyncio.Event()
+
+    async def stop_thread(self):
+        await self.__stop_event.wait()
+        self.__thread_files_done.set()
+        for i in range(self.__nombre_threads):
+            try:
+                self.__queue_fichiers.put_nowait(None)
+            except QueueFull:
+                pass
 
     async def run(self):
         await self.calculer_nombre_fichiers()
         debut = datetime.datetime.now()
         print("Debut verification : %s" % debut)
-        coros = [
-            self.verifier_buckets(),
-            self.afficher_progres(),
-        ]
-        await asyncio.gather(*coros)
+        async with TaskGroup() as group:
+            group.create_task(self.verifier_buckets())
+            group.create_task(self.afficher_progres())
+            group.create_task(self.stop_thread())
+
         fin = datetime.datetime.now()
         duree = fin - debut
         print("Fin de la verification a %s (duree: %s)" % (fin, duree))
@@ -81,11 +91,9 @@ class VerifierRepertoire:
     async def verifier_buckets(self):
         # for bucket in self.__repertoire_buckets.iterdir():
         #     self.verifier_fichiers(bucket)
-        coros = [
-            self.remplir_queue_thread(),
-            self.verifier_fichiers(),
-        ]
-        await asyncio.gather(*coros)
+        async with TaskGroup() as group:
+            group.create_task(self.remplir_queue_thread())
+            group.create_task(self.verifier_fichiers())
 
         await asyncio.sleep(0.1)
         self.afficher_progres_ligne()
@@ -97,17 +105,16 @@ class VerifierRepertoire:
 
     async def verifier_fichiers(self):
         # Creer un thread pool pour l'execution des threads
-        try:
-            async with TaskGroup() as group:
-                # Initialiser le nombre de threads
-                for i in range(0, self.__nombre_threads):
-                    group.create_task(self.verification_fichiers_thread())
-        except* Exception:
-            self.__logger.exception("Error checking files")
+        async with TaskGroup() as group:
+            # Initialiser le nombre de threads
+            for i in range(0, self.__nombre_threads):
+                group.create_task(self.verification_fichiers_thread())
 
     async def verification_fichiers_thread(self):
         while self.__stop_event.is_set() is False:
             task = await self.__queue_fichiers.get()
+            if task is None:
+                return  # Stopping
             nom_bucket = task['nom_bucket']
             fichier = task['fichier']
 
@@ -131,9 +138,10 @@ class VerifierRepertoire:
                 await self.__queue_fichiers.put({'nom_bucket': nom_bucket, 'fichier': fichier})
 
         # Attendre que le traitement soit complete
-        while self.__compteur != nombre_fichiers:
+        while self.__queue_fichiers.empty() is False:
             await asyncio.sleep(0.5)
 
+        self.__thread_files_done.set()
         self.__stop_event.set()  # Termine
 
     def verifier_fichier(self, bucket: str, path_fichier: pathlib.Path):
