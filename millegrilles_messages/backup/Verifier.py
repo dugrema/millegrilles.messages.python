@@ -48,12 +48,11 @@ class VerifierRepertoire:
         taille_fichiers = 0
         print('Verification du nombre de fichiers sous %s' % self.__repertoire_buckets)
         for bucket in self.__repertoire_buckets.iterdir():
-            for sub_bucket in bucket.iterdir():
-                for fichier in sub_bucket.iterdir():
-                    if fichier.is_file():
-                        nombre_fichiers = nombre_fichiers + 1
-                        stat = fichier.stat()
-                        taille_fichiers = taille_fichiers + stat.st_size
+            for fichier in bucket.iterdir():
+                if fichier.is_file():
+                    nombre_fichiers = nombre_fichiers + 1
+                    stat = fichier.stat()
+                    taille_fichiers = taille_fichiers + stat.st_size
 
         self.__nombre_fichiers = nombre_fichiers
         self.__taille_fichiers = taille_fichiers
@@ -127,10 +126,9 @@ class VerifierRepertoire:
             if nom_bucket.startswith('_') or nom_bucket.startswith('.'):
                 return  # On ne verifie pas les path caches
 
-            for sub_bucket in path_bucket.iterdir():
-                for fichier in sub_bucket.iterdir():
-                    nombre_fichiers += 1
-                    await self.__queue_fichiers.put({'nom_bucket': nom_bucket, 'fichier': fichier})
+            for fichier in path_bucket.iterdir():
+                nombre_fichiers += 1
+                await self.__queue_fichiers.put({'nom_bucket': nom_bucket, 'fichier': fichier})
 
         # Attendre que le traitement soit complete
         while self.__compteur != nombre_fichiers:
