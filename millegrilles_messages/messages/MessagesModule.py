@@ -264,6 +264,8 @@ class MessageWrapper:
         if self.__kind not in [6, 8]:
             # Extraire le contenu et donner acces a l'original parsed (val) via __original
             parsed_contenu = json.loads(val['contenu'])
+            if parsed_contenu is False:
+                raise Exception("Error response received")
             parsed_contenu['__original'] = val
             self.__parsed = parsed_contenu
 
