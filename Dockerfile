@@ -12,7 +12,7 @@ COPY ./fixes/oscrypto_130_fix_d5f3437ed24257895ae1edd9e503cfb352e635a8.zip $BUIL
 
 RUN pip3 install setuptools && \
     pip3 install --no-cache-dir -r $BUILD_FOLDER/requirements.txt && \
-    pip3 install --force-reinstall ./fixes/oscrypto_130_fix_d5f3437ed24257895ae1edd9e503cfb352e635a8.zip
+    pip3 install --force-reinstall $BUILD_FOLDER/oscrypto_130_fix_d5f3437ed24257895ae1edd9e503cfb352e635a8.zip
 
 # Note : bug oscrypto
 # https://community.snowflake.com/s/article/Python-Connector-fails-to-connect-with-LibraryNotFoundError-Error-detecting-the-version-of-libcrypto
