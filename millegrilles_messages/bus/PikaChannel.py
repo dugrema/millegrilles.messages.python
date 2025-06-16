@@ -111,6 +111,9 @@ class MilleGrillesPikaChannel:
 
     async def start_consuming(self):
         # Connect new channel
+        if self.ready.is_set():
+            raise Exception('Already consuming')
+
         self.__channel = await self.__connector.connection.open_channel()
         self.__publish_count = 1
         self.__channel.add_on_close_callback(self.on_close)
