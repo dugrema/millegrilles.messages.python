@@ -1,6 +1,7 @@
 import os
 
-from millegrilles_messages.messages.Constantes import ENV_REDIS_HOSTNAME, ENV_REDIS_PASSWORD_PATH, ENV_REDIS_PORT
+from millegrilles_messages.messages.Constantes import ENV_REDIS_HOSTNAME, ENV_REDIS_PASSWORD_PATH, ENV_REDIS_PORT, \
+    ENV_REDIS_USERNAME
 
 ENV_CERT_PATH = 'CERT_PATH'
 ENV_KEY_PATH = 'KEY_PATH'
@@ -14,6 +15,7 @@ DEFAULT_CA="/run/secrets/ca.pem"
 DEFAULT_MQ_HOSTNAME="mq"
 DEFAULT_MQ_PORT=5673
 DEFAULT_REDIS_HOSTNAME="redis"
+DEFAULT_REDIS_USERNAME="client_nodejs"
 DEFAULT_REDIS_PORT=6379
 DEFAULT_REDIS_PASSWORD_PATH='/run/secrets/redis.txt'
 
@@ -28,6 +30,7 @@ class MilleGrillesBusConfiguration:
         self.mq_port = DEFAULT_MQ_PORT
         self.redis_hostname = DEFAULT_REDIS_HOSTNAME
         self.redis_port = DEFAULT_REDIS_PORT
+        self.redis_username = DEFAULT_REDIS_USERNAME
         self.redis_password_path = DEFAULT_REDIS_PASSWORD_PATH
 
     def parse_config(self):
@@ -36,6 +39,7 @@ class MilleGrillesBusConfiguration:
         self.ca_path = os.environ.get(ENV_CA_PATH) or self.ca_path
         self.mq_hostname = os.environ.get(ENV_MQ_HOSTNAME) or self.mq_hostname
         self.redis_hostname = os.environ.get(ENV_REDIS_HOSTNAME) or self.redis_hostname
+        self.redis_username = os.environ.get(ENV_REDIS_USERNAME) or self.redis_username
         self.redis_password_path = os.environ.get(ENV_REDIS_PASSWORD_PATH) or self.redis_password_path
 
         mq_port = os.environ.get(ENV_MQ_PORT)
