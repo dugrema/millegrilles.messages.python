@@ -15,6 +15,11 @@ from millegrilles_messages.chiffrage.DechiffrageUtils import get_decipher_cle_se
 CONST_MAX_RETRY = 3
 
 class FilehostConnection:
+    """
+    Allows authenticating with a filehost and downloading a file.
+    Note that the context must have already loaded the filehost information by having its reload_filehost_configuration()
+    method called.
+    """
 
     def __init__(self, context: MilleGrillesBusContext):
         self.__logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
@@ -23,6 +28,9 @@ class FilehostConnection:
         self.__session: Optional[aiohttp.ClientSession] = None
 
     async def download_decrypt_file(self, decrypted_key: str, job: dict, tmp_file: tempfile.TemporaryFile) -> int:
+        if self.__context.filehost is None:
+            raise ValueError("No filehost is available. Has the context been initalized with reload_filehost_configuration()?")
+
         fuuid = job['fuuid']
         decrypted_key_bytes = decode_base64pad(decrypted_key)
 
@@ -92,6 +100,7 @@ class FilehostConnection:
         tmp_file.seek(0)
         content = await asyncio.to_thread(tmp_file.read)
         return content
+
 
 async def filehost_authenticate(context: MilleGrillesBusContext, session: aiohttp.ClientSession):
     filehost_url = context.filehost_url
