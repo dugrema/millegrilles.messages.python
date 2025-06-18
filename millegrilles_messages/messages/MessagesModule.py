@@ -7,7 +7,7 @@ import json
 import logging
 
 from threading import Event as EventThreading
-from typing import Optional, Union
+from typing import Optional, Union, AsyncGenerator, Any
 from uuid import uuid4
 
 from asyncio import Event
@@ -243,7 +243,7 @@ class MessageWrapper:
         self.__certificat_pem: Optional[list] = None
         self.__pubkey: Optional[str] = None
         self.__id: Optional[str] = None
-        self.original: Optional[str] = None
+        self.original: Optional[Union[str, dict]] = None
         self.certificat: Optional[EnveloppeCertificat] = None
         self.est_valide = False
 
@@ -322,7 +322,7 @@ class CorrelationReponse:
         self.correlation_id = correlation_id
         self.__callback = callback
 
-        self.__creation = datetime.datetime.utcnow()
+        self.__creation = datetime.datetime.now()
         self.__duree_attente = ATTENTE_MESSAGE_DUREE
 
         self.consumer = None  # MessageConsumer
@@ -377,7 +377,7 @@ class CorrelationReponse:
             # Verifier si on a l'attachement "streaming=True", indique que le stream n'est pas termine
             try:
                 await self.__stream_queue.put(message)
-                self.__creation = datetime.datetime.utcnow()  # Reset expiration
+                self.__creation = datetime.datetime.now()  # Reset expiration
                 if message.parsed['__original']['attachements']['streaming'] is True:
                     pass  # Ok, continuer le streaming
             except (AttributeError, KeyError):
@@ -387,7 +387,7 @@ class CorrelationReponse:
         elif self.__callback is not None:
             try:
                 await self.__callback(self.correlation_id, message)
-                self.__creation = datetime.datetime.utcnow()  # Reset expiration
+                self.__creation = datetime.datetime.now()  # Reset expiration
                 if message.original['attachements']['streaming'] is True:
                     pass  # Ok, continuer le streaming
             except (AttributeError, KeyError, TypeError):
@@ -401,7 +401,7 @@ class CorrelationReponse:
         if self.__reponse_consommee:
             duree_message = duree_message * 3  # On donne un delai supplementaire si la reponse n'est pas consommee
 
-        date_expiration = datetime.datetime.utcnow() - duree_message
+        date_expiration = datetime.datetime.now() - duree_message
 
         return self.__creation < date_expiration
 
@@ -672,7 +672,7 @@ class MessageProducerFormatteur(MessageProducer):
     async def executer_commande_stream(self, commande: dict, domaine: str, action: str, exchange: str,
                                        partition: Optional[str] = None,
                                        reply_to=None, noformat=False, timeout=30,
-                                       attachements: Optional[dict] = None, kind=Constantes.KIND_COMMANDE) -> Optional[MessageWrapper]:
+                                       attachements: Optional[dict] = None, kind=Constantes.KIND_COMMANDE) -> AsyncGenerator[MessageWrapper, Any]:
 
         if noformat is True:
             message = commande
