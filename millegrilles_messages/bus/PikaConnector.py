@@ -6,7 +6,8 @@ from typing import Optional
 
 from millegrilles_messages.bus.PikaBusConnection import MilleGrillesPikaBusConnection
 from millegrilles_messages.bus.BusContext import MilleGrillesBusContext, ForceTerminateExecution
-from millegrilles_messages.bus.PikaChannel import MilleGrillesPikaChannel, ConnectionProvider
+from millegrilles_messages.bus.PikaChannel import MilleGrillesPikaChannel, ConnectionProvider, \
+    PikaChannelAlreadyConsumingException
 from millegrilles_messages.bus.PikaMessageProducer import MilleGrillesPikaMessageProducer
 from millegrilles_messages.bus.PikaQueue import MilleGrillesPikaReplyQueueConsumer
 
@@ -91,7 +92,10 @@ class MilleGrillesPikaConnector(ConnectionProvider):
     async def on_connect(self):
         self.__logger.debug("Bus connected, starting channels")
         for channel in self.__channels:
-            await channel.start_consuming()
+            try:
+                await channel.start_consuming()
+            except PikaChannelAlreadyConsumingException:
+                self.__logger.info("Channel already consuming during on_connect")
 
     async def __stop_consuming(self):
         for channel in self.__channels:

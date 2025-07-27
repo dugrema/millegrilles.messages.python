@@ -112,7 +112,7 @@ class MilleGrillesPikaChannel:
     async def start_consuming(self):
         # Connect new channel
         if self.ready.is_set():
-            raise Exception('Already consuming')
+            raise PikaChannelAlreadyConsumingException()
 
         self.__channel = await self.__connector.connection.open_channel()
         self.__publish_count = 1
@@ -216,3 +216,7 @@ class MilleGrillesPikaChannel:
 
         if wait_dict.get('ok') is not True:
             raise Exception("NACK on send")
+
+
+class PikaChannelAlreadyConsumingException(Exception):
+    pass
