@@ -42,6 +42,7 @@ class PikaModule(MessagesModule):
         self.__connexions = list()
         self.__clecert: Optional[CleCertificat] = None
         self._enveloppe_ca: Optional[EnveloppeCertificat] = None
+        self.__closing = False
 
     def est_connecte(self) -> bool:
         return self.__connexion is not None
@@ -160,6 +161,7 @@ class PikaModule(MessagesModule):
 
     async def _close(self):
         self._consuming = False
+        self.__closing = True
 
         try:
             await MessagesModule._close(self)
@@ -208,6 +210,7 @@ class PikaModule(MessagesModule):
             self.__connexion.channel(on_open_callback=self.on_channel_open)
 
     def on_channel_open(self, channel: Channel):
+        self.__closing = False
         self.__channel_main = channel
         channel.add_on_close_callback(self.on_channel_closed)
 
@@ -254,6 +257,10 @@ class PikaModule(MessagesModule):
             res = consumer.get_ressources()
             if res.channel_separe is True:
                 consumer.clear_channel()
+
+        if not self.__closing:
+            self.__connexion.close(reply_text="Internal close")
+            raise Exception("Channel %s closed by server" % _channel)
 
     def on_close(self, _unused_connection, reason):
         self.__logger.info("on_close: Connexion fermee, raison : %s", reason)
