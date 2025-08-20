@@ -135,18 +135,21 @@ class CleCsrGenere:
         # Generer une cle
         if type_genere == TypeGenere.RSA:
             cle_privee, password = generer_cle_rsa(generer_password=generer_password, keysize=keysize)
+            algorithm = hashes.SHA512()
         elif type_genere == TypeGenere.ED25519:
             # Va utilise type par defaut (EdDSA25519)
             cle_privee, password = generer_cle_ed25519(generer_password=generer_password)
+            algorithm = None
         else:
             raise TypeAlgorithmeInconnu()
+            algorithm = None
 
         subject = [x509.NameAttribute(x509.name.NameOID.COMMON_NAME, cn)]
         if idmg is not None:
             subject.append(x509.NameAttribute(x509.name.NameOID.ORGANIZATION_NAME, idmg))
         builder = builder.subject_name(x509.Name(subject))
 
-        request = builder.sign(cle_privee, None, default_backend())
+        request = builder.sign(cle_privee, algorithm, default_backend())
 
         return CleCsrGenere(request, cle_privee, password)
 
