@@ -57,7 +57,12 @@ def signer_rsa_web(server_name: str, ca: CleCertificatGenere, hostnames: list[st
 
     enveloppe_csr = CleCsrGenere.build(server_name, type_genere=TypeGenere.RSA, keysize=4096)
 
+    date_now = datetime.datetime.utcnow() - datetime.timedelta(days=2)
+    date_not_valid_before = datetime.datetime(year=date_now.year, month=date_now.month, day=date_now.day)
+
     builder = CertificateBuilder()
     builder = builder.add_extension(x509.SubjectAlternativeName(liste), critical=False)
-    clecert_genere = enveloppe_csr.signer(ca.clecertificat, 'web', duree=datetime.timedelta(days=730), builder=builder)
+    clecert_genere = enveloppe_csr.signer(ca.clecertificat, 'web', duree=datetime.timedelta(days=730), builder=builder,
+                                          not_before=date_not_valid_before)
+
     return clecert_genere

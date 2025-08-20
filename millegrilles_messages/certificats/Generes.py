@@ -71,7 +71,7 @@ class EnveloppeCsr:
         return binascii.hexlify(self.cle_publique).decode('utf-8')
 
     def signer(self, cle_signature: CleCertificat, role: str,
-               builder: Optional[CertificateBuilder] = None, duree=DUREE_CERT_DEFAUT):
+               builder: Optional[CertificateBuilder] = None, duree=DUREE_CERT_DEFAUT, not_before: Optional[datetime.datetime] = None):
 
         if builder is None:
             builder = CertificateBuilder()
@@ -91,9 +91,12 @@ class EnveloppeCsr:
 
         now = datetime.datetime.utcnow()
 
+        if not not_before:
+            not_before = now - DELTA_INITIAL
+
         builder = builder.subject_name(subject)
         builder = builder.issuer_name(autorite.subject)
-        builder = builder.not_valid_before(now - DELTA_INITIAL)
+        builder = builder.not_valid_before(not_before)
         builder = builder.not_valid_after(now + duree)
         builder = builder.serial_number(x509.random_serial_number())
         builder = builder.public_key(cle_publique)
@@ -215,9 +218,9 @@ class CleCsrGenere:
         return self.__password
 
     def signer(self, cle_signature: CleCertificat, role: str,
-               builder: Optional[CertificateBuilder] = None, duree=DUREE_CERT_DEFAUT):
+               builder: Optional[CertificateBuilder] = None, duree=DUREE_CERT_DEFAUT, not_before: Optional[datetime.datetime] = None):
 
-        enveloppe = self.__enveloppe_csr.signer(cle_signature, role, builder, duree)
+        enveloppe = self.__enveloppe_csr.signer(cle_signature, role, builder, duree, not_before)
         clecertificat = CleCertificat(self.__cle_privee, enveloppe)
         clecertificat_genere = CleCertificatGenere(clecertificat, self.__password)
 
