@@ -60,7 +60,7 @@ class SignatureDomaines:
     def get_cle_ref(self) -> str:
         signature_bytes = multibase.decode('m' + self.signature)
         hachage_domaines = hacher_to_digest(signature_bytes, hashing_code='blake2s-256')
-        print("Hachages domaines hex\n%s" % binascii.hexlify(hachage_domaines).decode('utf-8'))
+        # print("Hachages domaines hex\n%s" % binascii.hexlify(hachage_domaines).decode('utf-8'))
 
         # Encoder en base58btc
         hachage_str = multibase.encode('base58btc', hachage_domaines).decode('utf-8')
