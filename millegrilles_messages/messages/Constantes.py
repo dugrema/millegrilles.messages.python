@@ -56,6 +56,7 @@ ROLE_BACKUP = 'backup'
 ROLE_USAGER = 'usager'
 ROLE_CEDULEUR = 'ceduleur'
 ROLE_MAITRE_DES_CLES = 'maitredescles'
+ROLE_MANAGER = 'manager'
 
 
 DOMAINE_GLOBAL = 'global'
