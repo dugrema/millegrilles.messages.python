@@ -38,10 +38,23 @@ class CleCertificat:
 
     @staticmethod
     def from_files(path_key, path_certificat, path_password=None, password=None):
-        with open(path_key, 'rb') as fichier:
-            cle = fichier.read()
-        with open(path_certificat, 'rb') as fichier:
-            cert = fichier.read()
+        if path_key != path_certificat:
+            with open(path_key, 'rb') as fichier:
+                cle = fichier.read()
+            with open(path_certificat, 'rb') as fichier:
+                cert = fichier.read()
+        else:
+            import re
+            with open(path_key, 'r') as fichier:
+                value = fichier.read()
+            key_match = re.search(r'-----BEGIN\s+PRIVATE\s+KEY-----.*?-----END\s+PRIVATE\s+KEY-----', value, re.DOTALL)
+            cert_match = re.findall(r'-----BEGIN\s+CERTIFICATE-----.*?-----END\s+CERTIFICATE-----', value, re.DOTALL)
+
+            if not key_match or not cert_match:
+                raise ValueError("Error: Could not find both Key and Certificate in the PEM")
+
+            cle = key_match.group(0)
+            cert = '\n'.join(cert_match)
 
         if path_password is not None:
             with open(path_password, 'rb') as fichier:

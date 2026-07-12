@@ -73,8 +73,12 @@ class EnveloppeCertificat:
     @staticmethod
     def from_certificate(certificat: Certificate, intermediaires_pem: Optional[list] = None):
         pem_certificat = str(certificat.public_bytes(serialization.Encoding.PEM), 'utf-8')
+        if 'PRIVATE' in pem_certificat:
+            raise ValueError("Private key present in certificate PEM")
         chaine_pems = [pem_certificat]
         if intermediaires_pem is not None:
+            if 'PRIVATE' in pem_certificat:
+                raise ValueError("Private key present in certificate PEM")
             chaine_pems.extend(intermediaires_pem)
         enveloppe = EnveloppeCertificat(certificat, chaine_pems)
         return enveloppe
@@ -83,7 +87,12 @@ class EnveloppeCertificat:
     def from_file(file_path: str):
         with open(file_path, 'r') as fichier:
             pem = fichier.read()
-        return EnveloppeCertificat.from_pem(pem)
+
+        import re
+        cert_match = re.findall(r'-----BEGIN\s+CERTIFICATE-----.*?-----END\s+CERTIFICATE-----', pem, re.DOTALL)
+        cert = '\n'.join(cert_match)
+
+        return EnveloppeCertificat.from_pem(cert)
 
     @property
     def fingerprint(self) -> str:
@@ -585,8 +594,12 @@ def preparer_chaine_certificats(pems: Union[str, bytes, list]):
     if isinstance(pems, bytes):
         pems = pems.decode('utf-8')
     if isinstance(pems, str):
+        if 'PRIVATE' in pems:
+            raise ValueError("PRIVATE key in certificate pem")
         return split_chaine_certificats(pems)
     else:
+        if any([p for p in pems if 'PRIVATE' in p]):
+            raise ValueError("PRIVATE key in certificate pem")
         return pems
 
 
