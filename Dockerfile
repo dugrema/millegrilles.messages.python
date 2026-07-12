@@ -1,4 +1,4 @@
-FROM python:3.12 as stage1
+FROM python:3.14 as stage1
 
 ENV BUILD_FOLDER=/opt/millegrilles/build \
     BUNDLE_FOLDER=/opt/millegrilles/dist \
@@ -31,5 +31,5 @@ RUN python3 ./setup.py install
 
 WORKDIR /opt/millegrilles/dist
 
-ARG VBUILD=2024.0.0
+ARG VBUILD=2026.0.0
 ENTRYPOINT ["python3"]
