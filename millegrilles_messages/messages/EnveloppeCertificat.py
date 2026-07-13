@@ -1,4 +1,5 @@
 # Utilitaires pour les certificats X.509
+import pathlib
 
 import base58
 import base64
@@ -84,7 +85,7 @@ class EnveloppeCertificat:
         return enveloppe
 
     @staticmethod
-    def from_file(file_path: str):
+    def from_file(file_path: Union[str, pathlib.Path]):
         with open(file_path, 'r') as fichier:
             pem = fichier.read()
 
