@@ -472,6 +472,8 @@ class MilleGrillesConnecteur:
         self.nb_reply_correlation_max = 20
         self.__disconnect_fatal = disconnect_fatal
 
+        raise NotImplementedError("obsolete - remplace par PikaBusConnection")
+
     async def __creer_thread(self):
         routing_keys = self.__command_handler.get_routing_keys()
         return MqThread(self.__event_stop, self.__etat_instance, self.__command_handler, routing_keys)
@@ -530,46 +532,47 @@ class MilleGrillesConnecteur:
         Creer un compte sur MQ via https (midcompte).
         :return:
         """
-        mq_host = self.__etat_instance.mq_host
-        self.__logger.info("Creation compte MQ avec %s" % mq_host)
+        self.__logger.info("Tenter creation compte MQ")
+        raise NotImplementedError("obsolete - remplace par PikaBusConnection")
 
-        # Le monitor peut etre trouve via quelques hostnames :
-        #  nginx : de l'interne, est le proxy web qui est mappe vers le monitor
-        #  mq_host : de l'exterieur, est le serveur mq qui est sur le meme swarm docker_obsolete que nginx
-        hosts = ['nginx', self.__etat_instance.mq_host]
-        port = 444  # 443
-        path = 'administration/ajouterCompte'
-
-        mq_cafile = self.__etat_instance.configuration.ca_pem_path
-        mq_certfile = self.__etat_instance.configuration.cert_pem_path
-        mq_keyfile = self.__etat_instance.configuration.key_pem_path
-
-        with open(mq_certfile, 'r') as fichier:
-            chaine_cert = {'certificat': fichier.read()}
-
-        cle_cert = (mq_certfile, mq_keyfile)
-        self.__logger.debug("Creation compte MQ avec fichiers %s" % str(cle_cert))
-        try:
-            import requests
-            for host in hosts:
-                path_complet = 'https://%s:%d/%s' % (host, port, path)
-                try:
-                    self.__logger.debug("Creation compte avec path %s" % path_complet)
-                    reponse = requests.post(path_complet, json=chaine_cert, cert=cle_cert, verify=mq_cafile)
-                    if reponse.status_code in [200, 201]:
-                        return True
-                    else:
-                        self.__logger.error("Erreur creation compte MQ via https, code : %d", reponse.status_code)
-                except requests.exceptions.SSLError as e:
-                    self.__logger.exception("Erreur connexion https pour compte MQ")
-                except requests.exceptions.ConnectionError:
-                    # Erreur connexion au serveur, tenter le prochain host
-                    self.__logger.info("Echec creation compte MQ avec %s" % path_complet)
-        except ImportError:
-            self.__logger.warning("requests non disponible, on ne peut pas tenter d'ajouter le compte MQ")
-            requests = None
-
-        return False
+        # # Le monitor peut etre trouve via quelques hostnames :
+        # #  midcompte : application pour creer les comptes, accessible sur reseau docker interne
+        # #  mq_host : de l'exterieur, c'est le serveur mq avec le port millegrilles TLS client 444 vers midcompte
+        # #  localhost : environnement host externe (manager) ou dev (pas sous docker)
+        # #  nginx : de l'interne, est le proxy web qui est mappe vers midcompte (dernier recours)
+        # midcompte_url = ['https://midcompte:2444', f'https://{self.__etat_instance.mq_host}:444', 'https://localhost:444', 'https://nginx:444']
+        # path = 'administration/ajouterCompte'
+        #
+        # mq_cafile = self.__etat_instance.configuration.ca_pem_path
+        # mq_certfile = self.__etat_instance.configuration.cert_pem_path
+        # mq_keyfile = self.__etat_instance.configuration.key_pem_path
+        #
+        # with open(mq_certfile, 'r') as fichier:
+        #     chaine_cert = {'certificat': fichier.read()}
+        #
+        # cle_cert = (mq_certfile, mq_keyfile)
+        # self.__logger.debug("Creation compte MQ avec fichiers %s" % str(cle_cert))
+        # try:
+        #     import requests
+        #     for host in midcompte_url:
+        #         path_complet = f'{host}/{path}'
+        #         try:
+        #             self.__logger.debug("Creation compte avec path %s" % path_complet)
+        #             reponse = requests.post(path_complet, json=chaine_cert, cert=cle_cert, verify=mq_cafile)
+        #             if reponse.status_code in [200, 201]:
+        #                 return True
+        #             else:
+        #                 self.__logger.error("Erreur creation compte MQ via https, code : %d", reponse.status_code)
+        #         except requests.exceptions.SSLError as e:
+        #             self.__logger.exception("Erreur connexion https pour compte MQ")
+        #         except requests.exceptions.ConnectionError:
+        #             # Erreur connexion au serveur, tenter le prochain host
+        #             self.__logger.info("Echec creation compte MQ avec %s" % path_complet)
+        # except ImportError:
+        #     self.__logger.warning("requests non disponible, on ne peut pas tenter d'ajouter le compte MQ")
+        #     requests = None
+        #
+        # return False
 
     async def attendre_pret(self, timeout=30) -> bool:
         """
