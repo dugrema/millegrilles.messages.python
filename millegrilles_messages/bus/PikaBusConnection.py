@@ -205,10 +205,13 @@ def _create_middleware_access(mq_host: str, ca_path: str, cert_path: str, key_pa
     LOGGER.info("Creating MQ account using host %s" % mq_host)
 
     # Le monitor peut etre trouve via quelques hostnames :
-    #  nginx : de l'interne, est le proxy web qui est mappe vers le monitor
-    #  mq_host : de l'exterieur, est le serveur mq qui est sur le meme swarm docker_obsolete que nginx
+    #  midcompte : application pour creer les comptes, accessible sur reseau docker interne
+    #  mq_host : de l'exterieur, c'est le serveur mq avec le port millegrilles TLS client 444 vers midcompte
+    #  localhost : environnement host externe (manager) ou dev (pas sous docker)
+    #  nginx : de l'interne, est le proxy web qui est mappe vers midcompte (dernier recours)
+    #  localhost 2444 : dev avec midcompte expose localement
     midcompte_urls = ['https://midcompte:2444', f'https://{mq_host}:444', 'https://localhost:444',
-                      'https://nginx:444']
+                      'https://nginx:444', f"https://localhost:2444"]
     # hosts = ['nginx', mq_host, 'localhost']
     # port = 444
     path = 'administration/ajouterCompte'
