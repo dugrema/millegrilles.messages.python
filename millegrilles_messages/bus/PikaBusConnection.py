@@ -207,8 +207,10 @@ def _create_middleware_access(mq_host: str, ca_path: str, cert_path: str, key_pa
     # Le monitor peut etre trouve via quelques hostnames :
     #  nginx : de l'interne, est le proxy web qui est mappe vers le monitor
     #  mq_host : de l'exterieur, est le serveur mq qui est sur le meme swarm docker_obsolete que nginx
-    hosts = ['nginx', mq_host, 'localhost']
-    port = 444
+    midcompte_urls = ['https://midcompte:2444', f'https://{mq_host}:444', 'https://localhost:444',
+                      'https://nginx:444']
+    # hosts = ['nginx', mq_host, 'localhost']
+    # port = 444
     path = 'administration/ajouterCompte'
 
     with open(cert_path, 'r') as fichier:
@@ -218,8 +220,9 @@ def _create_middleware_access(mq_host: str, ca_path: str, cert_path: str, key_pa
     LOGGER.debug("Creation compte MQ avec fichiers %s" % str(cle_cert))
     try:
         import requests
-        for host in hosts:
-            path_complet = 'https://%s:%d/%s' % (host, port, path)
+        for host_url in midcompte_urls:
+            # path_complet = 'https://%s:%d/%s' % (host, port, path)
+            path_complet = f"{host_url}/{path}"
             try:
                 LOGGER.debug("Creation compte avec path %s" % path_complet)
                 reponse = requests.post(path_complet, json=chaine_cert, cert=cle_cert, verify=ca_path)
