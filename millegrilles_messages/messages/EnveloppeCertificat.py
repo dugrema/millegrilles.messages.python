@@ -356,7 +356,7 @@ class EnveloppeCertificat:
                 fraction_renouveller = 2/3
 
             delta_fin_debut = date_expiration.timestamp() - not_valid_before.timestamp()
-            epoch_renouveler = fraction_renouveller * delta_fin_debut + not_valid_before.timestamp()
+            epoch_renouveler = int(fraction_renouveller * delta_fin_debut) + not_valid_before.timestamp()
             date_renouvellement = datetime.datetime.fromtimestamp(epoch_renouveler, tz=pytz.UTC)
 
         peut_renouveler = date_renouvellement < date_courante
