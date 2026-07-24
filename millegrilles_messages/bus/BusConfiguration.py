@@ -1,7 +1,13 @@
 import os
+import logging
+from typing import Optional
 
+from cryptography.x509 import ExtensionNotFound
+
+from millegrilles_messages.messages.CleCertificat import CleCertificat
 from millegrilles_messages.messages.Constantes import ENV_REDIS_HOSTNAME, ENV_REDIS_PASSWORD_PATH, ENV_REDIS_PORT, \
     ENV_REDIS_USERNAME
+from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
 
 ENV_CERT_PATH = 'CERT_PATH'
 ENV_KEY_PATH = 'KEY_PATH'
@@ -20,6 +26,8 @@ DEFAULT_REDIS_PORT=6379
 DEFAULT_REDIS_PASSWORD_PATH='/run/secrets/redis.txt'
 
 
+LOGGER = logging.getLogger(__name__)
+
 class MilleGrillesBusConfiguration:
 
     def __init__(self):
@@ -32,6 +40,8 @@ class MilleGrillesBusConfiguration:
         self.redis_port = DEFAULT_REDIS_PORT
         self.redis_username = DEFAULT_REDIS_USERNAME
         self.redis_password_path = DEFAULT_REDIS_PASSWORD_PATH
+        self.__signing_key: Optional[CleCertificat] = None
+        self.__ca: Optional[EnveloppeCertificat] = None
 
     def parse_config(self):
         self.cert_path = os.environ.get(ENV_CERT_PATH) or self.cert_path
@@ -55,7 +65,52 @@ class MilleGrillesBusConfiguration:
         config = MilleGrillesBusConfiguration()
         config.parse_config()
         config.reload()
+
         return config
 
     def reload(self):
-        pass  # Hook for sub-classes
+        # Attempt to load certificates
+        try:
+            self.__load_certificates(self.key_path, self.cert_path, self.ca_path)
+        except FileNotFoundError:
+            LOGGER.warning("Error loading certificate files (signing key, CA)")
+
+    def __load_certificates(self, key_path: str, cert_path: str, ca_path: str):
+        clecert = CleCertificat.from_files(key_path, cert_path)
+        clecert.cle_correspondent()  # Ensures the cert/key match
+        ca = EnveloppeCertificat.from_file(ca_path)
+        idmg = ca.idmg
+        if clecert.enveloppe.idmg != idmg:
+            raise ValueError("CA and Cert mismatch on IDMG")
+
+        self.__signing_key = clecert
+        self.__ca = ca
+
+    @property
+    def signing_key(self) -> Optional[CleCertificat]:
+        return self.__signing_key
+
+    @property
+    def ca(self) -> Optional[EnveloppeCertificat]:
+        return self.__ca
+
+    @property
+    def instance_id(self) -> Optional[str]:
+        if self.__signing_key:
+            return self.__signing_key.enveloppe.subject_common_name
+        return None
+
+    @property
+    def securite(self) -> Optional[str]:
+        if self.__signing_key:
+            try:
+                return self.__signing_key.enveloppe.get_exchanges[0]
+            except (TypeError, ValueError, IndexError, ExtensionNotFound):
+                pass
+        return None
+
+    @property
+    def idmg(self) -> Optional[str]:
+        if self.__signing_key:
+            return self.__signing_key.enveloppe.idmg
+        return None
