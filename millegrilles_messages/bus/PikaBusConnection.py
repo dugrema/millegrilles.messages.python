@@ -90,6 +90,7 @@ class MilleGrillesPikaBusConnection(StopListener):
 
         event = asyncio.Event()
         result = dict()
+
         def on_connection_open(_unused_connection: AsyncioConnection):
             self.__loop.call_soon_threadsafe(event.set)
 
@@ -187,8 +188,8 @@ class MilleGrillesPikaBusConnection(StopListener):
         self.__logger.info("Creating middleware access using nginx")
         configuration = self.__context.configuration
         result = await asyncio.to_thread(
-            _create_middleware_access, configuration.mq_hostname, configuration.ca_path, configuration.cert_path,
-            configuration.key_path)
+            _create_middleware_access, configuration.mq_hostname, configuration.mtls_port,
+            configuration.ca_path, configuration.cert_path, configuration.key_path)
         if result is True:
             raise MiddlewareAccessCreatedException()
 
@@ -197,7 +198,7 @@ class MiddlewareAccessCreatedException(Exception):
     pass
 
 
-def _create_middleware_access(mq_host: str, ca_path: str, cert_path: str, key_path: str):
+def _create_middleware_access(mq_host: str, mtls_port: int, ca_path: str, cert_path: str, key_path: str):
     """
     Creer un compte sur MQ via https (midcompte).
     :return:
@@ -210,8 +211,8 @@ def _create_middleware_access(mq_host: str, ca_path: str, cert_path: str, key_pa
     #  localhost : environnement host externe (manager) ou dev (pas sous docker)
     #  nginx : de l'interne, est le proxy web qui est mappe vers midcompte (dernier recours)
     #  localhost 2444 : dev avec midcompte expose localement
-    midcompte_urls = ['https://midcompte:2444', f'https://{mq_host}:444', 'https://localhost:444',
-                      'https://nginx:444', f"https://localhost:2444"]
+    midcompte_urls = ['https://midcompte:2444', f'https://{mq_host}:{mtls_port}', f'https://localhost:{mtls_port}',
+                      f'https://nginx:{mtls_port}', f"https://localhost:2444"]
     # hosts = ['nginx', mq_host, 'localhost']
     # port = 444
     path = 'administration/ajouterCompte'

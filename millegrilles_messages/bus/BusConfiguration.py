@@ -14,6 +14,7 @@ ENV_KEY_PATH = 'KEY_PATH'
 ENV_CA_PATH = 'CA_PATH'
 ENV_MQ_HOSTNAME = 'MQ_HOSTNAME'
 ENV_MQ_PORT = 'MQ_PORT'
+ENV_MTLS_PORT = 'MTLS_PORT'
 
 DEFAULT_CERT="/run/secrets/cert.pem"
 DEFAULT_KEY="/run/secrets/key.pem"
@@ -24,6 +25,7 @@ DEFAULT_REDIS_HOSTNAME="redis"
 DEFAULT_REDIS_USERNAME="client_nodejs"
 DEFAULT_REDIS_PORT=6379
 DEFAULT_REDIS_PASSWORD_PATH='/run/secrets/redis.txt'
+DEFAULT_MTLS_PORT=444
 
 
 LOGGER = logging.getLogger(__name__)
@@ -36,6 +38,7 @@ class MilleGrillesBusConfiguration:
         self.ca_path = DEFAULT_CA
         self.mq_hostname = DEFAULT_MQ_HOSTNAME
         self.mq_port = DEFAULT_MQ_PORT
+        self.mtls_port = DEFAULT_MTLS_PORT
         self.redis_hostname = DEFAULT_REDIS_HOSTNAME
         self.redis_port = DEFAULT_REDIS_PORT
         self.redis_username = DEFAULT_REDIS_USERNAME
@@ -59,6 +62,10 @@ class MilleGrillesBusConfiguration:
         redis_port = os.environ.get(ENV_REDIS_PORT)
         if redis_port:
             self.redis_port = int(redis_port)
+
+        mtls_port = os.environ.get(ENV_MTLS_PORT)
+        if mtls_port:
+            self.mtls_port = int(mtls_port)
 
     @staticmethod
     def load():
