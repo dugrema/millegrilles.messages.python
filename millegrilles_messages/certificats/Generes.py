@@ -71,7 +71,7 @@ class EnveloppeCsr:
         return binascii.hexlify(self.cle_publique).decode('utf-8')
 
     def signer(self, cle_signature: CleCertificat, role: str,
-               builder: Optional[CertificateBuilder] = None, duree=DUREE_CERT_DEFAUT, not_before: Optional[datetime.datetime] = None):
+               builder: Optional[CertificateBuilder] = None, duree=DUREE_CERT_DEFAUT, not_before: Optional[datetime.datetime] = None) -> EnveloppeCertificat:
 
         if builder is None:
             builder = CertificateBuilder()
@@ -118,6 +118,7 @@ class EnveloppeCsr:
         else:
             chaine = None
         enveloppe = signer_certificat(builder, cle_signature.private_key, chaine)
+
         return enveloppe
 
 
