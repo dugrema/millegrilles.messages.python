@@ -20,7 +20,7 @@ from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertific
 from millegrilles_messages.messages.FormatteurMessages import SignateurTransactionSimple, FormatteurMessageMilleGrilles
 from millegrilles_messages.messages.ValidateurCertificats import ValidateurCertificatCache, ValidateurCertificatRedis
 from millegrilles_messages.messages.ValidateurMessage import ValidateurMessage
-from millegrilles_messages.structs.Filehost import Filehost
+from millegrilles_messages.structs.Filehost import Filehost, load_filehost_configuration
 
 LOGGER = logging.getLogger(__name__)
 
@@ -78,8 +78,8 @@ class MilleGrillesBusContext:
 
         # Filehost connection
         self._filehost: Optional[Filehost] = None
-        self._filehost_url: Optional[str] = None
-        self._tls_method: Optional[str] = None
+        # self._filehost_url: Optional[str] = None
+        # self._tls_method: Optional[str] = None
 
         if load:
             # Initial load of the configuration
@@ -264,11 +264,11 @@ class MilleGrillesBusContext:
 
     @property
     def filehost_url(self):
-        return self._filehost_url
+        return self.filehost.filehost_params.url.geturl()
 
     @property
     def tls_method(self):
-        return self._tls_method
+        return self.filehost.filehost_params.method
 
     @property
     def filehost(self) -> Optional[Filehost]:
@@ -278,53 +278,55 @@ class MilleGrillesBusContext:
     def filehost(self, value: Filehost):
         self._filehost = value
 
-        # Pick URL
-        url, tls_method = self.__load_url(value)
-        self._filehost_url = url.geturl()
-        self._tls_method = tls_method
-
     def get_tcp_connector(self) -> TCPConnector:
         # Prepare connection information (SSL)
-        ssl_context = None
+        ssl_context = False
         verify = True
-        if self._tls_method == 'millegrille':
+        tls_method = self.tls_method
+        if tls_method == 'millegrille':
             ssl_context = self.ssl_context
-        elif self._tls_method == 'nocheck':
+        elif tls_method == 'nocheck':
             verify = False
 
         connector = TCPConnector(ssl=ssl_context, verify_ssl=verify)
 
         return connector
 
-    @staticmethod
-    def __load_url(filehost: Filehost):
-        if filehost.url_external:
-            url = urlparse(filehost.url_external)
-            tls_method = filehost.tls_external
-        elif filehost.url_internal:
-            url = urlparse(filehost.url_internal)
-            tls_method = 'millegrille'
-        else:
-            raise ValueError("No valid URL")
-        return url, tls_method
+    # @staticmethod
+    # def __load_url(filehost: Filehost):
+    #     if filehost.url_external:
+    #         url = urlparse(filehost.url_external)
+    #         tls_method = filehost.tls_external
+    #     elif filehost.url_internal:
+    #         url = urlparse(filehost.url_internal)
+    #         tls_method = 'millegrille'
+    #     else:
+    #         raise ValueError("No valid URL")
+    #     return url, tls_method
 
     async def reload_filehost_configuration(self):
         """
         Enable filehost access by calling this method regularly.
         :return:
         """
-        producer = await self.get_producer()
-        response = await producer.request(
-            dict(), 'CoreTopologie', 'getFilehostForInstance', exchange="1.public")
-
         try:
-            filehost_response = response.parsed
-            filehost_dict = filehost_response['filehost']
-            filehost = Filehost.load_from_dict(filehost_dict)
-            self.filehost = filehost
+            self.filehost = await load_filehost_configuration(self)
         except (KeyError, AttributeError, ValueError):
             self.__logger.exception("Error loading filehost")
             self.filehost = None
+
+        # producer = await self.get_producer()
+        # response = await producer.request(
+        #     dict(), 'CoreTopologie', 'getFilehostForInstance', exchange="1.public")
+        #
+        # try:
+        #     filehost_response = response.parsed
+        #     filehost_dict = filehost_response['filehost']
+        #     filehost = Filehost.load_from_dict(filehost_dict)
+        #     self.filehost = filehost
+        # except (KeyError, AttributeError, ValueError):
+        #     self.__logger.exception("Error loading filehost")
+        #     self.filehost = None
 
 def _load_ssl_context(configuration: MilleGrillesBusConfiguration) -> ssl.SSLContext:
     ssl_context = SSLContext()

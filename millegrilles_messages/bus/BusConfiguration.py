@@ -6,7 +6,7 @@ from cryptography.x509 import ExtensionNotFound
 
 from millegrilles_messages.messages.CleCertificat import CleCertificat
 from millegrilles_messages.messages.Constantes import ENV_REDIS_HOSTNAME, ENV_REDIS_PASSWORD_PATH, ENV_REDIS_PORT, \
-    ENV_REDIS_USERNAME
+    ENV_REDIS_USERNAME, ENV_DEV
 from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
 
 ENV_CERT_PATH = 'CERT_PATH'
@@ -45,6 +45,7 @@ class MilleGrillesBusConfiguration:
         self.redis_password_path = DEFAULT_REDIS_PASSWORD_PATH
         self.__signing_key: Optional[CleCertificat] = None
         self.__ca: Optional[EnveloppeCertificat] = None
+        self.dev = False
 
     def parse_config(self):
         self.cert_path = os.environ.get(ENV_CERT_PATH) or self.cert_path
@@ -54,6 +55,7 @@ class MilleGrillesBusConfiguration:
         self.redis_hostname = os.environ.get(ENV_REDIS_HOSTNAME) or self.redis_hostname
         self.redis_username = os.environ.get(ENV_REDIS_USERNAME) or self.redis_username
         self.redis_password_path = os.environ.get(ENV_REDIS_PASSWORD_PATH) or self.redis_password_path
+        self.dev = True if os.environ.get(ENV_DEV) else False
 
         mq_port = os.environ.get(ENV_MQ_PORT)
         if mq_port:
