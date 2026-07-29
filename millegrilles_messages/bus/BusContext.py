@@ -282,15 +282,33 @@ class MilleGrillesBusContext:
         # Prepare connection information (SSL)
         ssl_context = False
         verify = True
-        tls_method = self.tls_method
-        if tls_method == 'millegrille':
-            ssl_context = self.ssl_context
-        elif tls_method == 'nocheck':
-            verify = False
+        filehost = self.filehost
+        if filehost:
+            if filehost.filehost_params.method == 'millegrille':
+                ssl_context = self.ssl_context
+            elif filehost.filehost_params.method == 'nocheck':
+                verify = False
 
-        connector = TCPConnector(ssl=ssl_context, verify_ssl=verify)
+        if ssl_context:
+            connector = TCPConnector(ssl=ssl_context)
+        elif not verify:
+            connector = TCPConnector(verify_ssl=False)
+        else:
+            connector = TCPConnector()
 
         return connector
+
+        # ssl_context = False
+        # verify = True
+        # tls_method = self.tls_method
+        # if tls_method == 'millegrille':
+        #     ssl_context = self.ssl_context
+        # elif tls_method == 'nocheck':
+        #     verify = False
+        #
+        # connector = TCPConnector(ssl=ssl_context, verify_ssl=verify)
+        #
+        # return connector
 
     # @staticmethod
     # def __load_url(filehost: Filehost):
