@@ -1,6 +1,7 @@
 import os
 import logging
-from typing import Optional
+import pathlib
+from typing import Optional, Union
 
 from cryptography.x509 import ExtensionNotFound
 
@@ -16,7 +17,7 @@ ENV_MQ_HOSTNAME = 'MQ_HOSTNAME'
 ENV_MQ_PORT = 'MQ_PORT'
 ENV_MTLS_PORT = 'MTLS_PORT'
 
-DEFAULT_CERT="/run/secrets/cert.pem"
+# DEFAULT_CERT="/run/secrets/cert.pem"
 DEFAULT_KEY="/run/secrets/key.pem"
 DEFAULT_CA="/run/secrets/ca.pem"
 DEFAULT_MQ_HOSTNAME="mq"
@@ -33,9 +34,9 @@ LOGGER = logging.getLogger(__name__)
 class MilleGrillesBusConfiguration:
 
     def __init__(self):
-        self.cert_path = DEFAULT_CERT
-        self.key_path = DEFAULT_KEY
-        self.ca_path = DEFAULT_CA
+        self.__cert_path: Optional[pathlib.Path] = None
+        self.key_path: pathlib.Path = pathlib.Path(DEFAULT_KEY)             # Can be combined key/cert
+        self.ca_path: pathlib.Path = pathlib.Path(DEFAULT_CA)
         self.mq_hostname = DEFAULT_MQ_HOSTNAME
         self.mq_port = DEFAULT_MQ_PORT
         self.mtls_port = DEFAULT_MTLS_PORT
@@ -47,10 +48,14 @@ class MilleGrillesBusConfiguration:
         self.__ca: Optional[EnveloppeCertificat] = None
         self.dev = False
 
+    @staticmethod
+    def __load_path(val: Optional[Union[str, pathlib.Path]]):
+        return pathlib.Path(val) if val else None
+
     def parse_config(self):
-        self.cert_path = os.environ.get(ENV_CERT_PATH) or self.cert_path
-        self.key_path = os.environ.get(ENV_KEY_PATH) or self.key_path
-        self.ca_path = os.environ.get(ENV_CA_PATH) or self.ca_path
+        self.__cert_path = MilleGrillesBusConfiguration.__load_path(os.environ.get(ENV_CERT_PATH) or self.cert_path)
+        self.key_path = MilleGrillesBusConfiguration.__load_path(os.environ.get(ENV_KEY_PATH)) or self.key_path
+        self.ca_path = MilleGrillesBusConfiguration.__load_path(os.environ.get(ENV_CA_PATH)) or self.ca_path
         self.mq_hostname = os.environ.get(ENV_MQ_HOSTNAME) or self.mq_hostname
         self.redis_hostname = os.environ.get(ENV_REDIS_HOSTNAME) or self.redis_hostname
         self.redis_username = os.environ.get(ENV_REDIS_USERNAME) or self.redis_username
@@ -84,7 +89,14 @@ class MilleGrillesBusConfiguration:
         except FileNotFoundError:
             LOGGER.warning("Error loading certificate files (signing key, CA)")
 
-    def __load_certificates(self, key_path: str, cert_path: str, ca_path: str):
+    def __load_certificates(self, key_path: pathlib.Path, cert_path: Optional[pathlib.Path], ca_path: pathlib.Path):
+        """
+
+        :param key_path: Key file, may include cert chain
+        :param cert_path: Optional - when None certificate must be included in key file
+        :param ca_path: CA file
+        :return:
+        """
         clecert = CleCertificat.from_files(key_path, cert_path)
         clecert.cle_correspondent()  # Ensures the cert/key match
         ca = EnveloppeCertificat.from_file(ca_path)
@@ -123,3 +135,15 @@ class MilleGrillesBusConfiguration:
         if self.__signing_key:
             return self.__signing_key.enveloppe.idmg
         return None
+
+    @property
+    def cert_path(self) -> Optional[pathlib.Path]:
+        return self.__cert_path
+
+    @property
+    def private_cert_path(self) -> pathlib.Path:
+        """
+        The certificate chain can be included in the key file. This file must not be exported/copied.
+        :return:
+        """
+        return self.__cert_path if self.__cert_path else self.key_path

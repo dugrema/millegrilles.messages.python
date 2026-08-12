@@ -1,3 +1,5 @@
+import pathlib
+
 import multibase
 
 from typing import Optional, Union
@@ -37,8 +39,8 @@ class CleCertificat:
         return CleCertificat(private_key, enveloppe)
 
     @staticmethod
-    def from_files(path_key, path_certificat, path_password=None, password=None):
-        if path_key != path_certificat:
+    def from_files(path_key: pathlib.Path, path_certificat: Optional[pathlib.Path], path_password=None, password=None):
+        if path_certificat and path_key != path_certificat:
             with open(path_key, 'rb') as fichier:
                 cle = fichier.read()
             with open(path_certificat, 'rb') as fichier:

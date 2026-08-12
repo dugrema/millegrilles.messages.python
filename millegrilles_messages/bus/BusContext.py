@@ -351,7 +351,7 @@ def _load_ssl_context(configuration: MilleGrillesBusConfiguration) -> ssl.SSLCon
 
     LOGGER.debug("Load web certificate %s" % configuration.cert_path)
     try:
-        ssl_context.load_cert_chain(configuration.cert_path, configuration.key_path)
+        ssl_context.load_cert_chain(configuration.private_cert_path, configuration.key_path)
     except FileNotFoundError:
         files = "%s or %s" % (configuration.cert_path, configuration.key_path)
         raise ConfigurationFileError(files)

@@ -74,7 +74,7 @@ class MilleGrillesPikaBusConnection(StopListener):
         tls_context = ssl.SSLContext(ssl.PROTOCOL_TLS)
         tls_context.verify_mode = ssl.CERT_REQUIRED
         tls_context.load_verify_locations(self.__context.configuration.ca_path)
-        tls_context.load_cert_chain(self.__context.configuration.cert_path, self.__context.configuration.key_path)
+        tls_context.load_cert_chain(self.__context.configuration.private_cert_path, self.__context.configuration.key_path)
         ssl_options = pika.SSLOptions(tls_context, hostname)
 
         parameters = pika.ConnectionParameters(
