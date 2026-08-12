@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import pathlib
 from asyncio import TaskGroup
 
 import pika
@@ -12,6 +13,7 @@ from pika.channel import Channel
 from pika.exceptions import ProbableAuthenticationError
 
 from millegrilles_messages.bus.BusContext import MilleGrillesBusContext, StopListener, ForceTerminateExecution
+from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
 
 CONST_CONNECTION_ATTEMTPS = 5
 CONST_RETRY_DELAY = 5.0
@@ -198,7 +200,7 @@ class MiddlewareAccessCreatedException(Exception):
     pass
 
 
-def _create_middleware_access(mq_host: str, mtls_port: int, ca_path: str, cert_path: str, key_path: str):
+def _create_middleware_access(mq_host: str, mtls_port: int, ca_path: pathlib.Path, cert_path: Optional[pathlib.Path], key_path: pathlib.Path):
     """
     Creer un compte sur MQ via https (midcompte).
     :return:
@@ -217,10 +219,12 @@ def _create_middleware_access(mq_host: str, mtls_port: int, ca_path: str, cert_p
     # port = 444
     path = 'administration/ajouterCompte'
 
-    with open(cert_path, 'r') as fichier:
-        chaine_cert = {'certificat': fichier.read()}
+    # The certificate chain may be part of the key PEM file (when cert_path is None)
+    private_cert_path = cert_path or key_path
+    enveloppe_cert = EnveloppeCertificat.from_file(private_cert_path)       # Validate certificate, remove private key
+    chaine_cert = {'certificat': '\n'.join(enveloppe_cert.chaine_pem())}
 
-    cle_cert = (cert_path, key_path)
+    cle_cert = (str(private_cert_path), str(key_path))
     LOGGER.debug("Creation compte MQ avec fichiers %s" % str(cle_cert))
     try:
         import requests
@@ -229,7 +233,7 @@ def _create_middleware_access(mq_host: str, mtls_port: int, ca_path: str, cert_p
             path_complet = f"{host_url}/{path}"
             try:
                 LOGGER.debug("Creation compte avec path %s" % path_complet)
-                reponse = requests.post(path_complet, json=chaine_cert, cert=cle_cert, verify=ca_path)
+                reponse = requests.post(path_complet, json=chaine_cert, cert=cle_cert, verify=str(ca_path))
                 if reponse.status_code in [200, 201]:
                     return True
                 else:
