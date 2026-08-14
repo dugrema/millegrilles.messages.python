@@ -74,7 +74,12 @@ class MilleGrillesPikaQueueConsumer:
             self.exclusive = True
         else:
             self.exclusive = exclusive
-        self.durable = durable
+
+        if not exclusive:  # Resolve issue: mq 4.3 deprecation transient_nonexcl_queues
+            self.durable = True
+        else:
+            self.durable = durable
+
         self.auto_delete = auto_delete
         self.arguments = arguments
         self.allow_user_messages = allow_user_messages
