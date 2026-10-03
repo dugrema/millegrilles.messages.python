@@ -16,10 +16,35 @@ def dechiffrer_document(clecert: CleCertificat, cle_secrete: str, document_chiff
 
     contenu_chiffre = document_chiffre['data_chiffre']
     if isinstance(contenu_chiffre, str):
-        contenu_chiffre = multibase.decode(contenu_chiffre)
+        try:
+            contenu_chiffre = multibase.decode(contenu_chiffre)
+        except ValueError:
+            # Detect format
+            contenu_chiffre = document_chiffre['data_chiffre']
+            if isinstance(contenu_chiffre, str):
+                if document_chiffre.get('nonce'):
+                    if contenu_chiffre.endswith('='):
+                        contenu_chiffre = binascii.a2b_base64(contenu_chiffre)
+                    else:
+                        # Nouveau format, ajouter 'm' pour multibase
+                        contenu_chiffre = 'm' + contenu_chiffre
+                        contenu_chiffre = multibase.decode(contenu_chiffre)
+                else:
+                    contenu_chiffre = multibase.decode(contenu_chiffre)
 
     contenu_dechiffre = decipher.update(contenu_chiffre)
     contenu_dechiffre += decipher.finalize()
+
+    try:
+        compression = document_chiffre['compression']
+        if compression == 'deflate':
+            contenu_dechiffre = zlib.decompress(contenu_dechiffre)
+        elif compression in ['gz', 'gzip']:
+            contenu_dechiffre = gzip.decompress(contenu_dechiffre)
+        else:
+            raise Exception('Unsupported compression %s' % compression)
+    except KeyError:
+        pass
 
     contenu_json = json.loads(contenu_dechiffre)
 

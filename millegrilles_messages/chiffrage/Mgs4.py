@@ -287,3 +287,25 @@ def chiffrer_mgs4_bytes_secrete(cle_secrete: bytes, cleartext: Union[bytes, str]
         cipherinfo['compression'] = compression
 
     return cipher, cipherinfo
+
+def chiffrer_document_cles(certs: list[EnveloppeCertificat], doc: dict) -> dict:
+    secret_key: Optional[bytes] = None
+    cles_generees = dict()
+
+    for cert in certs:
+        if secret_key is None:
+            peer, secret_key = generer_cle_secrete(cert.get_public_x25519())
+            peer_x25519_public_bytes = peer.public_bytes(
+                serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+            cle_generee: str = binascii.b2a_base64(peer_x25519_public_bytes, newline=False).decode('utf-8')
+            cles_generee = cle_generee.replace('=', '')
+            cles_generees[cert.fingerprint] = cles_generee
+
+    if not secret_key:
+        raise Exception("No certificates provided")
+
+    cipherinfo = chiffrer_document(secret_key, "DUMMY", doc)
+    del cipherinfo["cle_id"]
+    cipherinfo["cles"] = cles_generees
+
+    return cipherinfo
