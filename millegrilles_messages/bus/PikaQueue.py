@@ -10,6 +10,7 @@ from cryptography.x509 import ExtensionNotFound
 from pika.channel import Channel
 from pika.frame import Method
 from pika.spec import Basic, BasicProperties
+from pika.exceptions import ChannelWrongStateError
 from certvalidator.errors import PathValidationError
 from cryptography.exceptions import InvalidSignature
 
@@ -266,7 +267,10 @@ class MilleGrillesPikaQueueConsumer:
                 self.__logger.exception('**UNHANDLED ERROR**: %s' % e)
             finally:
                 # ACK must be sent back on same channel as received
-                message.channel.basic_ack(message.deliver.delivery_tag)
+                try:
+                    message.channel.basic_ack(message.deliver.delivery_tag)
+                except ChannelWrongStateError as e:
+                    self.__logger.warning("Error sending ACK, message will be resent: %s", e)
 
 
     async def respond(self, message_wrapper: MessageWrapper, response: dict):
