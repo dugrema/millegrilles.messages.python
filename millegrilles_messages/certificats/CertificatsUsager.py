@@ -1,3 +1,4 @@
+import datetime
 from cryptography.x509.base import CertificateBuilder
 
 from millegrilles_messages.certificats.Generes import EnveloppeCsr
@@ -27,12 +28,24 @@ def signer_usager(cle_intermediaire: CleCertificat, csr_pem: str, parametres: di
     user_id: str = parametres['user_id']
     builder = ajouter_user_id(builder, user_id)
 
+    max_duration = 90
     try:
         delegation_globale = parametres['delegation_globale']
         builder = ajouter_delegation_globale(builder, delegation_globale)
+        max_duration = 1  # Max out at 1 day for admin
     except (AttributeError, KeyError):
         pass  # OK
 
-    enveloppe_certificat = enveloppe_csr.signer(cle_intermediaire, role, builder=builder)
+    # Set the duration to maximum 90 days (allow lower values)
+    try:
+        duration = parametres['duration']
+        if not isinstance(duration, int) or duration > max_duration:
+            duration = max_duration
+    except KeyError:
+        duration = max_duration
+
+    duration = datetime.timedelta(days=duration)
+
+    enveloppe_certificat = enveloppe_csr.signer(cle_intermediaire, role, builder=builder, duree=duration)
 
     return enveloppe_certificat
