@@ -2,17 +2,15 @@
 import datetime
 import json
 import logging
-from asyncio import TimeoutError
 
 import OpenSSL
 
 from asyncio.exceptions import TimeoutError
 from typing import Optional, Union
 
-import redis.asyncio as redis
+import redis.asyncio
 from redis.exceptions import ConnectionError
 
-# from millegrilles_messages.bus.PikaMessageProducer import MilleGrillesPikaMessageProducer
 from millegrilles_messages.messages import Constantes
 from millegrilles_messages.messages.EnveloppeCertificat import EnveloppeCertificat
 from millegrilles_messages.messages.ParamsEnvironnement import ConfigurationRedis
@@ -340,7 +338,7 @@ class ValidateurCertificatRedis(ValidateurCertificatCache):
                                  password=self.__configuration_redis.password,
                                  ssl=True,
                                  ssl_keyfile=self.__configuration_redis.key_pem_path,
-                                 ssl_certfile=self.__configuration_redis.cert_pem_path,
+                                 ssl_certfile=self.__configuration_redis.cert_pem_path or self.__configuration_redis.key_pem_path,
                                  ssl_ca_data=ca_pem)
 
             await client.ping()
