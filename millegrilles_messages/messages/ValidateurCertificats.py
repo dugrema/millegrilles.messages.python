@@ -335,7 +335,7 @@ class ValidateurCertificatRedis(ValidateurCertificatCache):
     async def __connecter(self):
         if self.__redis_client is None:
             ca_pem = self.__enveloppe_ca.certificat_pem
-            client = redis.Redis(host=self.__configuration_redis.hostname, port=self.__configuration_redis.port,
+            client = redis.asyncio.Redis(host=self.__configuration_redis.hostname, port=self.__configuration_redis.port,
                                  username=self.__configuration_redis.username,
                                  password=self.__configuration_redis.password,
                                  ssl=True,
