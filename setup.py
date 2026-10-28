@@ -14,11 +14,11 @@ setup(
     author_email='mathieu.dugre@mdugre.info',
     description='Scripts Python de messaging (MQ) pour MilleGrilles',
     install_requires=[
-        'pika>=1.2.1,<2',
+        'pika==1.3.2',
         'urllib3>=1.26.9',
         'requests>=2.27.1',
         'asyncio>=3.4.3,<4',
-        'aiohttp>=3.8.1,<4',
+        'aiohttp==3.12.13',
         'certifi>=2020.12.5',
         'certvalidator>=0.11.1',
         'cryptography>=38,<39',
@@ -31,6 +31,6 @@ setup(
         'pytz>=2020.4',
         'psutil>=5.8.0',
         'docker>=4.4.0',
-        'redis>=4.3.1,<5'
+        'redis>=8.1.0,<9'
     ]
 )
