@@ -2,14 +2,13 @@ import logging
 
 from millegrilles_messages.messages.CleCertificat import CleCertificat
 
-PATH_CORE_CERT = '/home/mathieu/mgdev/certs/pki.core.cert'
-PATH_CORE_CLE = '/home/mathieu/mgdev/certs/pki.core.key'
+PATH_CORE_CLE = '/home/mathieu/tas/dev/millegrilles/dev1/secrets/coreaccounts.pem'
 
 logger = logging.getLogger(__name__)
 
 
 def charger_cle():
-    clecert = CleCertificat.from_files(PATH_CORE_CLE, PATH_CORE_CERT)
+    clecert = CleCertificat.from_files(PATH_CORE_CLE, PATH_CORE_CLE)
     logger.debug('cle / cert correspondent : %s' % clecert.cle_correspondent())
     logger.debug('x25519 private key cert core : %s' % clecert.get_private_x25519())
 
