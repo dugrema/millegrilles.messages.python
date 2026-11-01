@@ -111,18 +111,27 @@ async def load_filehost_configuration(context) -> Optional[Filehost]:
             else:
                 # Different host, use system card to get hostname:port
                 fiche = await load_fiche(context)
-                instance = fiche['instances'][instance_id]
-                if instance:
-                    try:
-                        url = instance['domaines'][0]
-                        mtls_port = instance['ports']['https_mtls']
-                        url = f'https://{url}:{mtls_port}'
-                    except KeyError:
-                        LOGGER.info("Error reading from system card, falling back to trying direct local access")
+                try:
+                    instance = fiche['instances'][instance_id]
+                except KeyError:
+                    if filehost_dict.get('url_external'):
+                        # Unmanaged external filehost
+                        url = filehost_dict['url_external']
+                        tls_method = filehost_dict['tls_external']
+                    else:
                         url = None
                 else:
-                    LOGGER.warning('No filehost found, falling back to trying direct local access')
-                    url = None
+                    if instance:
+                        try:
+                            url = instance['domaines'][0]
+                            mtls_port = instance['ports']['https_mtls']
+                            url = f'https://{url}:{mtls_port}'
+                        except KeyError:
+                            LOGGER.info("Error reading from system card, falling back to trying direct local access")
+                            url = None
+                    else:
+                        LOGGER.warning('No filehost found, falling back to trying direct local access')
+                        url = None
         elif filehost_dict.get('url_external'):
             # Unmanaged external filehost
             url = filehost_dict['url_external']
