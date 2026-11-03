@@ -6,7 +6,7 @@ pipeline {
         string(defaultValue: '2026.7', name: 'VERSION')
         string(defaultValue: 'jenkins-maple', name: 'CREDENTIALS_ID')
         string(defaultValue: 'ssh://git.maple.maceroc.com/git/millegrilles.messages.python', name: 'GIT_URL')
-        string(defaultValue: 'registry.millegrilles.com:5000/millegrilles/messages_python', name: 'DOCKER_IMAGE')
+        string(defaultValue: 'vmhost2.maple.maceroc.com/millegrilles/messages_python', name: 'DOCKER_IMAGE')
     }
 
     environment {
@@ -44,9 +44,20 @@ pipeline {
                 docker build \
                   --build-arg PIP_INDEX_URL="$PIP_INDEX_URL" \
                   -t ${DOCKER_IMAGE}:${VBUILD} --build-arg VBUILD=${VBUILD} .
-                docker push ${DOCKER_IMAGE}:${VBUILD}
                 '''
+
+                withCredentials([usernamePassword(
+                    credentialsId: 'nexus-jenkins',
+                    usernameVariable: 'NEXUS_USER',
+                    passwordVariable: 'NEXUS_PASS'
+                )]) {
+                    sh '''
+                        echo "$NEXUS_PASS" | docker login $DOCKER_REGISTRY_URL -u $NEXUS_USER --password-stdin
+                        docker push ${DOCKER_IMAGE}:${VBUILD}
+                    '''
+                }
             }
+
         }
     }
 }
