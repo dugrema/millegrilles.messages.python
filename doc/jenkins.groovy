@@ -6,7 +6,7 @@ pipeline {
         string(defaultValue: '2026.7', name: 'VERSION')
         string(defaultValue: 'jenkins-maple', name: 'CREDENTIALS_ID')
         string(defaultValue: 'ssh://git.maple.maceroc.com/git/millegrilles.messages.python', name: 'GIT_URL')
-        string(defaultValue: 'vmhost2.maple.maceroc.com/millegrilles/messages_python', name: 'DOCKER_IMAGE')
+        string(defaultValue: 'nexus.maple.maceroc.com/millegrilles/messages_python', name: 'DOCKER_IMAGE')
     }
 
     environment {
@@ -30,7 +30,7 @@ pipeline {
                 archiveArtifacts artifacts: 'dist/millegrilles_messages-*', followSymlinks: false
 
                 sh '''
-                rsync dist/millegrilles_messages-* fs1.maple.maceroc.com:python/dist/millegrilles-messages
+                rsync dist/millegrilles_messages-* ${PUBLISH_RSYNC_PYTHON_DEST}/dist/millegrilles-messages
                 '''
             }
         }
