@@ -2,11 +2,7 @@ import asyncio
 import datetime
 import logging
 import pathlib
-import time
-import concurrent.futures
 from asyncio import TaskGroup, QueueFull
-
-from os import listdir, path, rename
 
 from millegrilles_messages.messages.Hachage import VerificateurHachage, ErreurHachage
 
@@ -183,24 +179,28 @@ async def main(repertoire: str, threads: int):
     verificateur = VerifierRepertoire(repertoire, nombre_threads=threads)
     await verificateur.run()
 
-CONST_KiB = 1_000
-CONST_MiB = 1_000_000
-CONST_GiB = 1_000_000_000
-CONST_TiB = 1_000_000_000_000
+CONST_KB = 1_000
+CONST_MB = 1_000_000
+CONST_GB = 1_000_000_000
+CONST_TB = 1_000_000_000_000
+CONST_PB = 1_000_000_000_000_000
 
 def format_size(size: int) -> str:
-    if size >= CONST_TiB:
-        val = size / CONST_TiB
-        unit = 'TiB'
-    elif size >= CONST_GiB:
-        val = size / CONST_GiB
-        unit = 'GiB'
-    elif size >= CONST_MiB:
-        val = size / CONST_MiB
-        unit = 'MiB'
-    elif size >= CONST_KiB:
-        val = size / CONST_KiB
-        unit = 'KiB'
+    if size >= CONST_PB:
+        val = size / CONST_TB
+        unit = 'PB'
+    elif size >= CONST_TB:
+        val = size / CONST_TB
+        unit = 'TB'
+    elif size >= CONST_GB:
+        val = size / CONST_GB
+        unit = 'GB'
+    elif size >= CONST_MB:
+        val = size / CONST_MB
+        unit = 'MB'
+    elif size >= CONST_KB:
+        val = size / CONST_KB
+        unit = 'KB'
     else:
         val = size
         unit = 'bytes'
